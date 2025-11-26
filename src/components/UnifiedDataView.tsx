@@ -25,6 +25,7 @@ import {
   parseISO,
   isBefore,
   isAfter,
+  isSameDay,
   startOfDay,
   endOfDay,
 } from 'date-fns';
@@ -432,6 +433,25 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
     return Array.from(sources).sort();
   }, [bookings]);
 
+  const meetingsBookedToday = useMemo(() => {
+    const today = startOfDay(new Date());
+    return bookings.filter((booking) => {
+      if (!booking.scheduledEventStartTime) return false;
+      const meetingDate = parseISO(booking.scheduledEventStartTime);
+      return isSameDay(meetingDate, today);
+    }).length;
+  }, [bookings]);
+
+  const handleShowMeetingsToday = useCallback(() => {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    setFromDate(today);
+    setToDate(today);
+    setTypeFilter('booking');
+    setStatusFilter('all');
+    setSearch('');
+    setUtmFilter('all');
+  }, []);
+
   const filteredData = useMemo(() => {
     return unifiedData
       .filter((row) => {
@@ -444,16 +464,24 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
         if (utmFilter !== 'all' && (row.source || 'direct') !== utmFilter) {
           return false;
         }
-        if (fromDate) {
-          const from = startOfDay(parseISO(fromDate));
-          if (isBefore(parseISO(row.createdAt), from)) {
-            return false;
+        if (fromDate || toDate) {
+          // For bookings, use scheduledTime (meeting time) if available, otherwise createdAt
+          // For users without bookings, use createdAt (sign up time)
+          const dateToCompare = row.type === 'booking' && row.scheduledTime 
+            ? row.scheduledTime 
+            : row.createdAt;
+          
+          if (fromDate) {
+            const from = startOfDay(parseISO(fromDate));
+            if (isBefore(parseISO(dateToCompare), from)) {
+              return false;
+            }
           }
-        }
-        if (toDate) {
-          const to = endOfDay(parseISO(toDate));
-          if (isAfter(parseISO(row.createdAt), to)) {
-            return false;
+          if (toDate) {
+            const to = endOfDay(parseISO(toDate));
+            if (isAfter(parseISO(dateToCompare), to)) {
+              return false;
+            }
           }
         }
         if (search) {
@@ -783,6 +811,15 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {meetingsBookedToday > 0 && (
+            <button
+              onClick={handleShowMeetingsToday}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-semibold"
+            >
+              <Calendar size={16} />
+              Meetings Booked Today ({meetingsBookedToday})
+            </button>
+          )}
           <button
             onClick={() => {
               clearAllCache();
