@@ -19,6 +19,7 @@ import {
   ChevronDown,
   ChevronRight,
   Edit,
+  Plus,
 } from 'lucide-react';
 import {
   format,
@@ -39,6 +40,7 @@ import {
 } from '../utils/dataCache';
 
 import NotesModal from './NotesModal';
+import InsertDataModal, { type InsertDataFormData } from './InsertDataModal';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -197,12 +199,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
   const [loadingUserCampaigns, setLoadingUserCampaigns] = useState(false);
   const [loadingCampaignsForEmails, setLoadingCampaignsForEmails] = useState<Set<string>>(new Set());
   const [isUsersWithoutMeetingsExpanded, setIsUsersWithoutMeetingsExpanded] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMoreData, setHasMoreData] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [selectedBookingForNotes, setSelectedBookingForNotes] = useState<{ id: string; name: string; notes: string } | null>(null);
-  const ITEMS_PER_PAGE = 50;
+  const [isInsertModalOpen, setIsInsertModalOpen] = useState(false);
 
   // Indexes for fast lookups
   const bookingsById = useMemo(() => {
@@ -221,16 +220,12 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
     return map;
   }, [usersWithoutBookings]);
 
-  const fetchData = useCallback(async (forceRefresh = false, page = 1, append = false) => {
+  const fetchData = useCallback(async (forceRefresh = false) => {
     try {
-      if (!append) {
-        setRefreshing(true);
-        setError(null);
-      } else {
-        setLoadingMore(true);
-      }
+      setRefreshing(true);
+      setError(null);
 
-      if (!forceRefresh && !append) {
+      if (!forceRefresh) {
         const cachedBookings = getCachedBookings<Booking>();
         const cachedUsers = getCachedUsers<UserWithoutBooking>();
 
@@ -240,15 +235,15 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
           setLoading(false);
           setRefreshing(false);
           setTimeout(() => {
-            fetchData(true, 1, false).catch(console.error);
+            fetchData(true).catch(console.error);
           }, 100);
           return;
         }
       }
 
-      const skip = (page - 1) * ITEMS_PER_PAGE;
+      // Fetch ALL data at once without pagination
       const [bookingsRes, usersRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/campaign-bookings?limit=${ITEMS_PER_PAGE}&skip=${skip}`),
+        fetch(`${API_BASE_URL}/api/campaign-bookings`),
         fetch(`${API_BASE_URL}/api/users/without-bookings/detailed`),
       ]);
 
@@ -256,22 +251,16 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
       const usersData = await usersRes.json();
 
       if (bookingsData.success) {
-        if (append) {
-          setBookings((prev) => [...prev, ...bookingsData.data]);
-        } else {
-          setBookings(bookingsData.data);
-          setCachedBookings(bookingsData.data);
-        }
-        const total = bookingsData.total || bookingsData.data.length;
-        setHasMoreData(bookingsData.data.length === ITEMS_PER_PAGE && (skip + ITEMS_PER_PAGE < total));
+        setBookings(bookingsData.data);
+        setCachedBookings(bookingsData.data);
       } else {
         throw new Error(bookingsData.message || 'Failed to fetch bookings');
       }
 
-      if (usersData.success && !append) {
+      if (usersData.success) {
         setUsersWithoutBookings(usersData.data);
         setCachedUsers(usersData.data);
-      } else if (!usersData.success && !append) {
+      } else {
         console.warn('Failed to fetch users:', usersData.message);
       }
     } catch (err) {
@@ -280,7 +269,6 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
     } finally {
       setRefreshing(false);
       setLoading(false);
-      setLoadingMore(false);
     }
   }, []);
 
@@ -335,10 +323,10 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
         fetchUserCampaigns(emailArray);
       }
       setTimeout(() => {
-        fetchData(true, 1, false).catch(console.error);
+        fetchData(true).catch(console.error);
       }, 100);
     } else {
-      fetchData(false, 1, false).catch(console.error);
+      fetchData(false).catch(console.error);
     }
   }, [fetchData, fetchUserCampaigns]);
 
@@ -358,38 +346,6 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
       fetchUserCampaigns(emailArray);
     }
   }, [usersWithoutBookings, bookings, fetchUserCampaigns]);
-
-  const loadMoreData = useCallback(() => {
-    if (!loadingMore && hasMoreData && !loading) {
-      const nextPage = currentPage + 1;
-      setCurrentPage(nextPage);
-      fetchData(true, nextPage, true).catch(console.error);
-    }
-  }, [currentPage, hasMoreData, loadingMore, loading, fetchData]);
-
-  const scrollSentinelRef = useCallback((node: HTMLTableRowElement | null) => {
-    if (!node) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasMoreData && !loadingMore && !loading) {
-          loadMoreData();
-        }
-      },
-      {
-        rootMargin: '100px',
-        threshold: 0.1,
-      }
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [hasMoreData, loadingMore, loading, loadMoreData]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-    setHasMoreData(true);
-  }, [statusFilter, typeFilter, utmFilter, fromDate, toDate, search]);
 
   const unifiedData = useMemo<UnifiedRow[]>(() => {
     const rows: UnifiedRow[] = [];
@@ -465,22 +421,43 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
           return false;
         }
         if (fromDate || toDate) {
-          // For bookings, use scheduledTime (meeting time) if available, otherwise createdAt
+          // For bookings, ONLY use scheduledTime (meeting time) for filtering
           // For users without bookings, use createdAt (sign up time)
-          const dateToCompare = row.type === 'booking' && row.scheduledTime 
-            ? row.scheduledTime 
-            : row.createdAt;
-          
-          if (fromDate) {
-            const from = startOfDay(parseISO(fromDate));
-            if (isBefore(parseISO(dateToCompare), from)) {
-              return false;
+          if (row.type === 'booking') {
+            // Only filter bookings that have a scheduled meeting time
+            if (!row.scheduledTime) {
+              return false; // Don't show bookings without meeting time when filtering by date
             }
-          }
-          if (toDate) {
-            const to = endOfDay(parseISO(toDate));
-            if (isAfter(parseISO(dateToCompare), to)) {
-              return false;
+            
+            const meetingDate = parseISO(row.scheduledTime);
+            
+            if (fromDate) {
+              const from = startOfDay(parseISO(fromDate));
+              if (isBefore(meetingDate, from)) {
+                return false;
+              }
+            }
+            if (toDate) {
+              const to = endOfDay(parseISO(toDate));
+              if (isAfter(meetingDate, to)) {
+                return false;
+              }
+            }
+          } else {
+            // For users, use createdAt
+            const signupDate = parseISO(row.createdAt);
+            
+            if (fromDate) {
+              const from = startOfDay(parseISO(fromDate));
+              if (isBefore(signupDate, from)) {
+                return false;
+              }
+            }
+            if (toDate) {
+              const to = endOfDay(parseISO(toDate));
+              if (isAfter(signupDate, to)) {
+                return false;
+              }
             }
           }
         }
@@ -717,6 +694,32 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
     }
   };
 
+  const handleInsertData = async (data: InsertDataFormData) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/manual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        throw new Error(result.message || 'Failed to create booking');
+      }
+
+      alert('Booking created successfully!');
+      // Refresh data to show the new booking
+      clearAllCache();
+      fetchData(true);
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : 'Failed to create booking');
+      throw err; // Re-throw to keep modal open on error
+    }
+  };
+
   const handleReschedule = async (booking: Booking) => {
     const defaultValue = booking.scheduledEventStartTime
       ? format(parseISO(booking.scheduledEventStartTime), "yyyy-MM-dd'T'HH:mm")
@@ -820,6 +823,13 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
               Meetings Booked Today ({meetingsBookedToday})
             </button>
           )}
+          <button
+            onClick={() => setIsInsertModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
+          >
+            <Plus size={16} />
+            Insert Data
+          </button>
           <button
             onClick={() => {
               clearAllCache();
@@ -1323,9 +1333,6 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
                       <td className="px-2 py-3">
                         <div className="space-y-1.5">
                         {isBooking && row.bookingId ? (
-                          row.status === 'completed' ? (
-                            <span className="text-xs text-slate-400 italic">No actions available</span>
-                          ) : (
                             <div className="flex flex-col gap-2">
                               {/* Row 1: Join and Completed */}
                               <div className="flex items-center gap-2">
@@ -1434,8 +1441,8 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
                                   </>
                                 )}
                               </div>
-                              {/* Row 3: Take Notes (centered) */}
-                              <div className="flex justify-center">
+                              {/* Row 3: Take Notes and Edit Status */}
+                              <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => {
                                     setSelectedBookingForNotes({
@@ -1445,14 +1452,30 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
                                     });
                                     setIsNotesModalOpen(true);
                                   }}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap flex-1 justify-center"
                                 >
                                   <Edit size={14} />
                                   {row.meetingNotes ? 'Edit Notes' : 'Take Notes'}
                                 </button>
+                                <select
+                                  value={row.status}
+                                  onChange={(e) => {
+                                    const booking = bookingsById.get(row.bookingId!);
+                                    if (booking && e.target.value !== row.status) {
+                                      handleStatusUpdate(booking.bookingId, e.target.value as BookingStatus);
+                                    }
+                                  }}
+                                  disabled={updatingBookingId === row.bookingId}
+                                  className="px-2 py-1 text-xs font-semibold border border-slate-300 rounded-lg bg-white text-slate-700 hover:border-slate-400 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition disabled:opacity-60 flex-1"
+                                >
+                                  <option value="scheduled">Scheduled</option>
+                                  <option value="completed">Completed</option>
+                                  <option value="no-show">No Show</option>
+                                  <option value="rescheduled">Rescheduled</option>
+                                  <option value="canceled">Canceled</option>
+                                </select>
                               </div>
                             </div>
-                          )
                         ) : (
                           <button
                             onClick={() => {
@@ -1486,25 +1509,6 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
                   <tr>
                     <td colSpan={11} className="text-center py-12 text-sm text-slate-500">
                       No data matches your filters. Try adjusting the criteria.
-                    </td>
-                  </tr>
-                )}
-                {hasMoreData && filteredData.length > 0 && (
-                  <tr ref={scrollSentinelRef} className="h-1">
-                    <td colSpan={11} className="p-0">
-                      {loadingMore && (
-                        <div className="flex items-center justify-center py-4">
-                          <Loader2 className="animate-spin text-orange-500" size={20} />
-                          <span className="ml-2 text-sm text-slate-600">Loading more...</span>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                )}
-                {!hasMoreData && filteredData.length > ITEMS_PER_PAGE && (
-                  <tr>
-                    <td colSpan={11} className="px-4 py-4 text-center text-sm text-slate-500">
-                      All data loaded ({filteredData.length} items)
                     </td>
                   </tr>
                 )}
@@ -1881,6 +1885,12 @@ export default function UnifiedDataView({ onOpenEmailCampaign }: UnifiedDataView
         onSave={handleSaveNotes}
         initialNotes={selectedBookingForNotes?.notes}
         clientName={selectedBookingForNotes?.name || ''}
+      />
+      {/* Insert Data Modal */}
+      <InsertDataModal
+        isOpen={isInsertModalOpen}
+        onClose={() => setIsInsertModalOpen(false)}
+        onSave={handleInsertData}
       />
     </div>
   );
