@@ -222,6 +222,7 @@ export default function Workflows() {
       channel: 'email',
       daysAfter: 0,
       templateId: '',
+      domainName: 'flashfiremails.com',
       order: workflowId ? workflows.find((w) => w.workflowId === workflowId)?.steps.length || 0 : newWorkflow.steps?.length || 0,
     };
 
@@ -711,7 +712,9 @@ export default function Workflows() {
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
                                 required
                               >
-                                <option value="">Select WhatsApp Template</option>
+                                {!step.templateName && !step.templateId ? (
+                                  <option value="">Select WhatsApp Template</option>
+                                ) : null}
                                 {watiTemplates.map((template) => (
                                   <option key={template.id} value={template.name}>
                                     {template.name}
@@ -750,22 +753,25 @@ export default function Workflows() {
                                     if (template) {
                                       updateStep(null, index, 'templateId', template.templateId);
                                       updateStep(null, index, 'templateName', template.name);
-                                      updateStep(null, index, 'domainName', template.domainName);
+                                      updateStep(null, index, 'domainName', 'flashfiremails.com');
                                     } else {
                                       updateStep(null, index, 'templateId', e.target.value);
                                       updateStep(null, index, 'templateName', e.target.value);
+                                      updateStep(null, index, 'domainName', 'flashfiremails.com');
                                     }
                                   }}
                                   className="flex-1 min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
                                   required
                                 >
-                                  <option value="">Select Email Template</option>
+                                  {!step.templateName && !step.templateId ? (
+                                    <option value="">Select Email Template</option>
+                                  ) : null}
                                   {emailTemplates.length === 0 ? (
                                     <option value="" disabled>No templates saved. Use manual input.</option>
                                   ) : (
                                     emailTemplates.map((template) => (
                                       <option key={template.id} value={template.name}>
-                                        {template.name} ({template.domainName})
+                                        {template.name}
                                       </option>
                                     ))
                                   )}
@@ -801,18 +807,18 @@ export default function Workflows() {
                             </label>
                             <input
                               type="text"
-                              value={step.domainName || ''}
+                              value={step.domainName || 'flashfiremails.com'}
                               onChange={(e) =>
                                 updateStep(null, index, 'domainName', e.target.value)
                               }
                               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
-                              placeholder="e.g., example.com (optional)"
+                              placeholder="flashfiremails.com"
                             />
                           </div>
                           <div>
                             <label className="block text-xs font-medium text-slate-600 mb-1">
                               Sender Email
-                              <span className="text-slate-400 text-xs ml-1">(optional - defaults to elizabeth@flashfirehq.com or elizabeth@domain)</span>
+                              <span className="text-slate-400 text-xs ml-1">(e.g., elizabeth@flashfirehq.com or adit.jain@flashfirehq.com)</span>
                             </label>
                             <input
                               type="email"
@@ -821,7 +827,7 @@ export default function Workflows() {
                                 updateStep(null, index, 'senderEmail', e.target.value)
                               }
                               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
-                              placeholder="e.g., elizabeth@example.com (optional)"
+                              placeholder="elizabeth@flashfirehq.com"
                             />
                           </div>
                         </div>
@@ -1021,7 +1027,9 @@ export default function Workflows() {
                                       className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
                                       required
                                     >
-                                      <option value="">Select Template</option>
+                                      {!step.templateName && !step.templateId ? (
+                                        <option value="">Select Template</option>
+                                      ) : null}
                                       {watiTemplates.map((template) => (
                                         <option key={template.id} value={template.name}>
                                           {template.name}
@@ -1060,22 +1068,25 @@ export default function Workflows() {
                                           if (template) {
                                             updateStep(workflow.workflowId, index, 'templateId', template.templateId);
                                             updateStep(workflow.workflowId, index, 'templateName', template.name);
-                                            updateStep(workflow.workflowId, index, 'domainName', template.domainName);
+                                            updateStep(workflow.workflowId, index, 'domainName', 'flashfiremails.com');
                                           } else {
                                             updateStep(workflow.workflowId, index, 'templateId', e.target.value);
                                             updateStep(workflow.workflowId, index, 'templateName', e.target.value);
+                                            updateStep(workflow.workflowId, index, 'domainName', 'flashfiremails.com');
                                           }
                                         }}
                                         className="flex-1 min-w-0 px-2 py-1.5 border border-slate-300 rounded text-sm"
                                         required
                                       >
-                                        <option value="">Select Template</option>
+                                        {!step.templateName && !step.templateId ? (
+                                          <option value="">Select Template</option>
+                                        ) : null}
                                         {emailTemplates.length === 0 ? (
                                           <option value="" disabled>No templates saved</option>
                                         ) : (
                                           emailTemplates.map((template) => (
                                             <option key={template.id} value={template.name}>
-                                              {template.name} ({template.domainName})
+                                              {template.name}
                                             </option>
                                           ))
                                         )}
@@ -1107,12 +1118,12 @@ export default function Workflows() {
                               <div className="mt-2 space-y-2">
                                 <input
                                   type="text"
-                                  value={step.domainName || ''}
+                                  value={step.domainName || 'flashfiremails.com'}
                                   onChange={(e) =>
                                     updateStep(workflow.workflowId, index, 'domainName', e.target.value)
                                   }
                                   className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
-                                  placeholder="Domain name (e.g., example.com)"
+                                  placeholder="flashfiremails.com"
                                 />
                                 <input
                                   type="email"
@@ -1121,7 +1132,7 @@ export default function Workflows() {
                                     updateStep(workflow.workflowId, index, 'senderEmail', e.target.value)
                                   }
                                   className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
-                                  placeholder="Sender email (optional)"
+                                  placeholder="elizabeth@flashfirehq.com"
                                 />
                               </div>
                             )}
@@ -1155,7 +1166,7 @@ export default function Workflows() {
                             {step.daysAfter === 0 ? 'Immediately' : `After ${step.daysAfter} day${step.daysAfter !== 1 ? 's' : ''}`}
                           </span>
                           <span className="text-sm text-slate-500 flex-1 truncate">
-                            Template: {step.templateId}
+                            Template: {step.templateName || step.templateId}
                           </span>
                         </div>
                       ))

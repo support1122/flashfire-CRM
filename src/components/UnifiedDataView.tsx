@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Calendar,
   CheckCircle2,
@@ -18,26 +18,19 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Edit,
   Plus,
   MessageCircle,
   AlertCircle,
+  Trash2,
 } from 'lucide-react';
 import {
   format,
   parseISO,
-  isBefore,
-  isAfter,
-  isSameDay,
-  startOfDay,
-  endOfDay,
 } from 'date-fns';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import {
-  getCachedBookings,
-  setCachedBookings,
-  getCachedUsers,
-  setCachedUsers,
   clearAllCache,
 } from '../utils/dataCache';
 
@@ -176,21 +169,12 @@ interface CampaignDetails {
 }
 
 export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCampaign }: UnifiedDataViewProps) {
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    // Initialize from cache if available
-    const cached = getCachedBookings<Booking>();
-    return cached || [];
-  });
-  const [usersWithoutBookings, setUsersWithoutBookings] = useState<UserWithoutBooking[]>(() => {
-    // Initialize from cache if available
-    const cached = getCachedUsers<UserWithoutBooking>();
-    return cached || [];
-  });
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [usersWithoutBookings, setUsersWithoutBookings] = useState<UserWithoutBooking[]>([]);
   const [userCampaigns, setUserCampaigns] = useState<Map<string, UserCampaign[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const fetchDataRef = useRef(false); // Prevent double calls in Strict Mode
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'booking' | 'user'>('all');
@@ -205,11 +189,20 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const [selectedUserEmail, setSelectedUserEmail] = useState<string | null>(null);
   const [userCampaignsList, setUserCampaignsList] = useState<UserCampaign[]>([]);
   const [loadingUserCampaigns, setLoadingUserCampaigns] = useState(false);
-  // Removed loadingCampaignsForEmails - campaigns now load on-demand only
   const [isUsersWithoutMeetingsExpanded, setIsUsersWithoutMeetingsExpanded] = useState(false);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [selectedBookingForNotes, setSelectedBookingForNotes] = useState<{ id: string; name: string; notes: string } | null>(null);
   const [isInsertModalOpen, setIsInsertModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedUserForDelete, setSelectedUserForDelete] = useState<{ name: string; email: string; phone?: string } | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
+  const [bookingsPage, setBookingsPage] = useState(1);
+  const [usersPage, setUsersPage] = useState(1);
+  const [bookingsPagination, setBookingsPagination] = useState({ page: 1, limit: 50, total: 0, pages: 1 });
+  const [usersPagination, setUsersPagination] = useState({ page: 1, limit: 50, total: 0, pages: 1 });
+  const [meetingsBookedToday, setMeetingsBookedToday] = useState<Booking[]>([]);
+  const [loadingMeetingsToday, setLoadingMeetingsToday] = useState(false);
+  const [showMeetingsToday, setShowMeetingsToday] = useState(false);
 
   // Indexes for fast lookups
   const bookingsById = useMemo(() => {
@@ -228,134 +221,139 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
     return map;
   }, [usersWithoutBookings]);
 
-  const fetchData = useCallback(async (forceRefresh = false) => {
-    if (fetchDataRef.current && !forceRefresh) {
-      return;
-    }
-    fetchDataRef.current = true;
-
+  const fetchBookings = useCallback(async (page: number = 1) => {
     try {
       setRefreshing(true);
       setError(null);
 
-      if (!forceRefresh) {
-        const cachedBookings = getCachedBookings<Booking>();
-        const cachedUsers = getCachedUsers<UserWithoutBooking>();
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '50',
+      });
 
-        if (cachedBookings && cachedUsers) {
-          setBookings(cachedBookings);
-          setUsersWithoutBookings(cachedUsers);
-          setLoading(false);
-          setRefreshing(false);
-          setTimeout(() => {
-            fetchDataRef.current = false;
-            fetchData(true).catch(console.error);
-          }, 500);
-          return;
-        }
+      if (statusFilter !== 'all') {
+        params.append('status', statusFilter);
+      }
+      if (utmFilter !== 'all') {
+        params.append('utmSource', utmFilter);
+      }
+      if (search) {
+        params.append('search', search);
+      }
+      if (fromDate) {
+        params.append('fromDate', fromDate);
+      }
+      if (toDate) {
+        params.append('toDate', toDate);
       }
 
-      // Fetch ALL data at once without pagination
-      const [bookingsRes, usersRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/campaign-bookings`),
-        fetch(`${API_BASE_URL}/api/users/without-bookings/detailed`),
-      ]);
+      const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/paginated?${params}`);
+      const data = await response.json();
 
-      const bookingsData = await bookingsRes.json();
-      const usersData = await usersRes.json();
-
-      if (bookingsData.success) {
-        setBookings(bookingsData.data);
-        setCachedBookings(bookingsData.data);
+      if (data.success) {
+        setBookings(data.data);
+        setBookingsPagination(data.pagination);
+        setBookingsPage(page);
       } else {
-        throw new Error(bookingsData.message || 'Failed to fetch bookings');
-      }
-
-      if (usersData.success) {
-        setUsersWithoutBookings(usersData.data);
-        setCachedUsers(usersData.data);
-      } else {
-        console.warn('Failed to fetch users:', usersData.message);
+        throw new Error(data.message || 'Failed to fetch bookings');
       }
     } catch (err) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Failed to load data');
+      setError(err instanceof Error ? err.message : 'Failed to load bookings');
     } finally {
       setRefreshing(false);
       setLoading(false);
-      fetchDataRef.current = false;
+    }
+  }, [statusFilter, utmFilter, search, fromDate, toDate]);
+
+  const fetchUsers = useCallback(async (page: number = 1) => {
+    try {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '50',
+      });
+
+      if (search) {
+        params.append('search', search);
+      }
+      if (fromDate) {
+        params.append('fromDate', fromDate);
+      }
+      if (toDate) {
+        params.append('toDate', toDate);
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/users/without-bookings/paginated?${params}`);
+      const data = await response.json();
+
+      if (data.success) {
+        setUsersWithoutBookings(data.data);
+        setUsersPagination(data.pagination);
+        setUsersPage(page);
+      } else {
+        console.warn('Failed to fetch users:', data.message);
+      }
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    }
+  }, [search, fromDate, toDate]);
+
+  const fetchMeetingsBookedToday = useCallback(async () => {
+    try {
+      setLoadingMeetingsToday(true);
+      const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/today`);
+      const data = await response.json();
+
+      if (data.success) {
+        setMeetingsBookedToday(data.data);
+        setShowMeetingsToday(true);
+        setFromDate(format(new Date(), 'yyyy-MM-dd'));
+        setToDate(format(new Date(), 'yyyy-MM-dd'));
+        setTypeFilter('booking');
+        setStatusFilter('all');
+        setSearch('');
+        setUtmFilter('all');
+      }
+    } catch (err) {
+      console.error('Error fetching meetings booked today:', err);
+    } finally {
+      setLoadingMeetingsToday(false);
     }
   }, []);
+
+  const fetchData = useCallback(async () => {
+    if (typeFilter === 'booking' || typeFilter === 'all') {
+      await fetchBookings(bookingsPage);
+    }
+    if (typeFilter === 'user' || typeFilter === 'all') {
+      await fetchUsers(usersPage);
+    }
+  }, [typeFilter, bookingsPage, usersPage]);
 
   // Removed automatic campaign fetching - now only fetches when "Campaigns" button is clicked
 
   useEffect(() => {
-    if (fetchDataRef.current) {
-      return;
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    if (typeFilter === 'booking' || typeFilter === 'all') {
+      const page = 1;
+      setBookingsPage(page);
+      fetchBookings(page);
     }
+  }, [statusFilter, utmFilter, search, fromDate, toDate, typeFilter, fetchBookings]);
 
-    const cachedBookings = getCachedBookings<Booking>();
-    const cachedUsers = getCachedUsers<UserWithoutBooking>();
-
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    if (cachedBookings && cachedUsers) {
-      setBookings(cachedBookings);
-      setUsersWithoutBookings(cachedUsers);
-      setLoading(false);
-      // Fetch fresh data in background without blocking UI
-      timeoutId = setTimeout(() => {
-        fetchData(true).catch(console.error);
-      }, 500);
-    } else {
-      fetchData(false).catch(console.error);
+  useEffect(() => {
+    if (typeFilter === 'user' || typeFilter === 'all') {
+      const page = 1;
+      setUsersPage(page);
+      fetchUsers(page);
     }
-    return () => {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      fetchDataRef.current = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Empty deps - only run once on mount
+  }, [search, fromDate, toDate, typeFilter, fetchUsers]);
 
   // Removed automatic campaign fetching on data changes - saves bandwidth and resources
 
-  const unifiedData = useMemo<UnifiedRow[]>(() => {
-    const rows: UnifiedRow[] = [];
-
-    bookings.forEach((booking) => {
-      rows.push({
-        id: `booking-${booking.bookingId}`,
-        type: 'booking',
-        name: booking.clientName || 'Unknown',
-        email: booking.clientEmail,
-        phone: booking.clientPhone,
-        createdAt: booking.bookingCreatedAt,
-        scheduledTime: booking.scheduledEventStartTime,
-        source: booking.utmSource || 'direct',
-        status: booking.bookingStatus,
-        meetLink: booking.calendlyMeetLink && booking.calendlyMeetLink !== 'Not Provided' ? booking.calendlyMeetLink : undefined,
-        notes: booking.anythingToKnow,
-        meetingNotes: booking.meetingNotes,
-        bookingId: booking.bookingId,
-      });
-    });
-
-    usersWithoutBookings.forEach((user) => {
-      rows.push({
-        id: `user-${user.email}`,
-        type: 'user',
-        name: user.fullName || 'Not Provided',
-        email: user.email,
-        phone: user.phone !== 'Not Specified' ? user.phone : undefined,
-        createdAt: user.createdAt,
-        workAuthorization: user.workAuthorization,
-      });
-    });
-
-    return rows;
-  }, [bookings, usersWithoutBookings]);
 
   const uniqueSources = useMemo(() => {
     const sources = new Set<string>();
@@ -363,136 +361,102 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
     return Array.from(sources).sort();
   }, [bookings]);
 
-  const meetingsBookedToday = useMemo(() => {
-    const today = startOfDay(new Date());
-    return bookings.filter((booking) => {
-      if (!booking.scheduledEventStartTime) return false;
-      const meetingDate = parseISO(booking.scheduledEventStartTime);
-      return isSameDay(meetingDate, today);
-    }).length;
-  }, [bookings]);
+  const meetingsBookedTodayCount = useMemo(() => {
+    return meetingsBookedToday.length;
+  }, [meetingsBookedToday]);
 
   const handleShowMeetingsToday = useCallback(() => {
-    const today = format(new Date(), 'yyyy-MM-dd');
-    setFromDate(today);
-    setToDate(today);
-    setTypeFilter('booking');
-    setStatusFilter('all');
-    setSearch('');
-    setUtmFilter('all');
-  }, []);
+    fetchMeetingsBookedToday();
+  }, [fetchMeetingsBookedToday]);
 
   const filteredData = useMemo(() => {
-    return unifiedData
-      .filter((row) => {
-        if (typeFilter !== 'all' && row.type !== typeFilter) {
-          return false;
-        }
-        if (statusFilter !== 'all' && row.status !== statusFilter) {
-          return false;
-        }
-        if (utmFilter !== 'all' && (row.source || 'direct') !== utmFilter) {
-          return false;
-        }
-        if (fromDate || toDate) {
-          // For bookings, ONLY use scheduledTime (meeting time) for filtering
-          // For users without bookings, use createdAt (sign up time)
-          if (row.type === 'booking') {
-            // Only filter bookings that have a scheduled meeting time
-            if (!row.scheduledTime) {
-              return false; // Don't show bookings without meeting time when filtering by date
-            }
-            
-            const meetingDate = parseISO(row.scheduledTime);
-            
-            if (fromDate) {
-              const from = startOfDay(parseISO(fromDate));
-              if (isBefore(meetingDate, from)) {
-                return false;
-              }
-            }
-            if (toDate) {
-              const to = endOfDay(parseISO(toDate));
-              if (isAfter(meetingDate, to)) {
-                return false;
-              }
-            }
-          } else {
-            // For users, use createdAt
-            const signupDate = parseISO(row.createdAt);
-            
-            if (fromDate) {
-              const from = startOfDay(parseISO(fromDate));
-              if (isBefore(signupDate, from)) {
-                return false;
-              }
-            }
-            if (toDate) {
-              const to = endOfDay(parseISO(toDate));
-              if (isAfter(signupDate, to)) {
-                return false;
-              }
-            }
-          }
-        }
-        if (search) {
-          const term = search.toLowerCase();
-          return (
-            row.name?.toLowerCase().includes(term) ||
-            row.email?.toLowerCase().includes(term) ||
-            row.source?.toLowerCase().includes(term)
-          );
-        }
-        // Filter out "Unknown Client" with placeholder email
-        if (row.name === 'Unknown Client' && row.email.includes('calendly.placeholder')) {
-          return false;
-        }
+    const rows: UnifiedRow[] = [];
 
-        // Filter out invalid dates (e.g. 1970-01-01)
-        if (row.scheduledTime) {
-          const date = parseISO(row.scheduledTime);
-          if (date.getFullYear() === 1970) {
-            return false;
-          }
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        const aDate = a.scheduledTime ? parseISO(a.scheduledTime) : parseISO(a.createdAt);
-        const bDate = b.scheduledTime ? parseISO(b.scheduledTime) : parseISO(b.createdAt);
-        return bDate.getTime() - aDate.getTime();
+    if (showMeetingsToday && meetingsBookedToday.length > 0) {
+      meetingsBookedToday.forEach((booking) => {
+        rows.push({
+          id: `booking-${booking.bookingId}`,
+          type: 'booking',
+          name: booking.clientName || 'Unknown',
+          email: booking.clientEmail,
+          phone: booking.clientPhone,
+          createdAt: booking.bookingCreatedAt,
+          scheduledTime: booking.scheduledEventStartTime,
+          source: booking.utmSource || 'direct',
+          status: booking.bookingStatus,
+          meetLink: booking.calendlyMeetLink && booking.calendlyMeetLink !== 'Not Provided' ? booking.calendlyMeetLink : undefined,
+          notes: booking.anythingToKnow,
+          meetingNotes: booking.meetingNotes,
+          bookingId: booking.bookingId,
+        });
       });
-  }, [unifiedData, statusFilter, typeFilter, utmFilter, fromDate, toDate, search]);
+      return rows;
+    }
 
-  const usersWithoutBookingsData = useMemo(() => {
-    return unifiedData.filter((row) => row.type === 'user');
-  }, [unifiedData]);
+    if (typeFilter === 'booking' || typeFilter === 'all') {
+      bookings.forEach((booking) => {
+        rows.push({
+          id: `booking-${booking.bookingId}`,
+          type: 'booking',
+          name: booking.clientName || 'Unknown',
+          email: booking.clientEmail,
+          phone: booking.clientPhone,
+          createdAt: booking.bookingCreatedAt,
+          scheduledTime: booking.scheduledEventStartTime,
+          source: booking.utmSource || 'direct',
+          status: booking.bookingStatus,
+          meetLink: booking.calendlyMeetLink && booking.calendlyMeetLink !== 'Not Provided' ? booking.calendlyMeetLink : undefined,
+          notes: booking.anythingToKnow,
+          meetingNotes: booking.meetingNotes,
+          bookingId: booking.bookingId,
+        });
+      });
+    }
 
-  const filteredUsersWithoutBookings = useMemo(() => {
-    return usersWithoutBookingsData.filter((row) => {
-      if (search) {
-        const term = search.toLowerCase();
-        return (
-          row.name?.toLowerCase().includes(term) ||
-          row.email?.toLowerCase().includes(term)
-        );
+    if (typeFilter === 'user' || typeFilter === 'all') {
+      usersWithoutBookings.forEach((user) => {
+        rows.push({
+          id: `user-${user.email}`,
+          type: 'user',
+          name: user.fullName || 'Not Provided',
+          email: user.email,
+          phone: user.phone !== 'Not Specified' ? user.phone : undefined,
+          createdAt: user.createdAt,
+          workAuthorization: user.workAuthorization,
+        });
+      });
+    }
+
+    return rows.filter((row) => {
+      if (row.name === 'Unknown Client' && row.email.includes('calendly.placeholder')) {
+        return false;
       }
-      if (fromDate) {
-        const from = startOfDay(parseISO(fromDate));
-        if (isBefore(parseISO(row.createdAt), from)) {
-          return false;
-        }
-      }
-      if (toDate) {
-        const to = endOfDay(parseISO(toDate));
-        if (isAfter(parseISO(row.createdAt), to)) {
+      if (row.scheduledTime) {
+        const date = parseISO(row.scheduledTime);
+        if (date.getFullYear() === 1970) {
           return false;
         }
       }
       return true;
+    }).sort((a, b) => {
+      const aDate = a.scheduledTime ? parseISO(a.scheduledTime) : parseISO(a.createdAt);
+      const bDate = b.scheduledTime ? parseISO(b.scheduledTime) : parseISO(b.createdAt);
+      return bDate.getTime() - aDate.getTime();
     });
-  }, [usersWithoutBookingsData, search, fromDate, toDate]);
+  }, [bookings, usersWithoutBookings, typeFilter, showMeetingsToday, meetingsBookedToday]);
+
+
+  const filteredUsersWithoutBookings = useMemo(() => {
+    return usersWithoutBookings.map((user) => ({
+      id: `user-${user.email}`,
+      type: 'user' as const,
+      name: user.fullName || 'Not Provided',
+      email: user.email,
+      phone: user.phone !== 'Not Specified' ? user.phone : undefined,
+      createdAt: user.createdAt,
+      workAuthorization: user.workAuthorization,
+    }));
+  }, [usersWithoutBookings]);
 
   const handleSelectAll = useCallback(() => {
     if (selectedRows.size === filteredData.length) {
@@ -661,10 +625,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         throw new Error(data.message || 'Failed to update booking status');
       }
       setBookings((prev) => {
-        const updated = prev.map((booking) => (booking.bookingId === bookingId ? { ...booking, bookingStatus: status } : booking));
-        setCachedBookings(updated);
-        return updated;
+        return prev.map((booking) => (booking.bookingId === bookingId ? { ...booking, bookingStatus: status } : booking));
       });
+      fetchBookings(bookingsPage);
       
       // Show toast notification if workflow was triggered
       if (data.workflowTriggered) {
@@ -696,14 +659,13 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       }
 
       setBookings((prev) => {
-        const updated = prev.map((booking) =>
+        return prev.map((booking) =>
           booking.bookingId === selectedBookingForNotes.id
             ? { ...booking, meetingNotes: notes }
             : booking
         );
-        setCachedBookings(updated);
-        return updated;
       });
+      await fetchBookings(bookingsPage);
 
       alert('Notes saved successfully');
     } catch (err) {
@@ -728,13 +690,53 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       }
 
       alert('Booking created successfully!');
-      // Refresh data to show the new booking
       clearAllCache();
-      fetchData(true);
+      setBookingsPage(1);
+      fetchBookings(1);
     } catch (err) {
       console.error(err);
       alert(err instanceof Error ? err.message : 'Failed to create booking');
       throw err; // Re-throw to keep modal open on error
+    }
+  };
+
+  const handleDeleteClick = (row: UnifiedRow) => {
+    setSelectedUserForDelete({
+      name: row.name,
+      email: row.email,
+      phone: row.phone
+    });
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!selectedUserForDelete) return;
+
+    setDeletingUser(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/users/delete/${encodeURIComponent(selectedUserForDelete.email)}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        showToast(`Successfully deleted all records for ${selectedUserForDelete.name}`, 'success');
+        clearAllCache();
+        setBookingsPage(1);
+        setUsersPage(1);
+        fetchBookings(1);
+        fetchUsers(1);
+        setIsDeleteModalOpen(false);
+        setSelectedUserForDelete(null);
+      } else {
+        showToast(data.message || 'Failed to delete user records', 'error');
+      }
+    } catch (err) {
+      console.error('Error deleting user records:', err);
+      showToast('Failed to delete user records. Please try again.', 'error');
+    } finally {
+      setDeletingUser(false);
     }
   };
 
@@ -779,10 +781,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       }
       const updatedBooking: Booking = data.data;
       setBookings((prev) => {
-        const updated = prev.map((item) => (item.bookingId === updatedBooking.bookingId ? { ...item, ...updatedBooking } : item));
-        setCachedBookings(updated);
-        return updated;
+        return prev.map((item) => (item.bookingId === updatedBooking.bookingId ? { ...item, ...updatedBooking } : item));
       });
+      await fetchBookings(bookingsPage);
       alert('Meeting rescheduled and call queue updated successfully.');
     } catch (err) {
       console.error(err);
@@ -859,15 +860,23 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {meetingsBookedToday > 0 && (
-            <button
-              onClick={handleShowMeetingsToday}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-semibold"
-            >
-              <Calendar size={16} />
-              Meetings Booked Today ({meetingsBookedToday})
-            </button>
-          )}
+          <button
+            onClick={handleShowMeetingsToday}
+            disabled={loadingMeetingsToday}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loadingMeetingsToday ? (
+              <>
+                <Loader2 className="animate-spin" size={16} />
+                Loading...
+              </>
+            ) : (
+              <>
+                <Calendar size={16} />
+                Meetings Booked Today {meetingsBookedTodayCount > 0 && `(${meetingsBookedTodayCount})`}
+              </>
+            )}
+          </button>
           <button
             onClick={() => setIsInsertModalOpen(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
@@ -878,7 +887,10 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           <button
             onClick={() => {
               clearAllCache();
-              fetchData(true);
+              setBookingsPage(1);
+              setUsersPage(1);
+              setShowMeetingsToday(false);
+              fetchData();
             }}
             className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition text-sm font-semibold"
           >
@@ -1092,6 +1104,14 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                               </td>
                               <td className="px-4 py-4">
                                 <div className="flex flex-col gap-1.5">
+                                {/* Delete Button */}
+                                <button
+                                  onClick={() => handleDeleteClick(row)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition w-full justify-center"
+                                >
+                                  <Trash2 size={14} />
+                                  Delete
+                                </button>
                                 <button
                                   onClick={() => {
                                     onOpenEmailCampaign({
@@ -1223,7 +1243,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
             className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
           />
         </div>
-        {(fromDate || toDate || search || statusFilter !== 'all' || utmFilter !== 'all' || typeFilter !== 'all') && (
+        {(fromDate || toDate || search || statusFilter !== 'all' || utmFilter !== 'all' || typeFilter !== 'all' || showMeetingsToday) && (
           <button
             onClick={() => {
               setFromDate('');
@@ -1232,6 +1252,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
               setTypeFilter('all');
               setUtmFilter('all');
               setSearch('');
+              setShowMeetingsToday(false);
+              setBookingsPage(1);
+              setUsersPage(1);
             }}
             className="text-sm text-orange-600 font-semibold"
           >
@@ -1415,6 +1438,14 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                       </td>
                       <td className="px-2 py-3">
                         <div className="space-y-1.5">
+                        {/* Delete Button */}
+                        <button
+                          onClick={() => handleDeleteClick(row)}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition w-full justify-center"
+                        >
+                          <Trash2 size={12} />
+                          Delete
+                        </button>
                         {isBooking && row.bookingId ? (
                             <div className="flex flex-col gap-2">
                               {/* Row 1: Join and Completed */}
@@ -1622,10 +1653,141 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           </div>
         </div>
       </div>
-      <p className="text-xs text-slate-500">
-        Showing {filteredData.length} of {unifiedData.length} total rows ({bookings.length} bookings,{' '}
-        {usersWithoutBookings.length} users without bookings).
-      </p>
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
+        <div className="text-sm text-slate-600">
+          {showMeetingsToday ? (
+            <>Showing {meetingsBookedTodayCount} meetings booked today</>
+          ) : typeFilter === 'all' ? (
+            <>Showing {filteredData.length} rows (Page {bookingsPage} of {bookingsPagination.pages} bookings, Page {usersPage} of {usersPagination.pages} users)</>
+          ) : typeFilter === 'booking' ? (
+            <>Showing {filteredData.length} of {bookingsPagination.total} bookings (Page {bookingsPage} of {bookingsPagination.pages})</>
+          ) : (
+            <>Showing {filteredData.length} of {usersPagination.total} users (Page {usersPage} of {usersPagination.pages})</>
+          )}
+        </div>
+
+        {!showMeetingsToday && (
+          <div className="flex items-center gap-2">
+            {(typeFilter === 'booking' || typeFilter === 'all') && bookingsPagination.pages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const newPage = Math.max(1, bookingsPage - 1);
+                    setBookingsPage(newPage);
+                    fetchBookings(newPage);
+                  }}
+                  disabled={bookingsPage === 1}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={16} className="inline" />
+                  Previous
+                </button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, bookingsPagination.pages) }, (_, i) => {
+                    let pageNum;
+                    if (bookingsPagination.pages <= 5) {
+                      pageNum = i + 1;
+                    } else if (bookingsPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (bookingsPage >= bookingsPagination.pages - 2) {
+                      pageNum = bookingsPagination.pages - 4 + i;
+                    } else {
+                      pageNum = bookingsPage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => {
+                          setBookingsPage(pageNum);
+                          fetchBookings(pageNum);
+                        }}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                          bookingsPage === pageNum
+                            ? 'bg-orange-500 text-white'
+                            : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => {
+                    const newPage = Math.min(bookingsPagination.pages, bookingsPage + 1);
+                    setBookingsPage(newPage);
+                    fetchBookings(newPage);
+                  }}
+                  disabled={bookingsPage === bookingsPagination.pages}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                  <ChevronRight size={16} className="inline" />
+                </button>
+              </div>
+            )}
+
+            {(typeFilter === 'user' || typeFilter === 'all') && usersPagination.pages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const newPage = Math.max(1, usersPage - 1);
+                    setUsersPage(newPage);
+                    fetchUsers(newPage);
+                  }}
+                  disabled={usersPage === 1}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft size={16} className="inline" />
+                  Previous
+                </button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, usersPagination.pages) }, (_, i) => {
+                    let pageNum;
+                    if (usersPagination.pages <= 5) {
+                      pageNum = i + 1;
+                    } else if (usersPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (usersPage >= usersPagination.pages - 2) {
+                      pageNum = usersPagination.pages - 4 + i;
+                    } else {
+                      pageNum = usersPage - 2 + i;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => {
+                          setUsersPage(pageNum);
+                          fetchUsers(pageNum);
+                        }}
+                        className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                          usersPage === pageNum
+                            ? 'bg-orange-500 text-white'
+                            : 'text-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => {
+                    const newPage = Math.min(usersPagination.pages, usersPage + 1);
+                    setUsersPage(newPage);
+                    fetchUsers(newPage);
+                  }}
+                  disabled={usersPage === usersPagination.pages}
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                  <ChevronRight size={16} className="inline" />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* User Campaigns List Modal */}
       {selectedUserEmail && (
@@ -1997,6 +2159,76 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         onClose={() => setIsInsertModalOpen(false)}
         onSave={handleInsertData}
       />
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && selectedUserForDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => !deletingUser && setIsDeleteModalOpen(false)}>
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="bg-red-100 p-3 rounded-full">
+                  <AlertCircle className="text-red-600" size={24} />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">Delete User Records</h3>
+              </div>
+              
+              <p className="text-slate-600 mb-6">
+                Are you sure you want to delete all records for this user? This action cannot be undone.
+              </p>
+
+              <div className="bg-slate-50 rounded-lg p-4 mb-6 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-700">Name:</span>
+                  <span className="text-sm text-slate-900">{selectedUserForDelete.name}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold text-slate-700">Email:</span>
+                  <span className="text-sm text-slate-900">{selectedUserForDelete.email}</span>
+                </div>
+                {selectedUserForDelete.phone && selectedUserForDelete.phone !== 'Not Specified' && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-700">Mobile:</span>
+                    <span className="text-sm text-slate-900">{selectedUserForDelete.phone}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setIsDeleteModalOpen(false);
+                    setSelectedUserForDelete(null);
+                  }}
+                  disabled={deletingUser}
+                  className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg text-slate-700 font-semibold hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={deletingUser}
+                  className="flex-1 px-4 py-2.5 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {deletingUser ? (
+                    <>
+                      <Loader2 className="animate-spin" size={18} />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={18} />
+                      Confirm Delete
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -66,10 +66,19 @@ interface EmailCampaignProps {
   onPrefillConsumed?: () => void;
 }
 
+interface EmailTemplate {
+  id: string;
+  name: string;
+  domainName: string;
+  templateId: string;
+  createdAt: string;
+}
+
 export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampaignProps) {
   const [domainName, setDomainName] = useState('');
   const [templateName, setTemplateName] = useState('Lead Not Booked Call Follow up 1');
   const [templateId, setTemplateId] = useState('');
+  const [senderEmail, setSenderEmail] = useState('');
   const [emailIds, setEmailIds] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingEmails, setLoadingEmails] = useState(false);
@@ -89,15 +98,47 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
   const [selectedBookingStatus, setSelectedBookingStatus] = useState<string>('scheduled');
   const [fetchingEmails, setFetchingEmails] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
+  const [loadingEmailTemplates, setLoadingEmailTemplates] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
 
   useEffect(() => {
     fetchCampaigns();
     fetchScheduledCampaigns();
+    fetchEmailTemplates();
     const interval = setInterval(() => {
       fetchScheduledCampaigns();
     }, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchEmailTemplates = async () => {
+    setLoadingEmailTemplates(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/email-templates`);
+      const data = await response.json();
+
+      if (data.success) {
+        setEmailTemplates(data.templates || []);
+      } else {
+        console.error('Failed to fetch email templates:', data.message);
+      }
+    } catch (err) {
+      console.error('Error fetching email templates:', err);
+    } finally {
+      setLoadingEmailTemplates(false);
+    }
+  };
+
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    const template = emailTemplates.find(t => t.id === templateId);
+    if (template) {
+      setTemplateName(template.name);
+      setTemplateId(template.templateId);
+      setDomainName(template.domainName);
+    }
+  };
 
   useEffect(() => {
     if (prefill?.recipients?.length) {
@@ -281,7 +322,7 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
       let response;
       let data;
 
-      if (isNoShowTemplate) {
+        if (isNoShowTemplate) {
         // Send immediately using SendEmailCampaign endpoint
         response = await fetch(`${API_BASE_URL}/api/email-campaign/send`, {
           method: 'POST',
@@ -293,6 +334,7 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
             domainName,
             templateId,
             emailIds: emailArray,
+            senderEmail: senderEmail || undefined,
           }),
         });
 
@@ -303,7 +345,9 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
           setDomainName('');
           setTemplateId('');
           setTemplateName('');
+          setSenderEmail('');
           setEmailIds('');
+          setSelectedTemplateId('');
           fetchCampaigns(1);
           setActiveTab('history');
         } else {
@@ -321,6 +365,7 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
             domainName,
             templateId,
             emailIds: emailArray,
+            senderEmail: senderEmail || undefined,
           }),
         });
 
@@ -331,7 +376,9 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
           setDomainName('');
           setTemplateId('');
           setTemplateName('');
+          setSenderEmail('');
           setEmailIds('');
+          setSelectedTemplateId('');
           fetchScheduledCampaigns();
           setActiveTab('scheduled');
         } else {
@@ -525,6 +572,33 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
 
           {activeTab === 'create' && (
             <form onSubmit={handleCreateScheduledCampaign} className="space-y-6">
+              {/* Template Selector Dropdown */}
+              <div>
+                <label htmlFor="savedTemplate" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Select Saved Template
+                </label>
+                <select
+                  id="savedTemplate"
+                  value={selectedTemplateId}
+                  onChange={(e) => handleTemplateSelect(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+                >
+                  <option value="">-- Select a saved template --</option>
+                  {loadingEmailTemplates ? (
+                    <option value="" disabled>Loading templates...</option>
+                  ) : emailTemplates.length === 0 ? (
+                    <option value="" disabled>No saved templates</option>
+                  ) : (
+                    emailTemplates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name} ({template.domainName})
+                      </option>
+                    ))
+                  )}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Select a saved template to auto-fill the form fields</p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <label htmlFor="domainName" className="block text-sm font-semibold text-gray-700 mb-2">
@@ -589,6 +663,21 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
                     )}
                   </button>
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="senderEmail" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Sender Email
+                  <span className="text-gray-400 text-xs ml-1">(optional - defaults to elizabeth@flashfirehq.com or elizabeth@domain)</span>
+                </label>
+                <input
+                  type="email"
+                  id="senderEmail"
+                  value={senderEmail}
+                  onChange={(e) => setSenderEmail(e.target.value)}
+                  placeholder="e.g., elizabeth@example.com (optional)"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+                />
               </div>
 
               <div>
