@@ -10,7 +10,7 @@ interface CrmAuthContextValue {
   token: string | null;
   user: CrmUser | null;
   requestOtp: (email: string) => Promise<void>;
-  verifyOtp: (email: string, otp: string) => Promise<void>;
+  verifyOtp: (email: string, otp: string, rememberMe?: boolean) => Promise<void>;
   logout: () => void;
   hasPermission: (permission: CrmPermission) => boolean;
 }
@@ -51,11 +51,11 @@ export function CrmAuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const verifyOtp = useCallback(async (email: string, otp: string) => {
+  const verifyOtp = useCallback(async (email: string, otp: string, rememberMe: boolean = false) => {
     const res = await fetch(`${API_BASE_URL}/api/crm/auth/verify-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, otp }),
+      body: JSON.stringify({ email, otp, rememberMe }),
     });
     const body = await safeJson(res);
     if (!res.ok || !body?.token) {

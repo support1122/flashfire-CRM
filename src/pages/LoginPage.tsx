@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(false);
 
   const emailTrimmed = useMemo(() => email.trim(), [email]);
 
@@ -42,7 +43,7 @@ export default function LoginPage() {
     setInfo(null);
     setLoading(true);
     try {
-      await verifyOtp(emailTrimmed, otp.trim());
+      await verifyOtp(emailTrimmed, otp.trim(), rememberMe);
       navigate('/', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid OTP');
@@ -110,7 +111,7 @@ export default function LoginPage() {
                 </button>
 
                 <div className="pt-3 text-center text-xs text-slate-500">
-                  Admin? Go to <span className="font-semibold text-slate-700">/admin/dashboard</span>
+                  Admin? Go to <span className="font-semibold text-slate-700">dashboard</span>
                 </div>
               </form>
             ) : (
@@ -152,6 +153,19 @@ export default function LoginPage() {
                     />
                   </div>
                   <p className="mt-2 text-xs text-slate-500">Code expires quickly. If needed, go back and resend.</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="remember-me"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 text-orange-600 border-slate-300 rounded focus:ring-orange-500 focus:ring-2"
+                  />
+                  <label htmlFor="remember-me" className="text-sm text-slate-700 cursor-pointer">
+                    Remember for 30 days
+                  </label>
                 </div>
 
                 <button

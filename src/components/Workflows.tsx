@@ -43,6 +43,7 @@ interface EmailTemplate {
   domainName: string;
   templateId: string;
   senderEmail?: string;
+  senderName?: string;
   createdAt: string;
 }
 
@@ -53,6 +54,7 @@ interface WorkflowStep {
   templateName?: string;
   domainName?: string;
   senderEmail?: string;
+  senderName?: string;
   order: number;
 }
 
@@ -117,7 +119,7 @@ export default function Workflows() {
     steps: [],
     isActive: true,
   });
-  
+
   // WATI Templates state
   const [watiTemplates, setWatiTemplates] = useState<WatiTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -125,7 +127,8 @@ export default function Workflows() {
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
   const [loadingEmailTemplates, setLoadingEmailTemplates] = useState(false);
   const [useManualEmailInput, setUseManualEmailInput] = useState<{ [key: string]: boolean }>({});
-  
+  const [savingTemplate, setSavingTemplate] = useState<{ [key: string]: boolean }>({});
+
   // Logs state
   const [logs, setLogs] = useState<WorkflowLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -200,6 +203,56 @@ export default function Workflows() {
     }, 4000);
   };
 
+  const handleSaveTemplate = async (workflowId: string, stepIndex: number, step: WorkflowStep) => {
+    if (!step.templateId || !step.domainName) {
+      showToast('Template ID and Domain Name are required', 'error');
+      return;
+    }
+
+    // Find the template to get the original domainName from database
+    const template = emailTemplates.find(t => t.templateId === step.templateId);
+    if (!template) {
+      showToast('Template not found. Please select a template from the list.', 'error');
+      return;
+    }
+
+    // Use the original domainName from the database (might be email format)
+    const dbDomainName = template.domainName;
+
+    const key = `${workflowId}_${stepIndex}`;
+    setSavingTemplate(prev => ({ ...prev, [key]: true }));
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/email-templates/fields`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          templateId: step.templateId,
+          domainName: dbDomainName, // Use the original domainName from database
+          senderEmail: step.senderEmail || undefined,
+          senderName: step.senderName || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        showToast('Template saved successfully!', 'success');
+        // Refresh templates to get updated data
+        await fetchEmailTemplates();
+      } else {
+        showToast(data.message || 'Failed to save template', 'error');
+      }
+    } catch (err) {
+      console.error('Error saving template:', err);
+      showToast('Failed to save template. Please try again.', 'error');
+    } finally {
+      setSavingTemplate(prev => ({ ...prev, [key]: false }));
+    }
+  };
+
   const fetchWorkflows = async () => {
     try {
       setLoading(true);
@@ -264,34 +317,33 @@ export default function Workflows() {
     }
   };
 
-  const updateStep = (workflowId: string | null, stepIndex: number, field: keyof WorkflowStep, value: any) => {
+  const updateStep = (workflowId: string | null, stepIndex: number, updates: Partial<WorkflowStep> | keyof WorkflowStep, value?: any) => {
+    const fields = typeof updates === 'string' ? { [updates]: value } : updates;
+
     if (workflowId && editingWorkflowId === workflowId) {
-      const workflow = workflows.find((w) => w.workflowId === workflowId);
-      if (workflow) {
-        const updatedSteps = workflow.steps.map((step, index) =>
-          index === stepIndex ? { ...step, [field]: value } : step
-        );
-        const updatedWorkflow = {
-          ...workflow,
-          steps: updatedSteps,
-        };
-        setWorkflows(workflows.map((w) => (w.workflowId === workflowId ? updatedWorkflow : w)));
-      }
-    } else {
-      const updatedSteps = (newWorkflow.steps || []).map((step, index) =>
-        index === stepIndex ? { ...step, [field]: value } : step
+      setWorkflows((prev) =>
+        prev.map((w) => {
+          if (w.workflowId !== workflowId) return w;
+          const updatedSteps = w.steps.map((step, index) =>
+            index === stepIndex ? { ...step, ...fields } : step
+          );
+          return { ...w, steps: updatedSteps };
+        })
       );
-      setNewWorkflow({
-        ...newWorkflow,
-        steps: updatedSteps,
-      });
+    } else {
+      setNewWorkflow((prev) => ({
+        ...prev,
+        steps: (prev.steps || []).map((step, index) =>
+          index === stepIndex ? { ...step, ...fields } : step
+        ),
+      }));
     }
   };
 
   const saveWorkflow = async (workflow: Partial<Workflow>) => {
     try {
       setSaving(workflow.workflowId || 'new');
-      
+
       if (!workflow.triggerAction || !workflow.steps || workflow.steps.length === 0) {
         showToast('Please fill in all required fields', 'error');
         return;
@@ -299,7 +351,7 @@ export default function Workflows() {
 
       // Validate steps
       for (const step of workflow.steps) {
-        if (!step.templateId || step.templateId.trim() === '') {
+        if (!step.templateId || (typeof step.templateId === 'string' && step.templateId.trim() === '')) {
           showToast('All steps must have a template ID', 'error');
           return;
         }
@@ -308,7 +360,7 @@ export default function Workflows() {
       const url = workflow.workflowId
         ? `${API_BASE_URL}/api/workflows/${workflow.workflowId}`
         : `${API_BASE_URL}/api/workflows`;
-      
+
       const method = workflow.workflowId ? 'PUT' : 'POST';
 
       const response = await fetch(url, {
@@ -326,7 +378,7 @@ export default function Workflows() {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         showToast(workflow.workflowId ? 'Workflow updated successfully' : 'Workflow created successfully', 'success');
         await fetchWorkflows();
@@ -361,7 +413,7 @@ export default function Workflows() {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         showToast('Workflow deleted successfully', 'success');
         await fetchWorkflows();
@@ -393,7 +445,7 @@ export default function Workflows() {
       });
 
       const data = await response.json();
-      
+
       if (data.success) {
         showToast(`Workflow ${!currentStatus ? 'activated' : 'deactivated'} successfully`, 'success');
         await fetchWorkflows();
@@ -436,7 +488,7 @@ export default function Workflows() {
         `${API_BASE_URL}/api/workflow-logs?page=${logPage}&limit=20${status ? `&status=${status}` : ''}`
       );
       const data = await response.json();
-      
+
       if (data.success) {
         setLogs(data.data || []);
         setTotalLogPages(data.pagination?.pages || 1);
@@ -453,7 +505,7 @@ export default function Workflows() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/workflow-logs/stats`);
       const data = await response.json();
-      
+
       if (data.success) {
         setLogStats(data.data);
       }
@@ -507,13 +559,12 @@ export default function Workflows() {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-white min-w-[300px] animate-in slide-in-from-right ${
-              toast.type === 'success'
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-white min-w-[300px] animate-in slide-in-from-right ${toast.type === 'success'
                 ? 'bg-green-500'
                 : toast.type === 'error'
-                ? 'bg-red-500'
-                : 'bg-blue-500'
-            }`}
+                  ? 'bg-red-500'
+                  : 'bg-blue-500'
+              }`}
           >
             {toast.type === 'success' && <CheckCircle2 size={20} />}
             {toast.type === 'error' && <AlertCircle size={20} />}
@@ -547,22 +598,20 @@ export default function Workflows() {
             <div className="flex items-center gap-1 px-4">
               <button
                 onClick={() => setActiveTab('workflows')}
-                className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${
-                  activeTab === 'workflows'
+                className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${activeTab === 'workflows'
                     ? 'border-orange-500 text-orange-600'
                     : 'border-transparent text-slate-600 hover:text-slate-900'
-                }`}
+                  }`}
               >
                 <Workflow size={16} className="inline mr-2" />
                 Workflows
               </button>
               <button
                 onClick={() => setActiveTab('logs')}
-                className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${
-                  activeTab === 'logs'
+                className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${activeTab === 'logs'
                     ? 'border-orange-500 text-orange-600'
                     : 'border-transparent text-slate-600 hover:text-slate-900'
-                }`}
+                  }`}
               >
                 <FileText size={16} className="inline mr-2" />
                 Logs
@@ -577,612 +626,718 @@ export default function Workflows() {
             {/* Create New Workflow */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
               <h2 className="text-xl font-semibold text-slate-900 mb-4">Create New Workflow</h2>
-              
+
               <div className="space-y-4">
-            {/* Action Selector */}
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
-                Trigger Action <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={newWorkflow.triggerAction || 'no-show'}
-                onChange={(e) =>
-                  setNewWorkflow({
-                    ...newWorkflow,
-                    triggerAction: e.target.value as any,
-                  })
-                }
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 bg-white"
-              >
-                <option value="no-show">No Show</option>
-                <option value="complete">Complete</option>
-                <option value="cancel">Cancel</option>
-                <option value="re-schedule">Re-schedule</option>
-              </select>
-            </div>
+                {/* Action Selector */}
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">
+                    Trigger Action <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={newWorkflow.triggerAction || 'no-show'}
+                    onChange={(e) =>
+                      setNewWorkflow({
+                        ...newWorkflow,
+                        triggerAction: e.target.value as any,
+                      })
+                    }
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 bg-white"
+                  >
+                    <option value="no-show">No Show</option>
+                    <option value="complete">Complete</option>
+                    <option value="cancel">Cancel</option>
+                    <option value="re-schedule">Re-schedule</option>
+                  </select>
+                </div>
 
-            {/* Workflow Steps */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-sm font-semibold text-slate-700">Workflow Steps</label>
-                <button
-                  onClick={() => addStepToWorkflow(null)}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-medium"
-                >
-                  <Plus size={16} />
-                  Add Step
-                </button>
-              </div>
-
-              {newWorkflow.steps && newWorkflow.steps.length > 0 ? (
+                {/* Workflow Steps */}
                 <div className="space-y-3">
-                  {newWorkflow.steps.map((step, index) => (
-                    <div
-                      key={index}
-                      className="p-4 border border-slate-200 rounded-lg bg-slate-50 space-y-3"
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-semibold text-slate-700">Workflow Steps</label>
+                    <button
+                      onClick={() => addStepToWorkflow(null)}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-medium"
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-semibold text-slate-700">Step {index + 1}</span>
-                        <button
-                          onClick={() => removeStepFromWorkflow(null, index)}
-                          className="text-red-500 hover:text-red-600 transition"
+                      <Plus size={16} />
+                      Add Step
+                    </button>
+                  </div>
+
+                  {newWorkflow.steps && newWorkflow.steps.length > 0 ? (
+                    <div className="space-y-3">
+                      {newWorkflow.steps.map((step, index) => (
+                        <div
+                          key={index}
+                          className="p-4 border border-slate-200 rounded-lg bg-slate-50 space-y-3"
                         >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 min-w-0">
-                        <div className="min-w-0">
-                          <label className="block text-xs font-medium text-slate-600 mb-1">
-                            Channel <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={step.channel}
-                            onChange={(e) =>
-                              updateStep(null, index, 'channel', e.target.value as 'email' | 'whatsapp')
-                            }
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
-                          >
-                            <option value="email">Email</option>
-                            <option value="whatsapp">WhatsApp</option>
-                          </select>
-                        </div>
-
-                        <div className="min-w-0">
-                          <label className="block text-xs font-medium text-slate-600 mb-1">
-                            Days After <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            value={step.daysAfter}
-                            onChange={(e) =>
-                              updateStep(null, index, 'daysAfter', parseInt(e.target.value) || 0)
-                            }
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
-                            placeholder="0"
-                          />
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="flex items-center justify-between mb-1 gap-2">
-                            <label className="block text-xs font-medium text-slate-600 flex-shrink-0">
-                              {step.channel === 'email' ? 'Template Name' : 'Template Name'} <span className="text-red-500">*</span>
-                            </label>
-                            {step.channel === 'email' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const key = `new_${index}`;
-                                  setUseManualEmailInput(prev => ({
-                                    ...prev,
-                                    [key]: !prev[key]
-                                  }));
-                                }}
-                                className="flex items-center gap-1.5 px-2 py-1 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors font-medium"
-                                title={useManualEmailInput[`new_${index}`] ? 'Switch to saved templates' : 'Enter template ID manually'}
-                              >
-                                {useManualEmailInput[`new_${index}`] ? (
-                                  <>
-                                    <List size={12} />
-                                    <span>Use Templates</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Type size={12} />
-                                    <span>Manual Entry</span>
-                                  </>
-                                )}
-                              </button>
-                            )}
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-semibold text-slate-700">Step {index + 1}</span>
+                            <button
+                              onClick={() => removeStepFromWorkflow(null, index)}
+                              className="text-red-500 hover:text-red-600 transition"
+                            >
+                              <Trash2 size={16} />
+                            </button>
                           </div>
-                          {step.channel === 'whatsapp' ? (
-                            loadingTemplates ? (
-                              <div className="flex items-center gap-2 text-slate-500 text-sm py-2">
-                                <Loader className="animate-spin" size={14} />
-                                <span>Loading templates...</span>
-                              </div>
-                            ) : (
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 min-w-0">
+                            <div className="min-w-0">
+                              <label className="block text-xs font-medium text-slate-600 mb-1">
+                                Channel <span className="text-red-500">*</span>
+                              </label>
                               <select
-                                value={step.templateName || step.templateId || ''}
-                                onChange={(e) => {
-                                  const template = watiTemplates.find(t => t.name === e.target.value);
-                                  updateStep(null, index, 'templateId', template?.id || e.target.value);
-                                  updateStep(null, index, 'templateName', e.target.value);
-                                }}
+                                value={step.channel}
+                                onChange={(e) =>
+                                  updateStep(null, index, 'channel', e.target.value as 'email' | 'whatsapp')
+                                }
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
-                                required
                               >
-                                {!step.templateName && !step.templateId ? (
-                                  <option value="">Select WhatsApp Template</option>
-                                ) : null}
-                                {watiTemplates.map((template) => (
-                                  <option key={template.id} value={template.name}>
-                                    {template.name}
-                                  </option>
-                                ))}
+                                <option value="email">Email</option>
+                                <option value="whatsapp">WhatsApp</option>
                               </select>
-                            )
-                          ) : useManualEmailInput[`new_${index}`] ? (
-                            <input
-                              type="text"
-                              value={step.templateId || ''}
-                              onChange={(e) =>
-                                updateStep(null, index, 'templateId', e.target.value)
-                              }
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
-                              placeholder="SendGrid Template ID"
-                              required
-                            />
-                          ) : (
-                            loadingEmailTemplates ? (
-                              <div className="flex items-center gap-2 text-slate-500 text-sm py-2">
-                                <Loader className="animate-spin" size={14} />
-                                <span>Loading templates...</span>
+                            </div>
+
+                            <div className="min-w-0">
+                              <label className="block text-xs font-medium text-slate-600 mb-1">
+                                Days After <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={step.daysAfter}
+                                onChange={(e) =>
+                                  updateStep(null, index, 'daysAfter', parseInt(e.target.value) || 0)
+                                }
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
+                                placeholder="0"
+                              />
+                            </div>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center justify-between mb-1 gap-2">
+                                <label className="block text-xs font-medium text-slate-600 flex-shrink-0">
+                                  {step.channel === 'email' ? 'Template Name' : 'Template Name'} <span className="text-red-500">*</span>
+                                </label>
+                                {step.channel === 'email' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const key = `new_${index}`;
+                                      setUseManualEmailInput(prev => ({
+                                        ...prev,
+                                        [key]: !prev[key]
+                                      }));
+                                    }}
+                                    className="flex items-center gap-1.5 px-2 py-1 text-xs text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors font-medium"
+                                    title={useManualEmailInput[`new_${index}`] ? 'Switch to saved templates' : 'Enter template ID manually'}
+                                  >
+                                    {useManualEmailInput[`new_${index}`] ? (
+                                      <>
+                                        <List size={12} />
+                                        <span>Use Templates</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Type size={12} />
+                                        <span>Manual Entry</span>
+                                      </>
+                                    )}
+                                  </button>
+                                )}
                               </div>
-                            ) : (
-                              <div className="flex gap-1.5 min-w-0">
-                                <select
-                                  value={step.templateName || ''}
-                                  onChange={(e) => {
-                                    if (e.target.value === '') {
-                                      updateStep(null, index, 'templateId', '');
-                                      updateStep(null, index, 'templateName', '');
-                                      return;
-                                    }
-                                    const template = emailTemplates.find(t => t.name === e.target.value);
-                                    if (template) {
-                                      updateStep(null, index, 'templateId', template.templateId);
-                                      updateStep(null, index, 'templateName', template.name);
-                                      updateStep(null, index, 'domainName', template.domainName || 'flashfiremails.com');
-                                      if (template.senderEmail) {
-                                        updateStep(null, index, 'senderEmail', template.senderEmail);
-                                      }
-                                    } else {
-                                      updateStep(null, index, 'templateId', e.target.value);
-                                      updateStep(null, index, 'templateName', e.target.value);
-                                      updateStep(null, index, 'domainName', 'flashfiremails.com');
-                                    }
-                                  }}
-                                  className="flex-1 min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
-                                  required
-                                >
-                                  {!step.templateName && !step.templateId ? (
-                                    <option value="">Select Email Template</option>
-                                  ) : null}
-                                  {emailTemplates.length === 0 ? (
-                                    <option value="" disabled>No templates saved. Use manual input.</option>
-                                  ) : (
-                                    emailTemplates.map((template) => (
+                              {step.channel === 'whatsapp' ? (
+                                loadingTemplates ? (
+                                  <div className="flex items-center gap-2 text-slate-500 text-sm py-2">
+                                    <Loader className="animate-spin" size={14} />
+                                    <span>Loading templates...</span>
+                                  </div>
+                                ) : (
+                                  <select
+                                    value={step.templateName || step.templateId || ''}
+                                    onChange={(e) => {
+                                      const template = watiTemplates.find(t => t.name === e.target.value);
+                                      updateStep(null, index, {
+                                        templateId: template?.id || e.target.value,
+                                        templateName: e.target.value
+                                      });
+                                    }}
+                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
+                                    required
+                                  >
+                                    {!step.templateName && !step.templateId ? (
+                                      <option value="">Select WhatsApp Template</option>
+                                    ) : null}
+                                    {watiTemplates.map((template) => (
                                       <option key={template.id} value={template.name}>
                                         {template.name}
                                       </option>
-                                    ))
-                                  )}
-                                </select>
+                                    ))}
+                                  </select>
+                                )
+                              ) : useManualEmailInput[`new_${index}`] ? (
+                                <input
+                                  type="text"
+                                  value={step.templateId || ''}
+                                  onChange={(e) =>
+                                    updateStep(null, index, 'templateId', e.target.value)
+                                  }
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
+                                  placeholder="SendGrid Template ID"
+                                  required
+                                />
+                              ) : (
+                                loadingEmailTemplates ? (
+                                  <div className="flex items-center gap-2 text-slate-500 text-sm py-2">
+                                    <Loader className="animate-spin" size={14} />
+                                    <span>Loading templates...</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex gap-1.5 min-w-0">
+                                    <select
+                                      value={step.templateName || ''}
+                                      onChange={(e) => {
+                                        if (e.target.value === '') {
+                                          updateStep(null, index, {
+                                            templateId: '',
+                                            templateName: '',
+                                            domainName: 'flashfiremails.com'
+                                          });
+                                          return;
+                                        }
+                                        const template = emailTemplates.find(t => t.name === e.target.value);
+                                        if (template) {
+                                          const domain = template.domainName?.includes('@')
+                                            ? template.domainName.split('@')[1]
+                                            : (template.domainName || 'flashfiremails.com');
+
+                                          updateStep(null, index, {
+                                            templateId: template.templateId,
+                                            templateName: template.name,
+                                            domainName: domain,
+                                            senderEmail: template.senderEmail || '',
+                                            senderName: template.senderName || ''
+                                          });
+                                        } else {
+                                          updateStep(null, index, {
+                                            templateId: e.target.value,
+                                            templateName: e.target.value,
+                                            domainName: 'flashfiremails.com'
+                                          });
+                                        }
+                                      }}
+                                      className="flex-1 min-w-0 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
+                                      required
+                                    >
+                                      <option value="">Select Email Template</option>
+                                      {emailTemplates.length === 0 ? (
+                                        <option value="" disabled>No templates saved. Use manual input.</option>
+                                      ) : (
+                                        emailTemplates.map((template) => (
+                                          <option key={template.id} value={template.name}>
+                                            {template.name}
+                                          </option>
+                                        ))
+                                      )}
+                                    </select>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const key = `new_${index}`;
+                                        setUseManualEmailInput(prev => ({
+                                          ...prev,
+                                          [key]: !prev[key]
+                                        }));
+                                      }}
+                                      className="flex-shrink-0 px-2.5 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 border border-slate-300 rounded-lg transition-colors"
+                                      title={useManualEmailInput[`new_${index}`] ? 'Switch to saved templates' : 'Enter template ID manually'}
+                                    >
+                                      {useManualEmailInput[`new_${index}`] ? (
+                                        <List size={16} />
+                                      ) : (
+                                        <Type size={16} />
+                                      )}
+                                    </button>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+                          {step.channel === 'email' && (
+                            <div className="mt-2 space-y-2">
+                              {step.templateName && (
+                                <div className="text-xs text-slate-600 font-semibold px-2 py-1 bg-slate-50 rounded border border-slate-200">
+                                  Template: {step.templateName}
+                                </div>
+                              )}
+                              <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">
+                                  Domain Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={step.domainName || 'flashfiremails.com'}
+                                  onChange={(e) =>
+                                    updateStep(null, index, 'domainName', e.target.value)
+                                  }
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
+                                  placeholder="flashfiremails.com"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">
+                                  Sender Email
+                                  <span className="text-slate-400 text-xs ml-1">(e.g., elizabeth@flashfirehq.com or adit.jain@flashfirehq.com)</span>
+                                </label>
+                                <input
+                                  type="email"
+                                  value={step.senderEmail || ''}
+                                  onChange={(e) =>
+                                    updateStep(null, index, 'senderEmail', e.target.value)
+                                  }
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
+                                  placeholder="elizabeth@flashfirehq.com"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-slate-600 mb-1">
+                                  Sender Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={step.senderName || ''}
+                                  onChange={(e) =>
+                                    updateStep(null, index, 'senderName', e.target.value)
+                                  }
+                                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
+                                  placeholder="Sender Name (optional)"
+                                />
+                              </div>
+                              {step.templateName && step.domainName && (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    const key = `new_${index}`;
-                                    setUseManualEmailInput(prev => ({
-                                      ...prev,
-                                      [key]: !prev[key]
-                                    }));
-                                  }}
-                                  className="flex-shrink-0 px-2.5 py-2 text-slate-600 hover:text-slate-800 hover:bg-slate-100 border border-slate-300 rounded-lg transition-colors"
-                                  title={useManualEmailInput[`new_${index}`] ? 'Switch to saved templates' : 'Enter template ID manually'}
+                                  onClick={() => handleSaveTemplate('new', index, step)}
+                                  disabled={savingTemplate[`new_${index}`] || !step.templateId}
+                                  className="w-full px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
                                 >
-                                  {useManualEmailInput[`new_${index}`] ? (
-                                    <List size={16} />
+                                  {savingTemplate[`new_${index}`] ? (
+                                    <>
+                                      <Loader className="animate-spin" size={14} />
+                                      Saving...
+                                    </>
                                   ) : (
-                                    <Type size={16} />
+                                    <>
+                                      <Save size={14} />
+                                      Save Template
+                                    </>
                                   )}
                                 </button>
-                              </div>
-                            )
+                              )}
+                            </div>
                           )}
                         </div>
-                      </div>
-                      {step.channel === 'email' && (
-                        <div className="mt-2 space-y-2">
-                          <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">
-                              Domain Name
-                            </label>
-                            <input
-                              type="text"
-                              value={step.domainName || 'flashfiremails.com'}
-                              onChange={(e) =>
-                                updateStep(null, index, 'domainName', e.target.value)
-                              }
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
-                              placeholder="flashfiremails.com"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">
-                              Sender Email
-                              <span className="text-slate-400 text-xs ml-1">(e.g., elizabeth@flashfirehq.com or adit.jain@flashfirehq.com)</span>
-                            </label>
-                            <input
-                              type="email"
-                              value={step.senderEmail || ''}
-                              onChange={(e) =>
-                                updateStep(null, index, 'senderEmail', e.target.value)
-                              }
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
-                              placeholder="elizabeth@flashfirehq.com"
-                            />
-                          </div>
-                        </div>
-                      )}
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="text-center py-8 border-2 border-dashed border-slate-300 rounded-lg">
+                      <p className="text-slate-500 text-sm">No steps added yet. Click "Add Step" to get started.</p>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="text-center py-8 border-2 border-dashed border-slate-300 rounded-lg">
-                  <p className="text-slate-500 text-sm">No steps added yet. Click "Add Step" to get started.</p>
-                </div>
-              )}
-            </div>
 
-            {/* Save Button */}
-            <div className="flex justify-end pt-4">
-              <button
-                onClick={() => saveWorkflow(newWorkflow)}
-                disabled={saving === 'new' || !newWorkflow.steps || newWorkflow.steps.length === 0}
-                className="inline-flex items-center gap-2 px-6 py-2.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
-              >
-                {saving === 'new' ? (
-                  <>
-                    <Loader2 className="animate-spin" size={18} />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save size={18} />
-                    Save Workflow
-                  </>
-                )}
-              </button>
+                {/* Save Button */}
+                <div className="flex justify-end pt-4">
+                  <button
+                    onClick={() => saveWorkflow(newWorkflow)}
+                    disabled={saving === 'new' || !newWorkflow.steps || newWorkflow.steps.length === 0}
+                    className="inline-flex items-center gap-2 px-6 py-2.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                  >
+                    {saving === 'new' ? (
+                      <>
+                        <Loader2 className="animate-spin" size={18} />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save size={18} />
+                        Save Workflow
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
             </div>
 
             {/* Existing Workflows */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
               <h2 className="text-xl font-semibold text-slate-900 mb-4">Existing Workflows</h2>
 
-          {loading ? (
-            <div className="text-center py-12">
-              <Loader2 className="animate-spin mx-auto text-orange-500" size={32} />
-              <p className="text-slate-600 mt-2">Loading workflows...</p>
-            </div>
-          ) : workflows.length === 0 ? (
-            <div className="text-center py-12">
-              <Workflow className="mx-auto text-slate-400 mb-3" size={48} />
-              <p className="text-slate-600">No workflows created yet</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {workflows.map((workflow) => (
-                <div
-                  key={workflow.workflowId}
-                  className={`p-5 border rounded-lg ${
-                    workflow.isActive
-                      ? 'border-slate-200 bg-white'
-                      : 'border-slate-300 bg-slate-50 opacity-75'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span
-                          className={`px-3 py-1 rounded-lg text-xs font-semibold ${
-                            workflow.triggerAction === 'no-show'
-                              ? 'bg-rose-100 text-rose-700'
-                              : workflow.triggerAction === 'complete'
-                              ? 'bg-green-100 text-green-700'
-                              : workflow.triggerAction === 'cancel'
-                              ? 'bg-red-100 text-red-700'
-                              : 'bg-amber-100 text-amber-700'
-                          }`}
-                        >
-                          {getActionLabel(workflow.triggerAction)}
-                        </span>
-                        {workflow.name && (
-                          <span className="text-sm font-semibold text-slate-900">{workflow.name}</span>
-                        )}
-                        {!workflow.isActive && (
-                          <span className="text-xs text-slate-500">(Inactive)</span>
-                        )}
-                      </div>
-                      {workflow.description && (
-                        <p className="text-sm text-slate-600">{workflow.description}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => toggleWorkflowActive(workflow.workflowId, workflow.isActive)}
-                        disabled={saving === workflow.workflowId}
-                        className={`p-2 rounded-lg transition ${
-                          workflow.isActive
-                            ? 'text-green-600 hover:bg-green-50'
-                            : 'text-slate-400 hover:bg-slate-100'
+              {loading ? (
+                <div className="text-center py-12">
+                  <Loader2 className="animate-spin mx-auto text-orange-500" size={32} />
+                  <p className="text-slate-600 mt-2">Loading workflows...</p>
+                </div>
+              ) : workflows.length === 0 ? (
+                <div className="text-center py-12">
+                  <Workflow className="mx-auto text-slate-400 mb-3" size={48} />
+                  <p className="text-slate-600">No workflows created yet</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {workflows.map((workflow) => (
+                    <div
+                      key={workflow.workflowId}
+                      className={`p-5 border rounded-lg ${workflow.isActive
+                          ? 'border-slate-200 bg-white'
+                          : 'border-slate-300 bg-slate-50 opacity-75'
                         }`}
-                        title={workflow.isActive ? 'Deactivate workflow' : 'Activate workflow'}
-                      >
-                        {workflow.isActive ? <Power size={18} /> : <PowerOff size={18} />}
-                      </button>
-                      {editingWorkflowId === workflow.workflowId ? (
-                        <>
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2">
+                            <span
+                              className={`px-3 py-1 rounded-lg text-xs font-semibold ${workflow.triggerAction === 'no-show'
+                                  ? 'bg-rose-100 text-rose-700'
+                                  : workflow.triggerAction === 'complete'
+                                    ? 'bg-green-100 text-green-700'
+                                    : workflow.triggerAction === 'cancel'
+                                      ? 'bg-red-100 text-red-700'
+                                      : 'bg-amber-100 text-amber-700'
+                                }`}
+                            >
+                              {getActionLabel(workflow.triggerAction)}
+                            </span>
+                            {workflow.name && (
+                              <span className="text-sm font-semibold text-slate-900">{workflow.name}</span>
+                            )}
+                            {!workflow.isActive && (
+                              <span className="text-xs text-slate-500">(Inactive)</span>
+                            )}
+                          </div>
+                          {workflow.description && (
+                            <p className="text-sm text-slate-600">{workflow.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
                           <button
-                            onClick={() => saveWorkflow(workflow)}
+                            onClick={() => toggleWorkflowActive(workflow.workflowId, workflow.isActive)}
                             disabled={saving === workflow.workflowId}
-                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-                            title="Save changes"
+                            className={`p-2 rounded-lg transition ${workflow.isActive
+                                ? 'text-green-600 hover:bg-green-50'
+                                : 'text-slate-400 hover:bg-slate-100'
+                              }`}
+                            title={workflow.isActive ? 'Deactivate workflow' : 'Activate workflow'}
                           >
-                            <Save size={18} />
+                            {workflow.isActive ? <Power size={18} /> : <PowerOff size={18} />}
                           </button>
-                          <button
-                            onClick={cancelEditing}
-                            className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
-                            title="Cancel editing"
-                          >
-                            <X size={18} />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => startEditing(workflow.workflowId)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                            title="Edit workflow"
-                          >
-                            <Edit size={18} />
-                          </button>
-                          <button
-                            onClick={() => deleteWorkflow(workflow.workflowId)}
-                            disabled={saving === workflow.workflowId}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                            title="Delete workflow"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Workflow Steps */}
-                  <div className="space-y-2">
-                    {editingWorkflowId === workflow.workflowId ? (
-                      <>
-                        {workflow.steps.map((step, index) => (
-                          <div
-                            key={index}
-                            className="p-3 border border-slate-200 rounded-lg bg-slate-50 overflow-hidden"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-semibold text-slate-700">Step {index + 1}</span>
+                          {editingWorkflowId === workflow.workflowId ? (
+                            <>
                               <button
-                                onClick={() => removeStepFromWorkflow(workflow.workflowId, index)}
-                                className="text-red-500 hover:text-red-600 transition"
+                                onClick={() => saveWorkflow(workflow)}
+                                disabled={saving === workflow.workflowId}
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
+                                title="Save changes"
                               >
-                                <Trash2 size={14} />
+                                <Save size={18} />
                               </button>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                              <select
-                                value={step.channel}
-                                onChange={(e) =>
-                                  updateStep(workflow.workflowId, index, 'channel', e.target.value)
-                                }
-                                className="px-2 py-1.5 border border-slate-300 rounded text-sm min-w-0"
+                              <button
+                                onClick={cancelEditing}
+                                className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                                title="Cancel editing"
                               >
-                                <option value="email">Email</option>
-                                <option value="whatsapp">WhatsApp</option>
-                              </select>
-                              <input
-                                type="number"
-                                min="0"
-                                value={step.daysAfter}
-                                onChange={(e) =>
-                                  updateStep(workflow.workflowId, index, 'daysAfter', parseInt(e.target.value) || 0)
-                                }
-                                className="px-2 py-1.5 border border-slate-300 rounded text-sm min-w-0"
-                                placeholder="Days after"
-                              />
-                              <div className="min-w-0">
-                                {step.channel === 'whatsapp' ? (
-                                  loadingTemplates ? (
-                                    <div className="flex items-center gap-1 text-slate-500 text-xs px-2 py-1.5">
-                                      <Loader className="animate-spin" size={12} />
-                                      <span>Loading...</span>
-                                    </div>
-                                  ) : (
-                                    <select
-                                      value={step.templateName || step.templateId || ''}
-                                      onChange={(e) => {
-                                        const template = watiTemplates.find(t => t.name === e.target.value);
-                                        updateStep(workflow.workflowId, index, 'templateId', template?.id || e.target.value);
-                                        updateStep(workflow.workflowId, index, 'templateName', e.target.value);
-                                      }}
-                                      className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
-                                      required
-                                    >
-                                      {!step.templateName && !step.templateId ? (
-                                        <option value="">Select Template</option>
-                                      ) : null}
-                                      {watiTemplates.map((template) => (
-                                        <option key={template.id} value={template.name}>
-                                          {template.name}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  )
-                                ) : useManualEmailInput[`edit_${workflow.workflowId}_${index}`] ? (
-                                  <input
-                                    type="text"
-                                    value={step.templateId || ''}
+                                <X size={18} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => startEditing(workflow.workflowId)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                title="Edit workflow"
+                              >
+                                <Edit size={18} />
+                              </button>
+                              <button
+                                onClick={() => deleteWorkflow(workflow.workflowId)}
+                                disabled={saving === workflow.workflowId}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                title="Delete workflow"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Workflow Steps */}
+                      <div className="space-y-2">
+                        {editingWorkflowId === workflow.workflowId ? (
+                          <>
+                            {workflow.steps.map((step, index) => (
+                              <div
+                                key={index}
+                                className="p-3 border border-slate-200 rounded-lg bg-slate-50 overflow-hidden"
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-xs font-semibold text-slate-700">Step {index + 1}</span>
+                                  <button
+                                    onClick={() => removeStepFromWorkflow(workflow.workflowId, index)}
+                                    className="text-red-500 hover:text-red-600 transition"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                  <select
+                                    value={step.channel}
                                     onChange={(e) =>
-                                      updateStep(workflow.workflowId, index, 'templateId', e.target.value)
+                                      updateStep(workflow.workflowId, index, 'channel', e.target.value)
                                     }
-                                    className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
-                                    placeholder="Template ID"
-                                    required
+                                    className="px-2 py-1.5 border border-slate-300 rounded text-sm min-w-0"
+                                  >
+                                    <option value="email">Email</option>
+                                    <option value="whatsapp">WhatsApp</option>
+                                  </select>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={step.daysAfter}
+                                    onChange={(e) =>
+                                      updateStep(workflow.workflowId, index, 'daysAfter', parseInt(e.target.value) || 0)
+                                    }
+                                    className="px-2 py-1.5 border border-slate-300 rounded text-sm min-w-0"
+                                    placeholder="Days after"
                                   />
-                                ) : (
-                                  loadingEmailTemplates ? (
-                                    <div className="flex items-center gap-1 text-slate-500 text-xs px-2 py-1.5">
-                                      <Loader className="animate-spin" size={12} />
-                                      <span>Loading...</span>
-                                    </div>
-                                  ) : (
-                                    <div className="flex gap-1.5 min-w-0">
-                                      <select
-                                        value={step.templateName || step.templateId || ''}
-                                        onChange={(e) => {
-                                          if (e.target.value === '') {
-                                            updateStep(workflow.workflowId, index, 'templateId', '');
-                                            updateStep(workflow.workflowId, index, 'templateName', '');
-                                            return;
-                                          }
-                                          const template = emailTemplates.find(t => t.name === e.target.value);
-                                          if (template) {
-                                            updateStep(workflow.workflowId, index, 'templateId', template.templateId);
-                                            updateStep(workflow.workflowId, index, 'templateName', template.name);
-                                            updateStep(workflow.workflowId, index, 'domainName', template.domainName || 'flashfiremails.com');
-                                            if (template.senderEmail) {
-                                              updateStep(workflow.workflowId, index, 'senderEmail', template.senderEmail);
-                                            }
-                                          } else {
-                                            updateStep(workflow.workflowId, index, 'templateId', e.target.value);
-                                            updateStep(workflow.workflowId, index, 'templateName', e.target.value);
-                                            updateStep(workflow.workflowId, index, 'domainName', 'flashfiremails.com');
-                                          }
-                                        }}
-                                        className="flex-1 min-w-0 px-2 py-1.5 border border-slate-300 rounded text-sm"
-                                        required
-                                      >
-                                        {!step.templateName && !step.templateId ? (
-                                          <option value="">Select Template</option>
-                                        ) : null}
-                                        {emailTemplates.length === 0 ? (
-                                          <option value="" disabled>No templates saved</option>
-                                        ) : (
-                                          emailTemplates.map((template) => (
+                                  <div className="min-w-0">
+                                    {step.channel === 'whatsapp' ? (
+                                      loadingTemplates ? (
+                                        <div className="flex items-center gap-1 text-slate-500 text-xs px-2 py-1.5">
+                                          <Loader className="animate-spin" size={12} />
+                                          <span>Loading...</span>
+                                        </div>
+                                      ) : (
+                                        <select
+                                          value={step.templateName || step.templateId || ''}
+                                          onChange={(e) => {
+                                            const template = watiTemplates.find(t => t.name === e.target.value);
+                                            updateStep(workflow.workflowId, index, {
+                                              templateId: template?.id || e.target.value,
+                                              templateName: e.target.value
+                                            });
+                                          }}
+                                          className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
+                                          required
+                                        >
+                                          {!step.templateName && !step.templateId ? (
+                                            <option value="">Select Template</option>
+                                          ) : null}
+                                          {watiTemplates.map((template) => (
                                             <option key={template.id} value={template.name}>
                                               {template.name}
                                             </option>
-                                          ))
-                                        )}
-                                      </select>
+                                          ))}
+                                        </select>
+                                      )
+                                    ) : useManualEmailInput[`edit_${workflow.workflowId}_${index}`] ? (
+                                      <input
+                                        type="text"
+                                        value={step.templateId || ''}
+                                        onChange={(e) =>
+                                          updateStep(workflow.workflowId, index, 'templateId', e.target.value)
+                                        }
+                                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
+                                        placeholder="Template ID"
+                                        required
+                                      />
+                                    ) : (
+                                      loadingEmailTemplates ? (
+                                        <div className="flex items-center gap-1 text-slate-500 text-xs px-2 py-1.5">
+                                          <Loader className="animate-spin" size={12} />
+                                          <span>Loading...</span>
+                                        </div>
+                                      ) : (
+                                        <div className="flex gap-1.5 min-w-0">
+                                          <select
+                                            value={step.templateName || ''}
+                                            onChange={(e) => {
+                                              if (e.target.value === '') {
+                                                updateStep(workflow.workflowId, index, {
+                                                  templateId: '',
+                                                  templateName: '',
+                                                  domainName: 'flashfiremails.com'
+                                                });
+                                                return;
+                                              }
+                                              const template = emailTemplates.find(t => t.name === e.target.value);
+                                              if (template) {
+                                                const domain = template.domainName?.includes('@')
+                                                  ? template.domainName.split('@')[1]
+                                                  : (template.domainName || 'flashfiremails.com');
+
+                                                updateStep(workflow.workflowId, index, {
+                                                  templateId: template.templateId,
+                                                  templateName: template.name,
+                                                  domainName: domain,
+                                                  senderEmail: template.senderEmail || '',
+                                                  senderName: template.senderName || ''
+                                                });
+                                              } else {
+                                                updateStep(workflow.workflowId, index, {
+                                                  templateId: e.target.value,
+                                                  templateName: e.target.value,
+                                                  domainName: 'flashfiremails.com'
+                                                });
+                                              }
+                                            }}
+                                            className="flex-1 min-w-0 px-2 py-1.5 border border-slate-300 rounded text-sm"
+                                            required
+                                          >
+                                            <option value="">Select Email Template</option>
+                                            {emailTemplates.length === 0 ? (
+                                              <option value="" disabled>No templates saved</option>
+                                            ) : (
+                                              emailTemplates.map((template) => (
+                                                <option key={template.id} value={template.name}>
+                                                  {template.name}
+                                                </option>
+                                              ))
+                                            )}
+                                          </select>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const key = `edit_${workflow.workflowId}_${index}`;
+                                              setUseManualEmailInput(prev => ({
+                                                ...prev,
+                                                [key]: !prev[key]
+                                              }));
+                                            }}
+                                            className="flex-shrink-0 px-2 py-1.5 text-slate-600 hover:text-slate-800 hover:bg-slate-100 border border-slate-300 rounded text-sm transition-colors"
+                                            title={useManualEmailInput[`edit_${workflow.workflowId}_${index}`] ? 'Switch to saved templates' : 'Enter template ID manually'}
+                                          >
+                                            {useManualEmailInput[`edit_${workflow.workflowId}_${index}`] ? (
+                                              <List size={14} />
+                                            ) : (
+                                              <Type size={14} />
+                                            )}
+                                          </button>
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                                {step.channel === 'email' && (
+                                  <div className="mt-2 space-y-2">
+                                    {step.templateName && (
+                                      <div className="text-xs text-slate-600 font-semibold px-2 py-1 bg-slate-50 rounded border border-slate-200">
+                                        Template: {step.templateName}
+                                      </div>
+                                    )}
+                                    <div>
+                                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                                        Domain Name
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={step.domainName || 'flashfiremails.com'}
+                                        onChange={(e) =>
+                                          updateStep(workflow.workflowId, index, 'domainName', e.target.value)
+                                        }
+                                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
+                                        placeholder="flashfiremails.com"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                                        Sender Email
+                                        <span className="text-slate-400 text-xs ml-1">(e.g., elizabeth@flashfirehq.com or adit.jain@flashfirehq.com)</span>
+                                      </label>
+                                      <input
+                                        type="email"
+                                        value={step.senderEmail || ''}
+                                        onChange={(e) =>
+                                          updateStep(workflow.workflowId, index, 'senderEmail', e.target.value)
+                                        }
+                                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
+                                        placeholder="elizabeth@flashfirehq.com"
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-slate-600 mb-1">
+                                        Sender Name
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={step.senderName || ''}
+                                        onChange={(e) =>
+                                          updateStep(workflow.workflowId, index, 'senderName', e.target.value)
+                                        }
+                                        className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
+                                        placeholder="Sender Name (optional)"
+                                      />
+                                    </div>
+                                    {step.templateName && step.domainName && (
                                       <button
                                         type="button"
-                                        onClick={() => {
-                                          const key = `edit_${workflow.workflowId}_${index}`;
-                                          setUseManualEmailInput(prev => ({
-                                            ...prev,
-                                            [key]: !prev[key]
-                                          }));
-                                        }}
-                                        className="flex-shrink-0 px-2 py-1.5 text-slate-600 hover:text-slate-800 hover:bg-slate-100 border border-slate-300 rounded text-sm transition-colors"
-                                        title={useManualEmailInput[`edit_${workflow.workflowId}_${index}`] ? 'Switch to saved templates' : 'Enter template ID manually'}
+                                        onClick={() => handleSaveTemplate(workflow.workflowId, index, step)}
+                                        disabled={savingTemplate[`${workflow.workflowId}_${index}`] || !step.templateId}
+                                        className="w-full px-3 py-2 bg-blue-500 text-white rounded text-sm font-semibold hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
                                       >
-                                        {useManualEmailInput[`edit_${workflow.workflowId}_${index}`] ? (
-                                          <List size={14} />
+                                        {savingTemplate[`${workflow.workflowId}_${index}`] ? (
+                                          <>
+                                            <Loader className="animate-spin" size={14} />
+                                            Saving...
+                                          </>
                                         ) : (
-                                          <Type size={14} />
+                                          <>
+                                            <Save size={14} />
+                                            Save Template
+                                          </>
                                         )}
                                       </button>
-                                    </div>
-                                  )
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            </div>
-                            {step.channel === 'email' && (
-                              <div className="mt-2 space-y-2">
-                                <input
-                                  type="text"
-                                  value={step.domainName || 'flashfiremails.com'}
-                                  onChange={(e) =>
-                                    updateStep(workflow.workflowId, index, 'domainName', e.target.value)
-                                  }
-                                  className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
-                                  placeholder="flashfiremails.com"
-                                />
-                                <input
-                                  type="email"
-                                  value={step.senderEmail || ''}
-                                  onChange={(e) =>
-                                    updateStep(workflow.workflowId, index, 'senderEmail', e.target.value)
-                                  }
-                                  className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
-                                  placeholder="elizabeth@flashfirehq.com"
-                                />
+                            ))}
+                            <button
+                              onClick={() => addStepToWorkflow(workflow.workflowId)}
+                              className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 hover:border-orange-500 hover:text-orange-500 transition text-sm font-medium"
+                            >
+                              <Plus size={16} className="inline mr-1" />
+                              Add Step
+                            </button>
+                          </>
+                        ) : (
+                          workflow.steps.map((step, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200"
+                            >
+                              <div className="flex items-center gap-2 text-slate-600">
+                                {step.channel === 'email' ? (
+                                  <Mail size={16} className="text-blue-500" />
+                                ) : (
+                                  <MessageCircle size={16} className="text-green-500" />
+                                )}
+                                <span className="text-sm font-medium">
+                                  {step.channel === 'email' ? 'Email' : 'WhatsApp'}
+                                </span>
                               </div>
-                            )}
-                          </div>
-                        ))}
-                        <button
-                          onClick={() => addStepToWorkflow(workflow.workflowId)}
-                          className="w-full py-2 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 hover:border-orange-500 hover:text-orange-500 transition text-sm font-medium"
-                        >
-                          <Plus size={16} className="inline mr-1" />
-                          Add Step
-                        </button>
-                      </>
-                    ) : (
-                      workflow.steps.map((step, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200"
-                        >
-                          <div className="flex items-center gap-2 text-slate-600">
-                            {step.channel === 'email' ? (
-                              <Mail size={16} className="text-blue-500" />
-                            ) : (
-                              <MessageCircle size={16} className="text-green-500" />
-                            )}
-                            <span className="text-sm font-medium">
-                              {step.channel === 'email' ? 'Email' : 'WhatsApp'}
-                            </span>
-                          </div>
-                          <span className="text-sm text-slate-600">
-                            {step.daysAfter === 0 ? 'Immediately' : `After ${step.daysAfter} day${step.daysAfter !== 1 ? 's' : ''}`}
-                          </span>
-                          <span className="text-sm text-slate-500 flex-1 truncate">
-                            Template: {step.templateName || step.templateId}
-                          </span>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                              <span className="text-sm text-slate-600">
+                                {step.daysAfter === 0 ? 'Immediately' : `After ${step.daysAfter} day${step.daysAfter !== 1 ? 's' : ''}`}
+                              </span>
+                              <span className="text-sm text-slate-500 flex-1 truncate">
+                                Template: {step.templateName || step.templateId}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
             </div>
           </>
         )}
@@ -1239,11 +1394,10 @@ export default function Workflows() {
                       setLogStatusTab('all');
                       setLogPage(1);
                     }}
-                    className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${
-                      logStatusTab === 'all'
+                    className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${logStatusTab === 'all'
                         ? 'border-orange-500 text-orange-600'
                         : 'border-transparent text-slate-600 hover:text-slate-900'
-                    }`}
+                      }`}
                   >
                     All Logs ({totalLogs})
                   </button>
@@ -1252,11 +1406,10 @@ export default function Workflows() {
                       setLogStatusTab('scheduled');
                       setLogPage(1);
                     }}
-                    className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${
-                      logStatusTab === 'scheduled'
+                    className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${logStatusTab === 'scheduled'
                         ? 'border-blue-500 text-blue-600'
                         : 'border-transparent text-slate-600 hover:text-slate-900'
-                    }`}
+                      }`}
                   >
                     Scheduled ({logStats.scheduled})
                   </button>
@@ -1265,11 +1418,10 @@ export default function Workflows() {
                       setLogStatusTab('executed');
                       setLogPage(1);
                     }}
-                    className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${
-                      logStatusTab === 'executed'
+                    className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${logStatusTab === 'executed'
                         ? 'border-green-500 text-green-600'
                         : 'border-transparent text-slate-600 hover:text-slate-900'
-                    }`}
+                      }`}
                   >
                     Completed ({logStats.executed})
                   </button>
@@ -1388,7 +1540,7 @@ export default function Workflows() {
                                   <button
                                     onClick={async () => {
                                       if (sendingLogId === log.logId) return;
-                                      
+
                                       try {
                                         setSendingLogId(log.logId);
                                         const response = await fetch(
@@ -1500,11 +1652,10 @@ export default function Workflows() {
                                 <button
                                   key={pageNum}
                                   onClick={() => setLogPage(pageNum)}
-                                  className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
-                                    logPage === pageNum
+                                  className={`px-3 py-2 rounded-lg text-sm font-medium transition ${logPage === pageNum
                                       ? 'bg-orange-500 text-white'
                                       : 'text-slate-700 hover:bg-slate-100'
-                                  }`}
+                                    }`}
                                 >
                                   {pageNum}
                                 </button>
