@@ -119,6 +119,11 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
   const [refreshing, setRefreshing] = useState(false);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [selectedBookingForNotes, setSelectedBookingForNotes] = useState<{ id: string; name: string; notes: string } | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [isDateModalOpen, setIsDateModalOpen] = useState(false);
+  const [dateMeetings, setDateMeetings] = useState<Booking[]>([]);
+  const [dateBreakdown, setDateBreakdown] = useState<{ booked: number; cancelled: number; noShow: number; completed: number; rescheduled: number; total: number } | null>(null);
+  const [loadingDateMeetings, setLoadingDateMeetings] = useState(false);
 
   const fetchBookings = useCallback(async (forceRefresh = false) => {
     try {
@@ -206,6 +211,10 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
     if (bookings.length === 0) {
       return {
         meetingsToday: 0,
+        meetingsTodayBooked: 0,
+        meetingsTodayCancelled: 0,
+        meetingsTodayNoShow: 0,
+        bookingsCreatedToday: 0,
         meetingsThisWeek: 0,
         upcomingMeetings: 0,
         completedMeetings: 0,
@@ -225,7 +234,23 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
 
     const now = new Date();
     const startOfWeek = subDays(startOfDay(now), 6);
-    const meetingsToday = bookings.filter((booking) =>
+    const todayStart = startOfDay(now);
+    const todayEnd = endOfDay(now);
+    
+    // Meetings scheduled for today (based on scheduledEventStartTime)
+    const meetingsTodayList = bookings.filter((booking) => {
+      if (!booking.scheduledEventStartTime) return false;
+      const eventDate = parseISO(booking.scheduledEventStartTime);
+      return eventDate >= todayStart && eventDate <= todayEnd;
+    });
+    
+    const meetingsToday = meetingsTodayList.length;
+    const meetingsTodayBooked = meetingsTodayList.filter(b => b.bookingStatus === 'scheduled' || !b.bookingStatus).length;
+    const meetingsTodayCancelled = meetingsTodayList.filter(b => b.bookingStatus === 'canceled').length;
+    const meetingsTodayNoShow = meetingsTodayList.filter(b => b.bookingStatus === 'no-show').length;
+    
+    // Bookings created today (for backward compatibility)
+    const bookingsCreatedToday = bookings.filter((booking) =>
       isSameDay(parseISO(booking.bookingCreatedAt), now),
     ).length;
     const meetingsThisWeek = bookings.filter((booking) => {
@@ -339,6 +364,10 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
 
     return {
       meetingsToday,
+      meetingsTodayBooked,
+      meetingsTodayCancelled,
+      meetingsTodayNoShow,
+      bookingsCreatedToday,
       meetingsThisWeek,
       upcomingMeetings,
       completedMeetings,
@@ -497,6 +526,32 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
     [onOpenEmailCampaign],
   );
 
+  const fetchMeetingsByDate = useCallback(async (date: string) => {
+    if (!date) return;
+    try {
+      setLoadingDateMeetings(true);
+      const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/by-date?date=${date}`);
+      const data = await response.json();
+      if (data.success) {
+        setDateMeetings(data.data || []);
+        setDateBreakdown(data.breakdown || null);
+        setIsDateModalOpen(true);
+      } else {
+        throw new Error(data.message || 'Unable to fetch meetings');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast(err instanceof Error ? err.message : 'Failed to load meetings', 'error');
+    } finally {
+      setLoadingDateMeetings(false);
+    }
+  }, []);
+
+  const handleDateSelect = (date: string) => {
+    setSelectedDate(date);
+    fetchMeetingsByDate(date);
+  };
+
   const handleReschedule = async (booking: Booking) => {
     const defaultValue = booking.scheduledEventStartTime
       ? format(parseISO(booking.scheduledEventStartTime), "yyyy-MM-dd'T'HH:mm")
@@ -598,7 +653,12 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
       title: 'Meetings Today',
       value: derived.meetingsToday,
       icon: Calendar,
-      subtitle: 'Bookings created in the last 24h',
+      subtitle: 'Scheduled for today',
+      breakdown: {
+        booked: derived.meetingsTodayBooked,
+        cancelled: derived.meetingsTodayCancelled,
+        noShow: derived.meetingsTodayNoShow,
+      },
     },
     {
       title: 'Upcoming Meetings',
@@ -677,20 +737,89 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        {overviewCards.map((card) => (
-          <div key={card.title} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-500">{card.title}</p>
-                <p className="text-3xl font-bold text-slate-900 mt-2">{card.value}</p>
+        {overviewCards.map((card) => {
+          const isMeetingsToday = card.title === 'Meetings Today';
+          return (
+            <div
+              key={card.title}
+              onClick={isMeetingsToday ? () => {
+                const today = format(new Date(), 'yyyy-MM-dd');
+                setSelectedDate(today);
+                handleDateSelect(today);
+              } : undefined}
+              className={`bg-white rounded-2xl border border-slate-200 shadow-sm p-6 ${isMeetingsToday ? 'cursor-pointer hover:border-orange-300 hover:shadow-md transition' : ''}`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-500">{card.title}</p>
+                  <p className="text-3xl font-bold text-slate-900 mt-2">{card.value}</p>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                  <card.icon size={22} />
+                </div>
               </div>
-              <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center">
-                <card.icon size={22} />
-              </div>
+              <p className="text-xs text-slate-500 mt-4">{card.subtitle}</p>
+              {card.breakdown && (
+                <div className="mt-4 space-y-2 pt-4 border-t border-slate-100">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600">Booked:</span>
+                    <span className="font-semibold text-blue-600">{card.breakdown.booked}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600">Cancelled:</span>
+                    <span className="font-semibold text-red-600">{card.breakdown.cancelled}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600">No-Show:</span>
+                    <span className="font-semibold text-rose-600">{card.breakdown.noShow}</span>
+                  </div>
+                  {isMeetingsToday && (
+                    <p className="text-xs text-orange-600 font-semibold mt-2 pt-2 border-t border-slate-100">
+                      Click to view details →
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
-            <p className="text-xs text-slate-500 mt-4">{card.subtitle}</p>
+          );
+        })}
+      </div>
+
+      {/* Date Picker Section */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">View Meetings by Date</h3>
+            <p className="text-sm text-slate-500 mt-1">Select a date to see all meetings scheduled for that day</p>
           </div>
-        ))}
+          <div className="flex items-center gap-3">
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                const date = e.target.value;
+                setSelectedDate(date);
+                if (date) {
+                  handleDateSelect(date);
+                }
+              }}
+              className="border border-slate-200 rounded-lg px-4 py-2 bg-white text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+            {selectedDate && (
+              <button
+                onClick={() => {
+                  setSelectedDate('');
+                  setIsDateModalOpen(false);
+                  setDateMeetings([]);
+                  setDateBreakdown(null);
+                }}
+                className="px-3 py-2 text-sm text-slate-600 hover:text-slate-900"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -1167,6 +1296,117 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
           initialNotes={selectedBookingForNotes.notes}
           clientName={selectedBookingForNotes.name}
         />
+      )}
+
+      {/* Date Meetings Modal */}
+      {isDateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-6 border-b border-slate-200">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-900">
+                  Meetings on {selectedDate ? format(new Date(selectedDate + 'T00:00:00'), 'MMMM d, yyyy') : 'Selected Date'}
+                </h3>
+                {dateBreakdown && (
+                  <div className="flex items-center gap-4 mt-2">
+                    <span className="text-sm text-slate-600">
+                      <span className="font-semibold text-blue-600">{dateBreakdown.booked}</span> Booked
+                    </span>
+                    <span className="text-sm text-slate-600">
+                      <span className="font-semibold text-red-600">{dateBreakdown.cancelled}</span> Cancelled
+                    </span>
+                    <span className="text-sm text-slate-600">
+                      <span className="font-semibold text-rose-600">{dateBreakdown.noShow}</span> No-Show
+                    </span>
+                    <span className="text-sm text-slate-600">
+                      <span className="font-semibold text-green-600">{dateBreakdown.completed}</span> Completed
+                    </span>
+                    <span className="text-sm text-slate-500">
+                      Total: <span className="font-semibold">{dateBreakdown.total}</span>
+                    </span>
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setIsDateModalOpen(false);
+                  setDateMeetings([]);
+                  setDateBreakdown(null);
+                }}
+                className="p-2 hover:bg-slate-100 rounded-lg transition"
+              >
+                <X size={24} className="text-slate-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {loadingDateMeetings ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="animate-spin text-orange-500" size={32} />
+                </div>
+              ) : dateMeetings.length === 0 ? (
+                <div className="text-center py-12">
+                  <Calendar className="mx-auto text-slate-300 mb-4" size={48} />
+                  <p className="text-lg font-semibold text-slate-600">No meetings scheduled for this date</p>
+                  <p className="text-sm text-slate-500 mt-2">Try selecting a different date</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {dateMeetings.map((booking) => {
+                    const meetingTime = booking.scheduledEventStartTime
+                      ? format(parseISO(booking.scheduledEventStartTime), 'h:mm a')
+                      : 'Not scheduled';
+                    return (
+                      <div
+                        key={booking.bookingId}
+                        className="border border-slate-200 rounded-xl p-4 hover:border-orange-300 transition"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h4 className="text-lg font-semibold text-slate-900">{booking.clientName || 'Unknown'}</h4>
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusColors[booking.bookingStatus]}`}>
+                                {statusLabels[booking.bookingStatus]}
+                              </span>
+                            </div>
+                            <div className="space-y-1 text-sm">
+                              <div className="flex items-center gap-2 text-slate-600">
+                                <Mail size={14} className="text-slate-400" />
+                                <span>{booking.clientEmail || 'No email'}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-slate-600">
+                                <Clock size={14} className="text-slate-400" />
+                                <span>Meeting Time: {meetingTime}</span>
+                              </div>
+                              {booking.clientPhone && (
+                                <div className="flex items-center gap-2 text-slate-600">
+                                  <span className="text-slate-400">📞</span>
+                                  <a href={`tel:${booking.clientPhone}`} className="text-orange-600 hover:text-orange-700 font-semibold">
+                                    {booking.clientPhone}
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {booking.calendlyMeetLink && booking.calendlyMeetLink !== 'Not Provided' && (
+                            <a
+                              href={booking.calendlyMeetLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-orange-500 text-white hover:bg-orange-600 transition"
+                            >
+                              <ExternalLink size={16} />
+                              Join Meeting
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
     </>
