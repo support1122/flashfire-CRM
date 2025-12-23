@@ -694,6 +694,11 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
     }, 4000);
   };
 
+  const getPlanOptionByName = (name?: string | null) => {
+    if (!name) return undefined;
+    return PLAN_OPTIONS.find((p) => p.key === name) || undefined;
+  };
+
   const handleStatusUpdate = async (bookingId: string, status: BookingStatus, plan?: PlanOption) => {
     try {
       setUpdatingBookingId(bookingId);
@@ -1703,6 +1708,29 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                   <DollarSign size={12} className="text-emerald-600" />
                                   <span>{row.paymentPlan.name}</span>
                                   <span className="text-emerald-700">{row.paymentPlan.displayPrice || `$${row.paymentPlan.price}`}</span>
+                                </div>
+                              )}
+                              {row.status === 'paid' && (
+                                <div className="flex items-center gap-2">
+                                  <select
+                                    value={row.paymentPlan?.name || ''}
+                                    onChange={(e) => {
+                                      const plan = getPlanOptionByName(e.target.value);
+                                      const booking = bookingsById.get(row.bookingId!);
+                                      if (plan && booking) {
+                                        handleStatusUpdate(booking.bookingId, 'paid', plan);
+                                      }
+                                    }}
+                                    disabled={updatingBookingId === row.bookingId}
+                                    className="flex-1 text-xs border border-emerald-200 rounded-lg px-2 py-1 bg-emerald-50 text-emerald-800"
+                                  >
+                                    <option value="">Select plan</option>
+                                    {PLAN_OPTIONS.map((plan) => (
+                                      <option key={plan.key} value={plan.key}>
+                                        {plan.label} ({plan.displayPrice})
+                                      </option>
+                                    ))}
+                                  </select>
                                 </div>
                               )}
                               {/* Join and Take Notes */}

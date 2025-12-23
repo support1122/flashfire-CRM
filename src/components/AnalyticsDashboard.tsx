@@ -495,6 +495,11 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
     }, 4000);
   };
 
+  const getPlanOptionByName = (name?: string | null) => {
+    if (!name) return undefined;
+    return PLAN_OPTIONS.find((p) => p.key === name) || undefined;
+  };
+
   const handleStatusUpdate = async (bookingId: string, status: BookingStatus, plan?: PlanOption) => {
     try {
       setUpdatingBookingId(bookingId);
@@ -1283,6 +1288,28 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
                               <DollarSign size={12} className="text-emerald-600" />
                               <span>{booking.paymentPlan.name}</span>
                               <span className="text-emerald-700">{booking.paymentPlan.displayPrice || `$${booking.paymentPlan.price}`}</span>
+                            </div>
+                          )}
+                          {booking.bookingStatus === 'paid' && (
+                            <div className="mt-2">
+                              <select
+                                value={booking.paymentPlan?.name || ''}
+                                onChange={(e) => {
+                                  const plan = getPlanOptionByName(e.target.value);
+                                  if (plan) {
+                                    handleStatusUpdate(booking.bookingId, 'paid', plan);
+                                  }
+                                }}
+                                disabled={updatingBookingId === booking.bookingId}
+                                className="text-xs border border-emerald-200 rounded-lg px-2 py-1 bg-emerald-50 text-emerald-800"
+                              >
+                                <option value="">Select plan</option>
+                                {PLAN_OPTIONS.map((plan) => (
+                                  <option key={plan.key} value={plan.key}>
+                                    {plan.label} ({plan.displayPrice})
+                                  </option>
+                                ))}
+                              </select>
                             </div>
                           )}
                         </td>
