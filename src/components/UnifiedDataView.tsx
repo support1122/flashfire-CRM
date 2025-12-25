@@ -37,6 +37,7 @@ import {
 
 import NotesModal from './NotesModal';
 import InsertDataModal, { type InsertDataFormData } from './InsertDataModal';
+import FollowUpModal, { type FollowUpData } from './FollowUpModal';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -226,6 +227,8 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const [showMeetingsToday, setShowMeetingsToday] = useState(false);
   const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null);
   const [planPickerFor, setPlanPickerFor] = useState<string | null>(null);
+  const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
+  const [selectedBookingForFollowUp, setSelectedBookingForFollowUp] = useState<Booking | null>(null);
 
   // Indexes for fast lookups
   const bookingsById = useMemo(() => {
@@ -742,12 +745,53 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       if (data.workflowTriggered) {
         showToast(`Workflow triggered for ${status} action`, 'success');
       }
+
+      // If status is "completed", show follow-up modal
+      if (status === 'completed') {
+        const booking = bookings.find(b => b.bookingId === bookingId);
+        if (booking) {
+          setSelectedBookingForFollowUp({
+            ...booking,
+            bookingStatus: status,
+            paymentPlan: updatedBooking?.paymentPlan || planPayload || booking.paymentPlan,
+          });
+          setIsFollowUpModalOpen(true);
+        }
+      }
     } catch (err) {
       console.error(err);
       showToast(err instanceof Error ? err.message : 'Failed to update booking status', 'error');
     } finally {
       setUpdatingBookingId(null);
       setPlanPickerFor(null);
+    }
+  };
+
+  const handleScheduleFollowUp = async (followUpData: FollowUpData) => {
+    if (!selectedBookingForFollowUp) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${selectedBookingForFollowUp.bookingId}/follow-up`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          bookingId: selectedBookingForFollowUp.bookingId,
+          ...followUpData,
+        }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to schedule follow-up');
+      }
+
+      showToast('Follow-up scheduled successfully!', 'success');
+      setIsFollowUpModalOpen(false);
+      setSelectedBookingForFollowUp(null);
+    } catch (err) {
+      throw err; // Re-throw to let modal handle error display
     }
   };
 
@@ -2364,6 +2408,20 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         onClose={() => setIsInsertModalOpen(false)}
         onSave={handleInsertData}
       />
+      {/* Follow-Up Modal */}
+      {selectedBookingForFollowUp && (
+        <FollowUpModal
+          isOpen={isFollowUpModalOpen}
+          onClose={() => {
+            setIsFollowUpModalOpen(false);
+            setSelectedBookingForFollowUp(null);
+          }}
+          onSchedule={handleScheduleFollowUp}
+          clientName={selectedBookingForFollowUp.clientName}
+          clientEmail={selectedBookingForFollowUp.clientEmail}
+          clientPhone={selectedBookingForFollowUp.clientPhone}
+        />
+      )}
 
       {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && selectedUserForDelete && (
