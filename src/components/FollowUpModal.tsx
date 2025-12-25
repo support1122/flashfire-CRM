@@ -21,8 +21,8 @@ export default function FollowUpModal({
     onClose, 
     onSchedule, 
     clientName, 
-    clientEmail,
-    clientPhone 
+    clientEmail: _clientEmail,
+    clientPhone: _clientPhone 
 }: FollowUpModalProps) {
     const [followUpDateTime, setFollowUpDateTime] = useState('');
     const [templateId, setTemplateId] = useState('');
