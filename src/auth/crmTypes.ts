@@ -4,7 +4,8 @@ export type CrmPermission =
   | 'whatsapp_campaign'
   | 'analytics'
   | 'all_data'
-  | 'workflows';
+  | 'workflows'
+  | 'leads';
 
 export interface CrmUser {
   email: string;

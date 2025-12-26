@@ -12,8 +12,6 @@ interface FollowUpModalProps {
 
 export interface FollowUpData {
     followUpDateTime: string; // ISO string
-    templateId: string;
-    senderEmail: string;
 }
 
 export default function FollowUpModal({ 
@@ -25,8 +23,6 @@ export default function FollowUpModal({
     clientPhone: _clientPhone 
 }: FollowUpModalProps) {
     const [followUpDateTime, setFollowUpDateTime] = useState('');
-    const [templateId, setTemplateId] = useState('');
-    const [senderEmail, setSenderEmail] = useState('');
     const [isScheduling, setIsScheduling] = useState(false);
     const [error, setError] = useState('');
 
@@ -34,12 +30,7 @@ export default function FollowUpModal({
         if (isOpen) {
             // Reset form when modal opens
             setFollowUpDateTime('');
-            setTemplateId('');
-            setSenderEmail('');
             setError('');
-            
-            // Set default sender email (can be customized)
-            setSenderEmail('elizabeth@flashfirehq.com');
             
             // Set default follow-up time to tomorrow at 10 AM
             const tomorrow = new Date();
@@ -60,21 +51,6 @@ export default function FollowUpModal({
             setError('Please select a follow-up date and time');
             return;
         }
-        if (!templateId.trim()) {
-            setError('Please enter a template ID');
-            return;
-        }
-        if (!senderEmail.trim()) {
-            setError('Please enter a sender email');
-            return;
-        }
-
-        // Validate email format
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(senderEmail.trim())) {
-            setError('Please enter a valid sender email address');
-            return;
-        }
 
         setIsScheduling(true);
         setError('');
@@ -86,8 +62,6 @@ export default function FollowUpModal({
 
             await onSchedule({
                 followUpDateTime: followUpISO,
-                templateId: templateId.trim(),
-                senderEmail: senderEmail.trim(),
             });
             onClose();
         } catch (err) {
@@ -143,49 +117,11 @@ export default function FollowUpModal({
                         </p>
                     </div>
 
-                    {/* Template ID */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">
-                            <Mail size={16} className="inline mr-2" />
-                            Template ID <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                            type="text"
-                            value={templateId}
-                            onChange={(e) => setTemplateId(e.target.value)}
-                            placeholder="e.g., d-1234567890abcdef"
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700"
-                            disabled={isScheduling}
-                        />
-                        <p className="text-xs text-slate-500 mt-1">
-                            SendGrid template ID for email and WhatsApp
-                        </p>
-                    </div>
-
-                    {/* Sender Email */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">
-                            <Mail size={16} className="inline mr-2" />
-                            Sender Email <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                            type="email"
-                            value={senderEmail}
-                            onChange={(e) => setSenderEmail(e.target.value)}
-                            placeholder="elizabeth@flashfirehq.com"
-                            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700"
-                            disabled={isScheduling}
-                        />
-                        <p className="text-xs text-slate-500 mt-1">
-                            Email address to send from
-                        </p>
-                    </div>
-
                     {/* Info Box */}
                     <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
                         <p className="font-semibold mb-1">What will be scheduled:</p>
                         <ul className="list-disc list-inside space-y-1 text-xs">
-                            <li>Email at the selected follow-up time</li>
+                            <li>Follow-up email at the selected time (from elizabeth@flashfirehq.com)</li>
                             <li>Call reminder 10 minutes before follow-up</li>
                             <li>WhatsApp message 5 minutes before follow-up</li>
                         </ul>

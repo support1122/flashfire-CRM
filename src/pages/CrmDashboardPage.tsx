@@ -11,6 +11,7 @@ import {
   MessageCircle,
   UserRound,
   Workflow,
+  Users,
 } from 'lucide-react';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
@@ -22,8 +23,9 @@ import WhatsAppCampaign from '../components/WhatsAppCampaign';
 import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import UnifiedDataView from '../components/UnifiedDataView';
 import Workflows from '../components/Workflows';
+import LeadsView from '../components/LeadsView';
 
-type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows';
+type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads';
 
 const TAB_CONFIG: Array<{
   tab: Tab;
@@ -37,6 +39,7 @@ const TAB_CONFIG: Array<{
   { tab: 'analytics', permission: 'analytics', label: 'Analytics', icon: BarChart3 },
   { tab: 'data', permission: 'all_data', label: 'All Data', icon: Database },
   { tab: 'workflows', permission: 'workflows', label: 'Workflows', icon: Workflow },
+  { tab: 'leads', permission: 'leads', label: 'Leads', icon: Users },
 ];
 
 export default function CrmDashboardPage() {
@@ -218,6 +221,12 @@ export default function CrmDashboardPage() {
                   />
                 )}
                 {activeTab === 'workflows' && <Workflows />}
+                {activeTab === 'leads' && (
+                  <LeadsView
+                    onOpenEmailCampaign={handleOpenEmailCampaign}
+                    onOpenWhatsAppCampaign={handleOpenWhatsAppCampaign}
+                  />
+                )}
               </>
             )}
           </div>

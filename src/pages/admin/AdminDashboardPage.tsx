@@ -10,7 +10,8 @@ type CrmPermission =
   | 'whatsapp_campaign'
   | 'analytics'
   | 'all_data'
-  | 'workflows';
+  | 'workflows'
+  | 'leads';
 
 const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: string }> = [
   { key: 'campaign_manager', label: 'Campaign Manager', description: 'UTM campaigns + bookings overview' },
@@ -19,6 +20,7 @@ const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: strin
   { key: 'analytics', label: 'Analytics', description: 'Performance dashboards + insights' },
   { key: 'all_data', label: 'All Data', description: 'Unified data view + notes/actions' },
   { key: 'workflows', label: 'Workflows', description: 'Workflow builder + logs' },
+  { key: 'leads', label: 'Leads', description: 'Paid clients management + revenue tracking' },
 ];
 
 type CrmUserRow = {
