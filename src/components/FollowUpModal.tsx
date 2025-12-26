@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Mail, Loader2 } from 'lucide-react';
+import { X, Calendar, Loader2 } from 'lucide-react';
 
 interface FollowUpModalProps {
     isOpen: boolean;
