@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactElement } from 'react';
 import {
   Plus,
   Trash2,
@@ -138,7 +138,7 @@ const getTemplateVariables = (templateName: string | undefined): string[] => {
 };
 
 // Helper function to highlight variables in text
-const highlightVariables = (text: string, variables: string[]): JSX.Element[] => {
+const highlightVariables = (text: string, variables: string[]): ReactElement[] => {
   if (!text) return [];
   
   const parts: Array<{ text: string; isVariable: boolean }> = [];
@@ -158,7 +158,7 @@ const highlightVariables = (text: string, variables: string[]): JSX.Element[] =>
   matches.sort((a, b) => a.index - b.index);
   
   // Build parts array
-  matches.forEach((match, i) => {
+  matches.forEach((match) => {
     // Add text before variable
     if (match.index > lastIndex) {
       parts.push({ text: text.substring(lastIndex, match.index), isVariable: false });

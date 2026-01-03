@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Mail, Loader2 } from 'lucide-react';
+import { X, Calendar, Loader2 } from 'lucide-react';
 
 interface FollowUpModalProps {
     isOpen: boolean;
@@ -19,8 +19,8 @@ export default function FollowUpModal({
     onClose, 
     onSchedule, 
     clientName, 
-    clientEmail,
-    clientPhone 
+    clientEmail: _clientEmail,
+    clientPhone: _clientPhone 
 }: FollowUpModalProps) {
     const [followUpDateTime, setFollowUpDateTime] = useState('');
     const [isScheduling, setIsScheduling] = useState(false);
