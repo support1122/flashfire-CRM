@@ -229,6 +229,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const [planPickerFor, setPlanPickerFor] = useState<string | null>(null);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [selectedBookingForFollowUp, setSelectedBookingForFollowUp] = useState<Booking | null>(null);
+  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
 
   // Indexes for fast lookups
   const bookingsById = useMemo(() => {
@@ -1432,33 +1433,33 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
 
       <div className="overflow-hidden">
         <div className="overflow-x-auto">
-          <div className="max-h-[600px] overflow-y-auto">
+          <div className="max-h-[calc(100vh-350px)] overflow-y-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="text-left text-slate-500">
-                  <th className="px-2 py-3 font-semibold w-10">
+                  <th className="px-1.5 py-2 font-semibold w-10">
                     <button
                       onClick={handleSelectAll}
                       className="flex items-center justify-center"
                       type="button"
                     >
                       {selectedRows.size === filteredData.length && filteredData.length > 0 ? (
-                        <CheckSquare size={16} className="text-orange-600" />
+                        <CheckSquare size={14} className="text-orange-600" />
                       ) : (
-                        <Square size={16} className="text-slate-400" />
+                        <Square size={14} className="text-slate-400" />
                       )}
                     </button>
                   </th>
-                  <th className="px-1 py-3 font-semibold w-16">Type</th>
-                  <th className="px-1 py-3 font-semibold w-32">Name</th>
-                  <th className="px-1 py-3 font-semibold w-40">Email</th>
-                  <th className="px-1 py-3 font-semibold w-28">Phone</th>
-                  <th className="px-1 py-3 font-semibold w-36">Created/Signed Up</th>
-                  <th className="px-1 py-3 font-semibold w-36">Meeting Time</th>
-                  <th className="px-1 py-3 font-semibold w-28">Source</th>
-                  <th className="px-1 py-3 font-semibold w-24">Status</th>
-                  <th className="px-2 py-3 font-semibold w-32">Campaigns</th>
-                  <th className="px-2 py-3 font-semibold w-40">Actions</th>
+                  <th className="px-1 py-2 font-semibold w-16">Type</th>
+                  <th className="px-1 py-2 font-semibold w-32">Name</th>
+                  <th className="px-1 py-2 font-semibold w-40">Email</th>
+                  <th className="px-1 py-2 font-semibold w-28">Phone</th>
+                  <th className="px-1 py-2 font-semibold w-36">Created/Signed Up</th>
+                  <th className="px-1 py-2 font-semibold w-36">Meeting Time</th>
+                  <th className="px-1 py-2 font-semibold w-28">Source</th>
+                  <th className="px-1 py-2 font-semibold w-24">Status</th>
+                  <th className="px-1.5 py-2 font-semibold w-32">Campaigns</th>
+                  <th className="px-1.5 py-2 font-semibold w-40">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1469,26 +1470,31 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                     : 'Not scheduled';
                   const createdDate = format(parseISO(row.createdAt), 'MMM d, yyyy • h:mm a');
                   const isSelected = selectedRows.has(row.id);
+                  const calendlyNoteKey = `calendly-${row.id}`;
+                  const meetingNoteKey = `meeting-${row.id}`;
+                  const isCalendlyNoteExpanded = expandedNotes.has(calendlyNoteKey);
+                  const isMeetingNoteExpanded = expandedNotes.has(meetingNoteKey);
+                  const TRUNCATE_LENGTH = 80;
 
                   return (
                     <tr
                       key={row.id}
                       className={`hover:bg-slate-50/60 transition ${isSelected ? 'bg-orange-50' : ''}`}
                     >
-                      <td className="px-2 py-3">
+                      <td className="px-1.5 py-2">
                         <button
                           onClick={() => handleSelectRow(row.id)}
                           className="flex items-center justify-center"
                           type="button"
                         >
                           {isSelected ? (
-                            <CheckSquare size={16} className="text-orange-600" />
+                            <CheckSquare size={14} className="text-orange-600" />
                           ) : (
-                            <Square size={16} className="text-slate-400" />
+                            <Square size={14} className="text-slate-400" />
                           )}
                         </button>
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-1 py-2">
                         <span
                           className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${isBooking
                             ? 'bg-blue-100 text-blue-800'
@@ -1498,13 +1504,13 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           {isBooking ? 'Booking' : 'User'}
                         </span>
                       </td>
-                      <td className="px-1 py-3">
-                        <div className="font-semibold text-slate-900 truncate" title={row.name}>{row.name}</div>
+                      <td className="px-1 py-2">
+                        <div className="font-semibold text-slate-900 truncate text-sm" title={row.name}>{row.name}</div>
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-1 py-2">
                         <div className="text-slate-700 truncate text-xs" title={row.email}>{row.email}</div>
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-1 py-2">
                         {row.phone && row.phone !== 'Not Specified' ? (
                           <a
                             href={`tel:${row.phone}`}
@@ -1517,23 +1523,23 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-1 py-3 text-slate-600 text-xs">{createdDate}</td>
-                      <td className="px-1 py-3 text-slate-600 text-xs">
+                      <td className="px-1 py-2 text-slate-600 text-xs">{createdDate}</td>
+                      <td className="px-1 py-2 text-slate-600 text-xs">
                         {isBooking ? scheduledDate : <span className="text-slate-400">—</span>}
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-1 py-2">
                         {row.source ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 truncate max-w-full" title={row.source}>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 truncate max-w-full" title={row.source}>
                             {row.source}
                           </span>
                         ) : (
                           <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-1 py-2">
                         {row.status ? (
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${statusColors[row.status]}`}
+                            className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-semibold ${statusColors[row.status]}`}
                           >
                             {statusLabels[row.status]}
                           </span>
@@ -1541,7 +1547,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-2 py-3">
+                      <td className="px-1.5 py-2">
                         {(() => {
                           const emailLower = row.email.toLowerCase();
                           const campaigns = userCampaigns.get(emailLower) || [];
@@ -1603,29 +1609,29 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           );
                         })()}
                       </td>
-                      <td className="px-2 py-3">
-                        <div className="space-y-1.5">
+                      <td className="px-1.5 py-2">
+                        <div className="space-y-1">
                         {/* Delete Button */}
                         <button
                           onClick={() => handleDeleteClick(row)}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition w-full justify-center"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition w-full justify-center"
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={11} />
                           Delete
                         </button>
                         {isBooking && row.bookingId ? (
-                            <div className="flex flex-col gap-2">
+                            <div className="flex flex-col gap-1">
                               {/* Follow-ups */}
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     const booking = bookingsById.get(row.bookingId!);
                                     openEmailFollowUp(booking?.clientEmail || row.email, 'booking_followup');
                                   }}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition flex-1 justify-center whitespace-nowrap"
+                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition flex-1 justify-center whitespace-nowrap"
                                 >
-                                  <Mail size={14} />
+                                  <Mail size={11} />
                                   Follow up
                                 </button>
                                 {onOpenWhatsAppCampaign ? (
@@ -1636,9 +1642,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                       openWhatsAppFollowUp(booking?.clientPhone || row.phone, 'booking_followup');
                                     }}
                                     disabled={!row.phone || row.phone === 'Not Specified'}
-                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition disabled:opacity-60 disabled:cursor-not-allowed flex-1 justify-center whitespace-nowrap"
+                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition disabled:opacity-60 disabled:cursor-not-allowed flex-1 justify-center whitespace-nowrap"
                                   >
-                                    <MessageCircle size={14} />
+                                    <MessageCircle size={11} />
                                     WhatsApp
                                   </button>
                                 ) : null}
@@ -1671,8 +1677,8 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                       className="fixed inset-0 z-10" 
                                       onClick={() => setOpenStatusDropdown(null)}
                                     />
-                                    <div className="absolute right-0 top-full mt-1 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
-                                      <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
+                                    <div className="absolute right-0 bottom-full mb-1 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
+                                      <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
                                         Change Status
                                       </div>
                                       {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
@@ -1695,16 +1701,16 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                                 handleStatusUpdate(booking.bookingId, status);
                                                 setOpenStatusDropdown(null);
                                               }}
-                                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition flex items-center gap-3 group"
+                                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition flex items-center gap-2 group"
                                             >
-                                              <StatusIcon size={16} className={`${status === 'completed' ? 'text-green-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-emerald-600' : status === 'canceled' ? 'text-red-600' : status === 'ignored' ? 'text-gray-600' : 'text-blue-600'}`} />
+                                              <StatusIcon size={14} className={`${status === 'completed' ? 'text-green-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-emerald-600' : status === 'canceled' ? 'text-red-600' : status === 'ignored' ? 'text-gray-600' : 'text-blue-600'}`} />
                                               <div className="flex flex-col gap-0.5">
                                                 <span className="font-medium">{statusLabels[status]}</span>
-                                                {isPaidOption && <span className="text-[11px] text-slate-500">Select a plan</span>}
+                                                {isPaidOption && <span className="text-[10px] text-slate-500">Select a plan</span>}
                                               </div>
                                             </button>
                                             {isPlanOpen && (
-                                              <div className="px-4 pb-3 grid grid-cols-1 gap-1">
+                                              <div className="px-3 pb-2 grid grid-cols-1 gap-1">
                                                 {PLAN_OPTIONS.map((plan) => (
                                                   <button
                                                     key={plan.key}
@@ -1715,13 +1721,13 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                                         setOpenStatusDropdown(null);
                                                       }
                                                     }}
-                                                    className="flex items-center justify-between w-full rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
+                                                    className="flex items-center justify-between w-full rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
                                                   >
                                                     <div className="flex flex-col text-left">
                                                       <span>{plan.label}</span>
-                                                      <span className="text-xs font-medium text-emerald-700">{plan.displayPrice}</span>
+                                                      <span className="text-[10px] font-medium text-emerald-700">{plan.displayPrice}</span>
                                                     </div>
-                                                    <DollarSign size={16} className="text-emerald-600" />
+                                                    <DollarSign size={14} className="text-emerald-600" />
                                                   </button>
                                                 ))}
                                               </div>
@@ -1729,7 +1735,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                           </div>
                                         );
                                       })}
-                                      <div className="border-t border-slate-200 my-1" />
+                                      <div className="border-t border-slate-200 my-0.5" />
                                       <button
                                         onClick={() => {
                                           const booking = bookingsById.get(row.bookingId!);
@@ -1738,9 +1744,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                             setOpenStatusDropdown(null);
                                           }
                                         }}
-                                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition flex items-center gap-3 text-amber-600 group"
+                                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-amber-50 transition flex items-center gap-2 text-amber-600 group"
                                       >
-                                        <Clock size={16} />
+                                        <Clock size={14} />
                                         <span className="font-medium">Reschedule</span>
                                       </button>
                                     </div>
@@ -1877,13 +1883,55 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                         )}
                         </div>
                         {row.notes && (
-                          <div className="text-xs text-slate-500 bg-slate-100 rounded-lg px-2 py-1.5 border border-slate-200 mt-1.5">
-                            <span className="font-semibold text-slate-600">Calendly Notes:</span> {row.notes}
+                          <div className="text-xs text-slate-500 bg-slate-100 rounded px-1.5 py-1 border border-slate-200 mt-1">
+                            <span className="font-semibold text-slate-600">Calendly Notes:</span>{' '}
+                            {isCalendlyNoteExpanded || row.notes.length <= TRUNCATE_LENGTH ? (
+                              <span>{row.notes}</span>
+                            ) : (
+                              <span>{row.notes.substring(0, TRUNCATE_LENGTH)}...</span>
+                            )}
+                            {row.notes.length > TRUNCATE_LENGTH && (
+                              <button
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedNotes);
+                                  if (isCalendlyNoteExpanded) {
+                                    newExpanded.delete(calendlyNoteKey);
+                                  } else {
+                                    newExpanded.add(calendlyNoteKey);
+                                  }
+                                  setExpandedNotes(newExpanded);
+                                }}
+                                className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline"
+                              >
+                                {isCalendlyNoteExpanded ? 'Less' : 'More'}
+                              </button>
+                            )}
                           </div>
                         )}
                         {row.meetingNotes && (
-                          <div className="text-xs text-slate-500 bg-yellow-50 rounded-lg px-2 py-1.5 border border-yellow-200 mt-1.5">
-                            <span className="font-semibold text-slate-600">Meeting Notes:</span> {row.meetingNotes}
+                          <div className="text-xs text-slate-500 bg-yellow-50 rounded px-1.5 py-1 border border-yellow-200 mt-1">
+                            <span className="font-semibold text-slate-600">Meeting Notes:</span>{' '}
+                            {isMeetingNoteExpanded || row.meetingNotes.length <= TRUNCATE_LENGTH ? (
+                              <span>{row.meetingNotes}</span>
+                            ) : (
+                              <span>{row.meetingNotes.substring(0, TRUNCATE_LENGTH)}...</span>
+                            )}
+                            {row.meetingNotes.length > TRUNCATE_LENGTH && (
+                              <button
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedNotes);
+                                  if (isMeetingNoteExpanded) {
+                                    newExpanded.delete(meetingNoteKey);
+                                  } else {
+                                    newExpanded.add(meetingNoteKey);
+                                  }
+                                  setExpandedNotes(newExpanded);
+                                }}
+                                className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline"
+                              >
+                                {isMeetingNoteExpanded ? 'Less' : 'More'}
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
