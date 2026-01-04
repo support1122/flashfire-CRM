@@ -739,7 +739,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       <div className="overflow-hidden bg-white border border-slate-200 rounded-lg">
         <div className="overflow-x-auto">
           <div className="max-h-[calc(100vh-350px)] overflow-y-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <table className="w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="text-left text-slate-500">
                   <th className="px-1.5 py-2 font-semibold w-10">
@@ -763,7 +763,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                   <th className="px-1 py-2 font-semibold w-24">Source</th>
                   <th className="px-1 py-2 font-semibold w-20">Status</th>
                   <th className="px-1 py-2 font-semibold w-24">Amount</th>
-                  <th className="px-1.5 py-2 font-semibold w-auto min-w-[280px]">Actions</th>
+                  <th className="px-1.5 py-2 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
