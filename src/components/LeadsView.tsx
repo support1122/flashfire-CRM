@@ -754,15 +754,15 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                       )}
                     </button>
                   </th>
-                  <th className="px-2 py-2 font-semibold w-16">Type</th>
-                  <th className="px-2 py-2 font-semibold w-28">Name</th>
-                  <th className="px-2 py-2 font-semibold w-36">Email</th>
-                  <th className="px-2 py-2 font-semibold w-24">Phone</th>
-                  <th className="px-2 py-2 font-semibold w-32">Latest Meeting</th>
-                  <th className="px-2 py-2 font-semibold w-24">Source</th>
-                  <th className="px-2 py-2 font-semibold w-20">Status</th>
-                  <th className="px-2 py-2 font-semibold w-24">Amount</th>
-                  <th className="px-2 py-2 font-semibold">Actions</th>
+                  <th className="px-3 py-2 font-semibold w-16">Type</th>
+                  <th className="px-3 py-2 font-semibold w-28">Name</th>
+                  <th className="px-3 py-2 font-semibold w-36">Email</th>
+                  <th className="px-3 py-2 font-semibold w-24">Phone</th>
+                  <th className="px-3 py-2 font-semibold w-32">Latest Meeting</th>
+                  <th className="px-3 py-2 font-semibold w-24">Source</th>
+                  <th className="px-3 py-2 font-semibold w-20">Status</th>
+                  <th className="px-3 py-2 font-semibold w-24">Amount</th>
+                  <th className="px-3 py-2 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -795,7 +795,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           )}
                         </button>
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-3 py-2">
                         <div className="flex flex-col gap-1">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                             Lead
@@ -807,13 +807,13 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           )}
                         </div>
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-3 py-2">
                         <div className="font-semibold text-slate-900 truncate text-sm" title={row.name}>{row.name}</div>
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-3 py-2">
                         <div className="text-slate-700 truncate text-xs" title={row.email}>{row.email}</div>
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-3 py-2">
                         {row.phone && row.phone !== 'Not Specified' ? (
                           <a
                             href={`tel:${row.phone}`}
@@ -826,7 +826,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-3 py-2">
                         <div className="text-slate-600 text-xs">
                           <div className="font-semibold">{scheduledDate}</div>
                           {row.totalBookings && row.totalBookings > 1 && (
@@ -834,7 +834,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           )}
                         </div>
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-3 py-2">
                         {row.source ? (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 truncate max-w-full" title={row.source}>
                             {row.source}
@@ -843,7 +843,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-3 py-2">
                         <div className="relative status-dropdown-container">
                           <button
                             onClick={() => setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId!)}
@@ -934,7 +934,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           )}
                         </div>
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-3 py-2">
                         {row.paymentPlan ? (
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-0.5 rounded border border-emerald-100 bg-emerald-50 px-1 py-0.5 text-xs font-semibold text-emerald-800">
@@ -981,7 +981,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-3 py-2">
                         <div className="flex items-center gap-1 flex-wrap">
                           {row.meetLink && (
                             <a
