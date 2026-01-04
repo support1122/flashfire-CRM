@@ -872,7 +872,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                 className="fixed inset-0 z-10" 
                                 onClick={() => setOpenStatusDropdown(null)}
                               />
-                              <div className="absolute right-0 bottom-full mb-1 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
+                              <div className="absolute left-full ml-1 top-0 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
                                 <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
                                   Change Status
                                 </div>
@@ -983,15 +983,15 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                         )}
                       </td>
                       <td className="px-1.5 py-2">
-                        <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-1">
                           {row.meetLink && (
                             <a
                               href={row.meetLink}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition w-full justify-center whitespace-nowrap"
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition justify-center whitespace-nowrap"
                             >
-                              <ExternalLink size={11} />
+                              <ExternalLink size={10} />
                               Join
                             </a>
                           )}
@@ -1004,47 +1004,45 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                               });
                               setIsNotesModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap w-full justify-center"
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap justify-center"
                           >
-                            <Edit size={11} />
-                            {row.meetingNotes ? 'Edit Notes' : 'Take Notes'}
+                            <Edit size={10} />
+                            Notes
                           </button>
-                          <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              onOpenEmailCampaign({
+                                recipients: [row.email],
+                                reason: 'lead_followup',
+                              });
+                            }}
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition justify-center whitespace-nowrap"
+                          >
+                            <Mail size={10} />
+                            Email
+                          </button>
+                          {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
                             <button
                               onClick={() => {
-                                onOpenEmailCampaign({
-                                  recipients: [row.email],
-                                  reason: 'lead_followup',
-                                });
+                                const phone = row.phone!.replace(/[^\d+]/g, '');
+                                if (phone) {
+                                  onOpenWhatsAppCampaign({
+                                    mobileNumbers: [phone],
+                                    reason: 'lead_followup',
+                                  });
+                                }
                               }}
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition flex-1 justify-center whitespace-nowrap"
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition justify-center whitespace-nowrap"
                             >
-                              <Mail size={11} />
-                              Email
+                              <MessageCircle size={10} />
+                              WA
                             </button>
-                            {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
-                              <button
-                                onClick={() => {
-                                  const phone = row.phone!.replace(/[^\d+]/g, '');
-                                  if (phone) {
-                                    onOpenWhatsAppCampaign({
-                                      mobileNumbers: [phone],
-                                      reason: 'lead_followup',
-                                    });
-                                  }
-                                }}
-                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition flex-1 justify-center whitespace-nowrap"
-                              >
-                                <MessageCircle size={11} />
-                                WhatsApp
-                              </button>
-                            )}
-                          </div>
+                          )}
                           <button
                             onClick={() => handleDeleteClick(row)}
-                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition w-full justify-center whitespace-nowrap"
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition justify-center whitespace-nowrap"
                           >
-                            <Trash2 size={11} />
+                            <Trash2 size={10} />
                             Delete
                           </button>
                         </div>
