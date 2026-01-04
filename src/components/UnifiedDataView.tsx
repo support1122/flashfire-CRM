@@ -1677,7 +1677,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                       className="fixed inset-0 z-10" 
                                       onClick={() => setOpenStatusDropdown(null)}
                                     />
-                                    <div className="absolute right-0 bottom-full mb-1 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
+                                    <div className="absolute left-full ml-1 top-0 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
                                       <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
                                         Change Status
                                       </div>
