@@ -124,6 +124,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [selectedBookingForFollowUp, setSelectedBookingForFollowUp] = useState<Booking | null>(null);
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: 'success' | 'error' | 'info' }>>([]);
+  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now().toString();
@@ -790,61 +791,67 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       </div>
 
       <div className="overflow-hidden bg-white border border-slate-200 rounded-lg">
-        <div className="overflow-x-auto">
-          <div className="max-h-[600px] overflow-y-auto">
-            <table className="min-w-full divide-y divide-slate-200 text-sm">
+        <div className="max-h-[calc(100vh-350px)] overflow-y-auto">
+          <table className="w-full text-sm table-auto border-separate border-spacing-y-2 border-spacing-x-1">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="text-left text-slate-500">
-                  <th className="px-2 py-3 font-semibold w-10">
+                  <th className="px-1.5 py-2 font-semibold w-10">
                     <button
                       onClick={handleSelectAll}
                       className="flex items-center justify-center"
                       type="button"
                     >
                       {selectedRows.size === filteredData.length && filteredData.length > 0 ? (
-                        <CheckSquare size={16} className="text-orange-600" />
+                        <CheckSquare size={14} className="text-orange-600" />
                       ) : (
-                        <Square size={16} className="text-slate-400" />
+                        <Square size={14} className="text-slate-400" />
                       )}
                     </button>
                   </th>
-                  <th className="px-1 py-3 font-semibold w-16">Type</th>
-                  <th className="px-1 py-3 font-semibold w-32">Name</th>
-                  <th className="px-1 py-3 font-semibold w-40">Email</th>
-                  <th className="px-1 py-3 font-semibold w-28">Phone</th>
-                  <th className="px-1 py-3 font-semibold w-36">Latest Meeting</th>
-                  <th className="px-1 py-3 font-semibold w-28">Source</th>
-                  <th className="px-1 py-3 font-semibold w-24">Status</th>
-                  <th className="px-2 py-3 font-semibold w-32">Amount</th>
-                  <th className="px-2 py-3 font-semibold w-40">Actions</th>
+                  <th className="px-3 py-2 font-semibold w-16">Type</th>
+                  <th className="px-3 py-2 font-semibold w-28">Name</th>
+                  <th className="px-3 py-2 font-semibold w-36">Email</th>
+                  <th className="px-3 py-2 font-semibold w-24">Phone</th>
+                  <th className="px-3 py-2 font-semibold w-32">Latest Meeting</th>
+                  <th className="px-3 py-2 font-semibold w-24">Source</th>
+                  <th className="px-3 py-2 font-semibold w-20">Status</th>
+                  <th className="px-3 py-2 font-semibold w-24">Amount</th>
+                  <th className="px-3 py-2 font-semibold">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {filteredData.map((row) => {
                   const scheduledDate = row.scheduledTime
                     ? format(parseISO(row.scheduledTime), 'MMM d, yyyy • h:mm a')
                     : 'Not scheduled';
                   const isSelected = selectedRows.has(row.id);
+                  const calendlyNoteKey = `calendly-${row.id}`;
+                  const meetingNoteKey = `meeting-${row.id}`;
+                  const isCalendlyNoteExpanded = expandedNotes.has(calendlyNoteKey);
+                  const isMeetingNoteExpanded = expandedNotes.has(meetingNoteKey);
+                  const TRUNCATE_LENGTH = 80;
 
                   return (
                     <tr
                       key={row.id}
-                      className={`hover:bg-slate-50/60 transition ${isSelected ? 'bg-orange-50' : ''}`}
+                      className={`transition rounded-xl border ${
+                        isSelected ? 'bg-orange-50 border-orange-200 shadow-sm' : 'bg-white border-slate-200 shadow'
+                      }`}
                     >
-                      <td className="px-2 py-3">
+                      <td className="px-1.5 py-2">
                         <button
                           onClick={() => handleSelectRow(row.id)}
                           className="flex items-center justify-center"
                           type="button"
                         >
                           {isSelected ? (
-                            <CheckSquare size={16} className="text-orange-600" />
+                            <CheckSquare size={14} className="text-orange-600" />
                           ) : (
-                            <Square size={16} className="text-slate-400" />
+                            <Square size={14} className="text-slate-400" />
                           )}
                         </button>
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-3 py-2">
                         <div className="flex flex-col gap-1">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                             Lead
@@ -856,13 +863,13 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           )}
                         </div>
                       </td>
-                      <td className="px-1 py-3">
-                        <div className="font-semibold text-slate-900 truncate" title={row.name}>{row.name}</div>
+                      <td className="px-3 py-2">
+                        <div className="font-semibold text-slate-900 truncate text-sm" title={row.name}>{row.name}</div>
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-3 py-2">
                         <div className="text-slate-700 truncate text-xs" title={row.email}>{row.email}</div>
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-3 py-2">
                         {row.phone && row.phone !== 'Not Specified' ? (
                           <a
                             href={`tel:${row.phone}`}
@@ -875,7 +882,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-3 py-2">
                         <div className="text-slate-600 text-xs">
                           <div className="font-semibold">{scheduledDate}</div>
                           {row.totalBookings && row.totalBookings > 1 && (
@@ -883,33 +890,33 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           )}
                         </div>
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-3 py-2">
                         {row.source ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 truncate max-w-full" title={row.source}>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 truncate max-w-full" title={row.source}>
                             {row.source}
                           </span>
                         ) : (
                           <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-1 py-3">
+                      <td className="px-3 py-2">
                         <div className="relative status-dropdown-container">
                           <button
                             onClick={() => setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId!)}
                             disabled={updatingBookingId === row.bookingId}
-                            className={`inline-flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-semibold border transition disabled:opacity-60 w-full justify-center ${
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold border transition disabled:opacity-60 w-full justify-center ${
                               row.status ? statusColors[row.status] : 'text-slate-600 bg-slate-100'
                             } border-current/20 hover:border-current/40`}
                           >
                             {updatingBookingId === row.bookingId ? (
                               <>
-                                <Loader2 className="animate-spin" size={14} />
+                                <Loader2 className="animate-spin" size={11} />
                                 <span>Updating...</span>
                               </>
                             ) : (
                               <>
                                 <span>{row.status ? statusLabels[row.status] : 'No Status'}</span>
-                                <ChevronDown size={12} className={`transition-transform duration-200 ${openStatusDropdown === row.bookingId ? 'rotate-180' : ''}`} />
+                                <ChevronDown size={10} className={`transition-transform duration-200 ${openStatusDropdown === row.bookingId ? 'rotate-180' : ''}`} />
                               </>
                             )}
                           </button>
@@ -920,8 +927,8 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                 className="fixed inset-0 z-10" 
                                 onClick={() => setOpenStatusDropdown(null)}
                               />
-                              <div className="absolute right-0 top-full mt-1 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
-                                <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
+                              <div className="absolute left-full ml-1 top-0 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
+                                <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
                                   Change Status
                                 </div>
                                 {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
@@ -944,16 +951,16 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                           handleStatusUpdate(booking.bookingId, status);
                                           setOpenStatusDropdown(null);
                                         }}
-                                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition flex items-center gap-3 group"
+                                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition flex items-center gap-2 group"
                                       >
-                                        <StatusIcon size={16} className={`${status === 'completed' ? 'text-green-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-emerald-600' : status === 'canceled' ? 'text-red-600' : status === 'ignored' ? 'text-gray-600' : 'text-blue-600'}`} />
+                                        <StatusIcon size={14} className={`${status === 'completed' ? 'text-green-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-emerald-600' : status === 'canceled' ? 'text-red-600' : status === 'ignored' ? 'text-gray-600' : 'text-blue-600'}`} />
                                         <div className="flex flex-col gap-0.5">
                                           <span className="font-medium">{statusLabels[status]}</span>
-                                          {isPaidOption && <span className="text-[11px] text-slate-500">Select a plan</span>}
+                                          {isPaidOption && <span className="text-[10px] text-slate-500">Select a plan</span>}
                                         </div>
                                       </button>
                                       {isPlanOpen && (
-                                        <div className="px-4 pb-3 grid grid-cols-1 gap-1">
+                                        <div className="px-3 pb-2 grid grid-cols-1 gap-1">
                                           {PLAN_OPTIONS.map((plan) => (
                                             <button
                                               key={plan.key}
@@ -964,13 +971,13 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                                   setOpenStatusDropdown(null);
                                                 }
                                               }}
-                                              className="flex items-center justify-between w-full rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
+                                              className="flex items-center justify-between w-full rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
                                             >
                                               <div className="flex flex-col text-left">
                                                 <span>{plan.label}</span>
-                                                <span className="text-xs font-medium text-emerald-700">{plan.displayPrice}</span>
+                                                <span className="text-[10px] font-medium text-emerald-700">{plan.displayPrice}</span>
                                               </div>
-                                              <DollarSign size={16} className="text-emerald-600" />
+                                              <DollarSign size={14} className="text-emerald-600" />
                                             </button>
                                           ))}
                                         </div>
@@ -983,13 +990,13 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           )}
                         </div>
                       </td>
-                      <td className="px-2 py-3">
+                      <td className="px-3 py-2">
                         {row.paymentPlan ? (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800">
-                              <DollarSign size={12} className="text-emerald-600" />
-                              <span>{row.paymentPlan.name}</span>
-                              <span className="text-emerald-700">{row.paymentPlan.displayPrice || `$${row.paymentPlan.price}`}</span>
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-0.5 rounded border border-emerald-100 bg-emerald-50 px-1 py-0.5 text-xs font-semibold text-emerald-800">
+                              <DollarSign size={10} className="text-emerald-600" />
+                              <span className="truncate">{row.paymentPlan.name}</span>
+                              <span className="text-emerald-700 truncate">{row.paymentPlan.displayPrice || `$${row.paymentPlan.price}`}</span>
                             </div>
                             {row.status === 'paid' && (
                               <>
@@ -1030,16 +1037,16 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-2 py-3">
-                        <div className="space-y-1.5">
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1 flex-wrap">
                           {row.meetLink && (
                             <a
                               href={row.meetLink}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition w-full justify-center whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition justify-center whitespace-nowrap"
                             >
-                              <ExternalLink size={14} />
+                              <ExternalLink size={12} />
                               Join
                             </a>
                           )}
@@ -1052,58 +1059,98 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                               });
                               setIsNotesModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap w-full justify-center"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap justify-center"
                           >
-                            <Edit size={14} />
-                            {row.meetingNotes ? 'Edit Notes' : 'Take Notes'}
+                            <Edit size={12} />
+                            Notes
                           </button>
-                          <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              onOpenEmailCampaign({
+                                recipients: [row.email],
+                                reason: 'lead_followup',
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition justify-center whitespace-nowrap"
+                          >
+                            <Mail size={12} />
+                            Email
+                          </button>
+                          {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
                             <button
                               onClick={() => {
-                                onOpenEmailCampaign({
-                                  recipients: [row.email],
-                                  reason: 'lead_followup',
-                                });
+                                const phone = row.phone!.replace(/[^\d+]/g, '');
+                                if (phone) {
+                                  onOpenWhatsAppCampaign({
+                                    mobileNumbers: [phone],
+                                    reason: 'lead_followup',
+                                  });
+                                }
                               }}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition flex-1 justify-center whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition justify-center whitespace-nowrap"
                             >
-                              <Mail size={14} />
-                              Email
+                              <MessageCircle size={12} />
+                              WA
                             </button>
-                            {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
-                              <button
-                                onClick={() => {
-                                  const phone = row.phone!.replace(/[^\d+]/g, '');
-                                  if (phone) {
-                                    onOpenWhatsAppCampaign({
-                                      mobileNumbers: [phone],
-                                      reason: 'lead_followup',
-                                    });
-                                  }
-                                }}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition flex-1 justify-center whitespace-nowrap"
-                              >
-                                <MessageCircle size={14} />
-                                WhatsApp
-                              </button>
-                            )}
-                          </div>
+                          )}
                           <button
                             onClick={() => handleDeleteClick(row)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition w-full justify-center whitespace-nowrap mt-1.5"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition justify-center whitespace-nowrap"
                           >
-                            <Trash2 size={14} />
+                            <Trash2 size={12} />
                             Delete
                           </button>
                         </div>
                         {row.notes && (
-                          <div className="text-xs text-slate-500 bg-slate-100 rounded-lg px-2 py-1.5 border border-slate-200 mt-1.5">
-                            <span className="font-semibold text-slate-600">Calendly Notes:</span> {row.notes}
+                          <div className="text-xs text-slate-500 bg-slate-100 rounded px-1.5 py-1 border border-slate-200 mt-1">
+                            <span className="font-semibold text-slate-600">Calendly Notes:</span>{' '}
+                            {isCalendlyNoteExpanded || row.notes.length <= TRUNCATE_LENGTH ? (
+                              <span>{row.notes}</span>
+                            ) : (
+                              <span>{row.notes.substring(0, TRUNCATE_LENGTH)}...</span>
+                            )}
+                            {row.notes.length > TRUNCATE_LENGTH && (
+                              <button
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedNotes);
+                                  if (isCalendlyNoteExpanded) {
+                                    newExpanded.delete(calendlyNoteKey);
+                                  } else {
+                                    newExpanded.add(calendlyNoteKey);
+                                  }
+                                  setExpandedNotes(newExpanded);
+                                }}
+                                className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline"
+                              >
+                                {isCalendlyNoteExpanded ? 'Less' : 'More'}
+                              </button>
+                            )}
                           </div>
                         )}
                         {row.meetingNotes && (
-                          <div className="text-xs text-slate-500 bg-yellow-50 rounded-lg px-2 py-1.5 border border-yellow-200 mt-1.5">
-                            <span className="font-semibold text-slate-600">Meeting Notes:</span> {row.meetingNotes}
+                          <div className="text-xs text-slate-500 bg-yellow-50 rounded px-1.5 py-1 border border-yellow-200 mt-1">
+                            <span className="font-semibold text-slate-600">Meeting Notes:</span>{' '}
+                            {isMeetingNoteExpanded || row.meetingNotes.length <= TRUNCATE_LENGTH ? (
+                              <span>{row.meetingNotes}</span>
+                            ) : (
+                              <span>{row.meetingNotes.substring(0, TRUNCATE_LENGTH)}...</span>
+                            )}
+                            {row.meetingNotes.length > TRUNCATE_LENGTH && (
+                              <button
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedNotes);
+                                  if (isMeetingNoteExpanded) {
+                                    newExpanded.delete(meetingNoteKey);
+                                  } else {
+                                    newExpanded.add(meetingNoteKey);
+                                  }
+                                  setExpandedNotes(newExpanded);
+                                }}
+                                className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline"
+                              >
+                                {isMeetingNoteExpanded ? 'Less' : 'More'}
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
@@ -1120,7 +1167,6 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
               </tbody>
             </table>
           </div>
-        </div>
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50">
             <div className="text-sm text-slate-600">
             {bookingsPagination.pages > 1 ? (
@@ -1288,4 +1334,3 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
     </div>
   );
 }
-
