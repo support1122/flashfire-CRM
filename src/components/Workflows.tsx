@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactElement } from 'react';
 import {
   Plus,
   Trash2,
@@ -109,6 +109,128 @@ interface WorkflowLog {
 
 type ActiveTab = 'workflows' | 'logs' | 'bulk';
 type LogStatus = 'scheduled' | 'executed' | 'all';
+
+// Template variable mapping - maps template names to their available variables
+const TEMPLATE_VARIABLES: Record<string, { variables: string[]; exampleContent?: string }> = {
+  'plan_followup_utility_01dd': {
+    variables: ['{{1}}', '{{2}}'],
+    exampleContent: 'Hi {{1}},\n\nThis is a reminder regarding your recent plan with Flashfire. The payment of {{2}} is still pending.\n\nPlease let us know if you\'d like us to resend the payment link or if you need assistance.\n\nNeed help ?'
+  },
+  // Add more templates as needed
+};
+
+// Common variable mappings
+const VARIABLE_DESCRIPTIONS: Record<string, string> = {
+  '{{1}}': 'Client Name',
+  '{{2}}': 'Plan Cost / Payment Amount',
+  '{{3}}': 'Plan Name',
+  '{{4}}': 'Meeting Date',
+  '{{5}}': 'Meeting Time',
+  '{{6}}': 'Reschedule Link',
+  '{{7}}': 'Meeting Link',
+};
+
+// Helper function to get variables for a template
+const getTemplateVariables = (templateName: string | undefined): string[] => {
+  if (!templateName) return [];
+  const template = TEMPLATE_VARIABLES[templateName];
+  return template?.variables || [];
+};
+
+// Helper function to highlight variables in text
+const highlightVariables = (text: string, variables: string[]): ReactElement[] => {
+  if (!text) return [];
+  
+  const parts: Array<{ text: string; isVariable: boolean }> = [];
+  let lastIndex = 0;
+  
+  // Find all variable occurrences
+  const matches: Array<{ index: number; variable: string }> = [];
+  variables.forEach(variable => {
+    let index = text.indexOf(variable, lastIndex);
+    while (index !== -1) {
+      matches.push({ index, variable });
+      index = text.indexOf(variable, index + 1);
+    }
+  });
+  
+  // Sort matches by index
+  matches.sort((a, b) => a.index - b.index);
+  
+  // Build parts array
+  matches.forEach((match) => {
+    // Add text before variable
+    if (match.index > lastIndex) {
+      parts.push({ text: text.substring(lastIndex, match.index), isVariable: false });
+    }
+    // Add variable
+    parts.push({ text: match.variable, isVariable: true });
+    lastIndex = match.index + match.variable.length;
+  });
+  
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push({ text: text.substring(lastIndex), isVariable: false });
+  }
+  
+  // If no variables found, return original text
+  if (parts.length === 0) {
+    parts.push({ text, isVariable: false });
+  }
+  
+  return parts.map((part, i) => 
+    part.isVariable ? (
+      <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold text-xs mx-0.5">
+        {part.text}
+      </span>
+    ) : (
+      <span key={i}>{part.text}</span>
+    )
+  );
+};
+
+// Template Preview Component
+const TemplatePreview = ({ templateName, variables }: { templateName?: string; variables: string[] }) => {
+  if (!templateName || variables.length === 0) return null;
+  
+  const template = TEMPLATE_VARIABLES[templateName];
+  const exampleContent = template?.exampleContent || '';
+  
+  return (
+    <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+      <div className="flex items-center gap-2 mb-2">
+        <Info size={14} className="text-blue-600" />
+        <span className="text-xs font-semibold text-blue-900">Template Preview</span>
+      </div>
+      
+      {exampleContent && (
+        <div className="mb-3 p-2.5 bg-white rounded border border-blue-100 text-sm text-slate-700 whitespace-pre-wrap">
+          {highlightVariables(exampleContent, variables)}
+        </div>
+      )}
+      
+      <div className="flex flex-wrap gap-1.5">
+        <span className="text-xs font-semibold text-blue-900">Available Variables:</span>
+        {variables.map((variable, idx) => (
+          <span
+            key={idx}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 text-blue-700 font-semibold text-xs"
+            title={VARIABLE_DESCRIPTIONS[variable] || 'Variable'}
+          >
+            <span>{variable}</span>
+            {VARIABLE_DESCRIPTIONS[variable] && (
+              <span className="text-blue-600 text-[10px]">({VARIABLE_DESCRIPTIONS[variable]})</span>
+            )}
+          </span>
+        ))}
+      </div>
+      
+      <div className="mt-2 text-xs text-blue-700">
+        <strong>Note:</strong> Variables will be automatically replaced with actual values when the workflow runs.
+      </div>
+    </div>
+  );
+};
 
 export default function Workflows() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('workflows');
@@ -849,27 +971,35 @@ export default function Workflows() {
                                     <span>Loading templates...</span>
                                   </div>
                                 ) : (
-                                  <select
-                                    value={step.templateName || step.templateId || ''}
-                                    onChange={(e) => {
-                                      const template = watiTemplates.find(t => t.name === e.target.value);
-                                      updateStep(null, index, {
-                                        templateId: template?.id || e.target.value,
-                                        templateName: e.target.value
-                                      });
-                                    }}
-                                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
-                                    required
-                                  >
-                                    {!step.templateName && !step.templateId ? (
-                                      <option value="">Select WhatsApp Template</option>
-                                    ) : null}
-                                    {watiTemplates.map((template) => (
-                                      <option key={template.id} value={template.name}>
-                                        {template.name}
-                                      </option>
-                                    ))}
-                                  </select>
+                                  <>
+                                    <select
+                                      value={step.templateName || step.templateId || ''}
+                                      onChange={(e) => {
+                                        const template = watiTemplates.find(t => t.name === e.target.value);
+                                        updateStep(null, index, {
+                                          templateId: template?.id || e.target.value,
+                                          templateName: e.target.value
+                                        });
+                                      }}
+                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
+                                      required
+                                    >
+                                      {!step.templateName && !step.templateId ? (
+                                        <option value="">Select WhatsApp Template</option>
+                                      ) : null}
+                                      {watiTemplates.map((template) => (
+                                        <option key={template.id} value={template.name}>
+                                          {template.name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    {step.templateName && (
+                                      <TemplatePreview 
+                                        templateName={step.templateName} 
+                                        variables={getTemplateVariables(step.templateName)} 
+                                      />
+                                    )}
+                                  </>
                                 )
                               ) : useManualEmailInput[`new_${index}`] ? (
                                 <input
@@ -1184,28 +1314,29 @@ export default function Workflows() {
                                     <Trash2 size={14} />
                                   </button>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                  <select
-                                    value={step.channel}
-                                    onChange={(e) =>
-                                      updateStep(workflow.workflowId, index, 'channel', e.target.value)
-                                    }
-                                    className="px-2 py-1.5 border border-slate-300 rounded text-sm min-w-0"
-                                  >
-                                    <option value="email">Email</option>
-                                    <option value="whatsapp">WhatsApp</option>
-                                  </select>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={step.daysAfter}
-                                    onChange={(e) =>
-                                      updateStep(workflow.workflowId, index, 'daysAfter', parseInt(e.target.value) || 0)
-                                    }
-                                    className="px-2 py-1.5 border border-slate-300 rounded text-sm min-w-0"
-                                    placeholder="Days after"
-                                  />
-                                  <div className="min-w-0">
+                                <div className="space-y-2">
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                    <select
+                                      value={step.channel}
+                                      onChange={(e) =>
+                                        updateStep(workflow.workflowId, index, 'channel', e.target.value)
+                                      }
+                                      className="px-2 py-1.5 border border-slate-300 rounded text-sm min-w-0"
+                                    >
+                                      <option value="email">Email</option>
+                                      <option value="whatsapp">WhatsApp</option>
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={step.daysAfter}
+                                      onChange={(e) =>
+                                        updateStep(workflow.workflowId, index, 'daysAfter', parseInt(e.target.value) || 0)
+                                      }
+                                      className="px-2 py-1.5 border border-slate-300 rounded text-sm min-w-0"
+                                      placeholder="Days after"
+                                    />
+                                    <div className="min-w-0">
                                     {step.channel === 'whatsapp' ? (
                                       loadingTemplates ? (
                                         <div className="flex items-center gap-1 text-slate-500 text-xs px-2 py-1.5">
@@ -1213,27 +1344,29 @@ export default function Workflows() {
                                           <span>Loading...</span>
                                         </div>
                                       ) : (
-                                        <select
-                                          value={step.templateName || step.templateId || ''}
-                                          onChange={(e) => {
-                                            const template = watiTemplates.find(t => t.name === e.target.value);
-                                            updateStep(workflow.workflowId, index, {
-                                              templateId: template?.id || e.target.value,
-                                              templateName: e.target.value
-                                            });
-                                          }}
-                                          className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
-                                          required
-                                        >
-                                          {!step.templateName && !step.templateId ? (
-                                            <option value="">Select Template</option>
-                                          ) : null}
-                                          {watiTemplates.map((template) => (
-                                            <option key={template.id} value={template.name}>
-                                              {template.name}
-                                            </option>
-                                          ))}
-                                        </select>
+                                        <>
+                                          <select
+                                            value={step.templateName || step.templateId || ''}
+                                            onChange={(e) => {
+                                              const template = watiTemplates.find(t => t.name === e.target.value);
+                                              updateStep(workflow.workflowId, index, {
+                                                templateId: template?.id || e.target.value,
+                                                templateName: e.target.value
+                                              });
+                                            }}
+                                            className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
+                                            required
+                                          >
+                                            {!step.templateName && !step.templateId ? (
+                                              <option value="">Select Template</option>
+                                            ) : null}
+                                            {watiTemplates.map((template) => (
+                                              <option key={template.id} value={template.name}>
+                                                {template.name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </>
                                       )
                                     ) : useManualEmailInput[`edit_${workflow.workflowId}_${index}`] ? (
                                       <input
@@ -1322,6 +1455,13 @@ export default function Workflows() {
                                       )
                                     )}
                                   </div>
+                                  </div>
+                                  {step.channel === 'whatsapp' && step.templateName && (
+                                    <TemplatePreview 
+                                      templateName={step.templateName} 
+                                      variables={getTemplateVariables(step.templateName)} 
+                                    />
+                                  )}
                                 </div>
                                 {step.channel === 'email' && (
                                   <div className="mt-2 space-y-2">

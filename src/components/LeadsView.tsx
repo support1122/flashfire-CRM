@@ -101,6 +101,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [planFilter, setPlanFilter] = useState<PlanName | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
@@ -121,10 +122,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
   const [selectedLeadForDelete, setSelectedLeadForDelete] = useState<{ name: string; email: string; phone?: string } | null>(null);
   const [deletingLead, setDeletingLead] = useState(false);
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; type: 'success' | 'error' | 'info' }>>([]);
-  const [showRevenueStats, setShowRevenueStats] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const dropdownRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now().toString();
@@ -190,17 +188,24 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       setRefreshing(false);
       setLoading(false);
     }
-  }, [planFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
+  }, [planFilter, statusFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
 
+  // Debounce search input to avoid too many API calls
   useEffect(() => {
-    fetchLeads(bookingsPage);
-  }, [fetchLeads]);
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+    }, 300); // Wait 300ms after user stops typing
 
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Reset to page 1 and fetch when filters change
   useEffect(() => {
     const page = 1;
     setBookingsPage(page);
     fetchLeads(page);
-  }, [planFilter, utmFilter, statusFilter, search, fromDate, toDate, minAmount, maxAmount]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planFilter, statusFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
 
   const uniqueSources = useMemo(() => {
     const sources = new Set<string>();
@@ -250,6 +255,64 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       return bDate.getTime() - aDate.getTime();
     });
   }, [bookings]);
+
+  // Calculate status statistics from filtered data (unique leads only)
+  const statusStats = useMemo(() => {
+    const stats = {
+      scheduled: 0,
+      completed: 0,
+      canceled: 0,
+      'no-show': 0,
+      rescheduled: 0,
+      ignored: 0,
+      paid: 0,
+    };
+
+    filteredData.forEach((lead) => {
+      if (lead.status && stats.hasOwnProperty(lead.status)) {
+        stats[lead.status as keyof typeof stats]++;
+      }
+    });
+
+    const total = filteredData.length;
+    const booked = stats.scheduled + stats.rescheduled; // Booked includes scheduled and rescheduled
+
+    return {
+      booked,
+      completed: stats.completed,
+      canceled: stats.canceled,
+      noShow: stats['no-show'],
+      rescheduled: stats.rescheduled,
+      ignored: stats.ignored,
+      paid: stats.paid,
+      total,
+    };
+  }, [filteredData]);
+
+  // Format date range for display
+  const dateRangeDisplay = useMemo(() => {
+    if (!fromDate && !toDate) return null;
+    
+    const formatDate = (dateStr: string) => {
+      if (!dateStr) return '';
+      try {
+        // Handle YYYY-MM-DD format from date inputs
+        const date = parseISO(dateStr + 'T00:00:00');
+        return format(date, 'MMMM d, yyyy');
+      } catch {
+        return dateStr;
+      }
+    };
+
+    if (fromDate && toDate) {
+      return `${formatDate(fromDate)} to ${formatDate(toDate)}`;
+    } else if (fromDate) {
+      return `From ${formatDate(fromDate)}`;
+    } else if (toDate) {
+      return `Until ${formatDate(toDate)}`;
+    }
+    return null;
+  }, [fromDate, toDate]);
 
   const handleSelectAll = useCallback(() => {
     if (selectedRows.size === filteredData.length) {
@@ -533,7 +596,38 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         <p className="text-sm uppercase tracking-wider text-slate-500 font-semibold mb-1">UNIFIED DATA</p>
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Leads</h1>
         <p className="text-slate-600">View and manage all clients. Each client appears once with their latest booking status. Status and amount are editable.</p>
-      </div> */}
+      </div>
+
+      {/* Status Statistics - Show when date filters are selected */}
+      {dateRangeDisplay && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5">
+          <h2 className="text-base font-semibold text-slate-900 mb-4">
+            Meetings from {dateRangeDisplay}
+          </h2>
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+            <div className="flex items-baseline gap-2">
+              <span className="text-slate-600 text-sm font-medium">Booked</span>
+              <span className="text-lg font-bold text-blue-600">{statusStats.booked}</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-slate-600 text-sm font-medium">Cancelled</span>
+              <span className="text-lg font-bold text-red-600">{statusStats.canceled}</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-slate-600 text-sm font-medium">No-Show</span>
+              <span className="text-lg font-bold text-red-600">{statusStats.noShow}</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-slate-600 text-sm font-medium">Completed</span>
+              <span className="text-lg font-bold text-green-600">{statusStats.completed}</span>
+            </div>
+            <div className="flex items-baseline gap-2 ml-auto">
+              <span className="text-slate-500 text-sm font-medium">Total:</span>
+              <span className="text-lg font-bold text-slate-700">{statusStats.total}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex items-center gap-3 flex-wrap">
         {totalRevenue > 0 && (
@@ -610,122 +704,121 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
           </div>
         </div>
       )}
-      {showFilters && (
-        <div className="mt-4 flex flex-wrap items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg">
-            <div className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
-              <Search size={16} className="text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by name, email, or source…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="text-sm bg-transparent focus:outline-none"
-              />
-            </div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
-            >
-              <option value="all">All statuses</option>
-              {(['scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
-                <option key={status} value={status}>
-                  {statusLabels[status]}
-                </option>
-              ))}
-            </select>
-            <select
-              value={planFilter}
-              onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
-            >
-              <option value="all">All plans</option>
-              {PLAN_OPTIONS.map((plan) => (
-                <option key={plan.key} value={plan.key}>
-                  {plan.label} ({plan.displayPrice})
-                </option>
-              ))}
-            </select>
-            <select
-              value={utmFilter}
-              onChange={(e) => setUtmFilter(e.target.value)}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white min-w-[160px]"
-            >
-              <option value="all">All sources</option>
-              {uniqueSources.map((source) => (
-                <option key={source} value={source}>
-                  {source}
-                </option>
-              ))}
-            </select>
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
-              />
-              <span>—</span>
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
-              />
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <input
-                type="number"
-                placeholder="Min $"
-                value={minAmount}
-                onChange={(e) => setMinAmount(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 bg-white w-24"
-              />
-              <span>—</span>
-              <input
-                type="number"
-                placeholder="Max $"
-                value={maxAmount}
-                onChange={(e) => setMaxAmount(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 bg-white w-24"
-              />
-            </div>
-            {(fromDate || toDate || search || planFilter !== 'all' || utmFilter !== 'all' || statusFilter !== 'all' || minAmount || maxAmount) && (
-              <button
-                onClick={() => {
-                  setFromDate('');
-                  setToDate('');
-                  setPlanFilter('all');
-                  setUtmFilter('all');
-                  setStatusFilter('all');
-                  setSearch('');
-                  setMinAmount('');
-                  setMaxAmount('');
-                  setBookingsPage(1);
-                }}
-                className="text-sm text-orange-600 font-semibold"
-              >
-                Clear filters
-              </button>
-            )}
-            <button
-              onClick={() => fetchLeads(bookingsPage)}
-              disabled={refreshing}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-semibold disabled:opacity-60"
-            >
-              <RefreshCcw size={16} className={refreshing ? 'animate-spin' : ''} />
-              Refresh
-            </button>
-          </div>
+
+      <div className="flex flex-wrap items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg">
+        <div className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
+          <Search size={16} className="text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by name, email, phone, or source…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="text-sm bg-transparent focus:outline-none"
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+        >
+          <option value="all">All statuses</option>
+          {(['scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
+            <option key={status} value={status}>
+              {statusLabels[status]}
+            </option>
+          ))}
+        </select>
+        <select
+          value={planFilter}
+          onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+        >
+          <option value="all">All plans</option>
+          {PLAN_OPTIONS.map((plan) => (
+            <option key={plan.key} value={plan.key}>
+              {plan.label} ({plan.displayPrice})
+            </option>
+          ))}
+        </select>
+        <select
+          value={utmFilter}
+          onChange={(e) => setUtmFilter(e.target.value)}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white min-w-[160px]"
+        >
+          <option value="all">All sources</option>
+          {uniqueSources.map((source) => (
+            <option key={source} value={source}>
+              {source}
+            </option>
+          ))}
+        </select>
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
+          />
+          <span>—</span>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
+          />
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <input
+            type="number"
+            placeholder="Min $"
+            value={minAmount}
+            onChange={(e) => setMinAmount(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 bg-white w-24"
+          />
+          <span>—</span>
+          <input
+            type="number"
+            placeholder="Max $"
+            value={maxAmount}
+            onChange={(e) => setMaxAmount(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 bg-white w-24"
+          />
+        </div>
+        {(fromDate || toDate || searchInput || planFilter !== 'all' || utmFilter !== 'all' || statusFilter !== 'all' || minAmount || maxAmount) && (
+          <button
+            onClick={() => {
+              setFromDate('');
+              setToDate('');
+              setPlanFilter('all');
+              setUtmFilter('all');
+              setStatusFilter('all');
+              setSearchInput('');
+              setSearch('');
+              setMinAmount('');
+              setMaxAmount('');
+              setBookingsPage(1);
+            }}
+            className="text-sm text-orange-600 font-semibold"
+          >
+            Clear filters
+          </button>
         )}
+        <button
+          onClick={() => fetchLeads(bookingsPage)}
+          disabled={refreshing}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-semibold disabled:opacity-60"
+        >
+          <RefreshCcw size={16} className={refreshing ? 'animate-spin' : ''} />
+          Refresh
+        </button>
+      </div>
 
       <div className="overflow-hidden bg-white border border-slate-200 rounded-lg">
-        {/* <div className="overflow-x-auto"> */}
-          {/* <div ref={scrollContainerRef} className="max-h-[600px] overflow-y-auto"> */}
-            <table className="min-w-full divide-y divide-slate-200 text-xs">
+        <div className="max-h-[calc(100vh-350px)] overflow-y-auto">
+          <table className="w-full divide-y divide-slate-200 text-sm table-fixed">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="text-left text-slate-500">
-                  <th className="px-1 py-1.5 font-semibold w-8">
+                  <th className="px-1.5 py-2 font-semibold w-10">
                     <button
                       onClick={handleSelectAll}
                       className="flex items-center justify-center"
@@ -738,15 +831,15 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                       )}
                     </button>
                   </th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-14">Type</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-24">Name</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-32">Email</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-24">Phone</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-28">Latest Meeting</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-24">Source</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-20">Status</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-28">Amount</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-32">Actions</th>
+                  <th className="px-3 py-2 font-semibold w-16">Type</th>
+                  <th className="px-3 py-2 font-semibold w-28">Name</th>
+                  <th className="px-3 py-2 font-semibold w-36">Email</th>
+                  <th className="px-3 py-2 font-semibold w-24">Phone</th>
+                  <th className="px-3 py-2 font-semibold w-32">Latest Meeting</th>
+                  <th className="px-3 py-2 font-semibold w-24">Source</th>
+                  <th className="px-3 py-2 font-semibold w-20">Status</th>
+                  <th className="px-3 py-2 font-semibold w-24">Amount</th>
+                  <th className="px-3 py-2 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -755,13 +848,18 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                     ? format(parseISO(row.scheduledTime), 'MMM d, yyyy • h:mm a')
                     : 'Not scheduled';
                   const isSelected = selectedRows.has(row.id);
+                  const calendlyNoteKey = `calendly-${row.id}`;
+                  const meetingNoteKey = `meeting-${row.id}`;
+                  const isCalendlyNoteExpanded = expandedNotes.has(calendlyNoteKey);
+                  const isMeetingNoteExpanded = expandedNotes.has(meetingNoteKey);
+                  const TRUNCATE_LENGTH = 80;
 
                   return (
                     <tr
                       key={row.id}
                       className={`hover:bg-slate-50/60 transition ${isSelected ? 'bg-orange-50' : ''}`}
                     >
-                      <td className="px-1 py-1.5">
+                      <td className="px-1.5 py-2">
                         <button
                           onClick={() => handleSelectRow(row.id)}
                           className="flex items-center justify-center"
@@ -774,9 +872,9 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           )}
                         </button>
                       </td>
-                      <td className="px-1 py-1.5">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col gap-1">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                             Lead
                           </span>
                           {row.totalBookings && row.totalBookings > 1 && (
@@ -786,13 +884,13 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           )}
                         </div>
                       </td>
-                      <td className="px-1 py-1.5">
-                        <div className="font-semibold text-slate-900 truncate text-xs" title={row.name}>{row.name}</div>
+                      <td className="px-3 py-2">
+                        <div className="font-semibold text-slate-900 truncate text-sm" title={row.name}>{row.name}</div>
                       </td>
-                      <td className="px-1 py-1.5">
-                        <div className="text-slate-700 truncate text-[10px]" title={row.email}>{row.email}</div>
+                      <td className="px-3 py-2">
+                        <div className="text-slate-700 truncate text-xs" title={row.email}>{row.email}</div>
                       </td>
-                      <td className="px-1 py-1.5">
+                      <td className="px-3 py-2">
                         {row.phone && row.phone !== 'Not Specified' ? (
                           <a
                             href={`tel:${row.phone}`}
@@ -805,39 +903,35 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           <span className="text-slate-400 text-[10px]">—</span>
                         )}
                       </td>
-                      <td className="px-1 py-1.5">
-                        <div className="text-slate-600 text-[10px]">
+                      <td className="px-3 py-2">
+                        <div className="text-slate-600 text-xs">
                           <div className="font-semibold">{scheduledDate}</div>
                           {row.totalBookings && row.totalBookings > 1 && (
                             <div className="text-slate-400 mt-0.5">Latest of {row.totalBookings}</div>
                           )}
                         </div>
                       </td>
-                      <td className="px-1 py-1.5">
+                      <td className="px-3 py-2">
                         {row.source ? (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 truncate max-w-full" title={row.source}>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 truncate max-w-full" title={row.source}>
                             {row.source}
                           </span>
                         ) : (
                           <span className="text-slate-400 text-[10px]">—</span>
                         )}
                       </td>
-                      <td className="px-1 py-1.5">
-                        <div className="relative status-dropdown-container" ref={(el) => {
-                          if (el && row.bookingId) {
-                            dropdownRefs.current.set(row.bookingId, el);
-                          }
-                        }}>
+                      <td className="px-3 py-2">
+                        <div className="relative status-dropdown-container">
                           <button
                             onClick={() => setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId!)}
                             disabled={updatingBookingId === row.bookingId}
-                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border transition disabled:opacity-60 w-full justify-center ${
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold border transition disabled:opacity-60 w-full justify-center ${
                               row.status ? statusColors[row.status] : 'text-slate-600 bg-slate-100'
                             } border-current/20 hover:border-current/40`}
                           >
                             {updatingBookingId === row.bookingId ? (
                               <>
-                                <Loader2 className="animate-spin" size={10} />
+                                <Loader2 className="animate-spin" size={11} />
                                 <span>Updating...</span>
                               </>
                             ) : (
@@ -854,8 +948,8 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                 className="fixed inset-0 z-10" 
                                 onClick={() => setOpenStatusDropdown(null)}
                               />
-                              <div className="status-dropdown-menu absolute right-0 top-full mt-1 z-20 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-1 overflow-hidden max-h-[400px] overflow-y-auto">
-                                <div className="px-2 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100 sticky top-0 bg-white">
+                              <div className="absolute left-full ml-1 top-0 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
+                                <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
                                   Change Status
                                 </div>
                                 {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
@@ -878,16 +972,16 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                           handleStatusUpdate(booking.bookingId, status);
                                           setOpenStatusDropdown(null);
                                         }}
-                                        className="w-full text-left px-2 py-1.5 text-xs hover:bg-slate-50 transition flex items-center gap-2 group"
+                                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition flex items-center gap-2 group"
                                       >
                                         <StatusIcon size={14} className={`${status === 'completed' ? 'text-green-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-emerald-600' : status === 'canceled' ? 'text-red-600' : status === 'ignored' ? 'text-gray-600' : 'text-blue-600'}`} />
                                         <div className="flex flex-col gap-0.5">
-                                          <span className="font-medium text-xs">{statusLabels[status]}</span>
+                                          <span className="font-medium">{statusLabels[status]}</span>
                                           {isPaidOption && <span className="text-[10px] text-slate-500">Select a plan</span>}
                                         </div>
                                       </button>
                                       {isPlanOpen && (
-                                        <div className="px-2 pb-2 grid grid-cols-1 gap-0.5">
+                                        <div className="px-3 pb-2 grid grid-cols-1 gap-1">
                                           {PLAN_OPTIONS.map((plan) => (
                                             <button
                                               key={plan.key}
@@ -901,10 +995,10 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                               className="flex items-center justify-between w-full rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
                                             >
                                               <div className="flex flex-col text-left">
-                                                <span className="text-xs">{plan.label}</span>
+                                                <span>{plan.label}</span>
                                                 <span className="text-[10px] font-medium text-emerald-700">{plan.displayPrice}</span>
                                               </div>
-                                              <DollarSign size={12} className="text-emerald-600" />
+                                              <DollarSign size={14} className="text-emerald-600" />
                                             </button>
                                           ))}
                                         </div>
@@ -917,13 +1011,13 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           )}
                         </div>
                       </td>
-                      <td className="px-1 py-1.5">
+                      <td className="px-3 py-2">
                         {row.paymentPlan ? (
                           <div className="space-y-0.5">
-                            <div className="flex items-center gap-1 rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
+                            <div className="flex items-center gap-0.5 rounded border border-emerald-100 bg-emerald-50 px-1 py-0.5 text-xs font-semibold text-emerald-800">
                               <DollarSign size={10} className="text-emerald-600" />
-                              <span>{row.paymentPlan.name}</span>
-                              <span className="text-emerald-700">{row.paymentPlan.displayPrice || `$${row.paymentPlan.price}`}</span>
+                              <span className="truncate">{row.paymentPlan.name}</span>
+                              <span className="text-emerald-700 truncate">{row.paymentPlan.displayPrice || `$${row.paymentPlan.price}`}</span>
                             </div>
                             {row.status === 'paid' && (
                               <>
@@ -964,16 +1058,16 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           <span className="text-slate-400 text-[10px]">—</span>
                         )}
                       </td>
-                      <td className="px-1 py-1.5">
-                        <div className="space-y-1">
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1 flex-wrap">
                           {row.meetLink && (
                             <a
                               href={row.meetLink}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition w-full justify-center whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition justify-center whitespace-nowrap"
                             >
-                              <ExternalLink size={10} />
+                              <ExternalLink size={12} />
                               Join
                             </a>
                           )}
@@ -986,72 +1080,98 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                               });
                               setIsNotesModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap w-full justify-center"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap justify-center"
                           >
-                            <Edit size={10} />
-                            {row.meetingNotes ? 'Edit Notes' : 'Take Notes'}
+                            <Edit size={12} />
+                            Notes
                           </button>
-                          <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              onOpenEmailCampaign({
+                                recipients: [row.email],
+                                reason: 'lead_followup',
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition justify-center whitespace-nowrap"
+                          >
+                            <Mail size={12} />
+                            Email
+                          </button>
+                          {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
                             <button
                               onClick={() => {
-                                onOpenEmailCampaign({
-                                  recipients: [row.email],
-                                  reason: 'lead_followup',
-                                });
+                                const phone = row.phone!.replace(/[^\d+]/g, '');
+                                if (phone) {
+                                  onOpenWhatsAppCampaign({
+                                    mobileNumbers: [phone],
+                                    reason: 'lead_followup',
+                                  });
+                                }
                               }}
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500 text-white hover:bg-orange-600 transition flex-1 justify-center whitespace-nowrap"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition justify-center whitespace-nowrap"
                             >
-                              <Mail size={10} />
-                              Email
+                              <MessageCircle size={12} />
+                              WA
                             </button>
-                            {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
-                              <button
-                                onClick={() => {
-                                  const phone = row.phone!.replace(/[^\d+]/g, '');
-                                  if (phone) {
-                                    onOpenWhatsAppCampaign({
-                                      mobileNumbers: [phone],
-                                      reason: 'lead_followup',
-                                    });
-                                  }
-                                }}
-                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-500 text-white hover:bg-green-600 transition flex-1 justify-center whitespace-nowrap"
-                              >
-                                <MessageCircle size={10} />
-                                WhatsApp
-                              </button>
-                            )}
-                          </div>
+                          )}
                           <button
                             onClick={() => handleDeleteClick(row)}
-                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-500 text-white hover:bg-red-600 transition w-full justify-center whitespace-nowrap mt-1"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition justify-center whitespace-nowrap"
                           >
-                            <Trash2 size={10} />
+                            <Trash2 size={12} />
                             Delete
                           </button>
                         </div>
                         {row.notes && (
-                          <div className="mt-1 calendly-notes-container">
-                            <button
-                              onClick={() => setOpenCalendlyNotes(openCalendlyNotes === row.id ? null : row.id)}
-                              className="w-full text-left text-[10px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded px-1.5 py-0.5 border border-slate-200 transition flex items-center justify-between"
-                            >
-                              <span>Calendly Notes</span>
-                              <ChevronDown 
-                                size={10} 
-                                className={`transition-transform duration-200 ${openCalendlyNotes === row.id ? 'rotate-180' : ''}`} 
-                              />
-                            </button>
-                            {openCalendlyNotes === row.id && (
-                              <div className="text-[10px] text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-200 mt-0.5">
-                                {row.notes}
-                              </div>
+                          <div className="text-xs text-slate-500 bg-slate-100 rounded px-1.5 py-1 border border-slate-200 mt-1">
+                            <span className="font-semibold text-slate-600">Calendly Notes:</span>{' '}
+                            {isCalendlyNoteExpanded || row.notes.length <= TRUNCATE_LENGTH ? (
+                              <span>{row.notes}</span>
+                            ) : (
+                              <span>{row.notes.substring(0, TRUNCATE_LENGTH)}...</span>
+                            )}
+                            {row.notes.length > TRUNCATE_LENGTH && (
+                              <button
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedNotes);
+                                  if (isCalendlyNoteExpanded) {
+                                    newExpanded.delete(calendlyNoteKey);
+                                  } else {
+                                    newExpanded.add(calendlyNoteKey);
+                                  }
+                                  setExpandedNotes(newExpanded);
+                                }}
+                                className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline"
+                              >
+                                {isCalendlyNoteExpanded ? 'Less' : 'More'}
+                              </button>
                             )}
                           </div>
                         )}
                         {row.meetingNotes && (
-                          <div className="text-[10px] text-slate-500 bg-yellow-50 rounded px-1.5 py-0.5 border border-yellow-200 mt-1">
-                            <span className="font-semibold text-slate-600">Meeting Notes:</span> {row.meetingNotes}
+                          <div className="text-xs text-slate-500 bg-yellow-50 rounded px-1.5 py-1 border border-yellow-200 mt-1">
+                            <span className="font-semibold text-slate-600">Meeting Notes:</span>{' '}
+                            {isMeetingNoteExpanded || row.meetingNotes.length <= TRUNCATE_LENGTH ? (
+                              <span>{row.meetingNotes}</span>
+                            ) : (
+                              <span>{row.meetingNotes.substring(0, TRUNCATE_LENGTH)}...</span>
+                            )}
+                            {row.meetingNotes.length > TRUNCATE_LENGTH && (
+                              <button
+                                onClick={() => {
+                                  const newExpanded = new Set(expandedNotes);
+                                  if (isMeetingNoteExpanded) {
+                                    newExpanded.delete(meetingNoteKey);
+                                  } else {
+                                    newExpanded.add(meetingNoteKey);
+                                  }
+                                  setExpandedNotes(newExpanded);
+                                }}
+                                className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline"
+                              >
+                                {isMeetingNoteExpanded ? 'Less' : 'More'}
+                              </button>
+                            )}
                           </div>
                         )}
                       </td>
@@ -1067,8 +1187,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                 )}
               </tbody>
             </table>
-          {/* </div> */}
-        </div>
+          </div>
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50">
             <div className="text-sm text-slate-600">
             {bookingsPagination.pages > 1 ? (
