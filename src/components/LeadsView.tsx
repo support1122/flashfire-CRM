@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Loader2,
   Mail,
@@ -109,7 +109,6 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
   const [minAmount, setMinAmount] = useState<string>('');
   const [maxAmount, setMaxAmount] = useState<string>('');
   const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null);
-  const [openCalendlyNotes, setOpenCalendlyNotes] = useState<string | null>(null);
   const [planPickerFor, setPlanPickerFor] = useState<string | null>(null);
   const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
   const [bookingsPage, setBookingsPage] = useState(1);
@@ -461,66 +460,17 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       if (openStatusDropdown && !(event.target as Element).closest('.status-dropdown-container')) {
         setOpenStatusDropdown(null);
       }
-      if (openCalendlyNotes && !(event.target as Element).closest('.calendly-notes-container')) {
-        setOpenCalendlyNotes(null);
-      }
     };
 
-    if (openStatusDropdown || openCalendlyNotes) {
+    if (openStatusDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [openStatusDropdown, openCalendlyNotes]);
+  }, [openStatusDropdown]);
 
   useEffect(() => {
     if (!openStatusDropdown) {
       setPlanPickerFor(null);
-    }
-  }, [openStatusDropdown]);
-
-  // Auto-scroll dropdown into view when it opens
-  useEffect(() => {
-    if (openStatusDropdown) {
-      const dropdownContainer = dropdownRefs.current.get(openStatusDropdown);
-      const scrollContainer = scrollContainerRef.current;
-      
-      if (dropdownContainer && scrollContainer) {
-        // Use setTimeout to ensure DOM is updated and dropdown is rendered
-        setTimeout(() => {
-          const dropdownMenu = dropdownContainer.querySelector('.status-dropdown-menu') as HTMLElement;
-          if (!dropdownMenu) return;
-          
-          // Scroll the dropdown menu to the bottom to show all items
-          dropdownMenu.scrollTop = dropdownMenu.scrollHeight;
-          
-          const containerRect = scrollContainer.getBoundingClientRect();
-          const containerBottom = containerRect.bottom;
-          const containerTop = containerRect.top;
-          
-          // Get the dropdown menu position
-          const menuRect = dropdownMenu.getBoundingClientRect();
-          const menuBottom = menuRect.bottom;
-          const menuTop = menuRect.top;
-          
-          // Check if dropdown menu extends below the visible area
-          if (menuBottom > containerBottom) {
-            // Calculate how much we need to scroll to show the full dropdown
-            const scrollAmount = menuBottom - containerBottom + 20; // 20px padding
-            scrollContainer.scrollBy({
-              top: scrollAmount,
-              behavior: 'smooth'
-            });
-          }
-          // Check if dropdown menu is above the visible area
-          else if (menuTop < containerTop) {
-            const scrollAmount = menuTop - containerTop - 20; // 20px padding
-            scrollContainer.scrollBy({
-              top: scrollAmount,
-              behavior: 'smooth'
-            });
-          }
-        }, 50);
-      }
     }
   }, [openStatusDropdown]);
 
@@ -592,7 +542,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
 
   return (
     <div className="p-6 space-y-6">
-      {/* <div>
+      <div>
         <p className="text-sm uppercase tracking-wider text-slate-500 font-semibold mb-1">UNIFIED DATA</p>
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Leads</h1>
         <p className="text-slate-600">View and manage all clients. Each client appears once with their latest booking status. Status and amount are editable.</p>
@@ -629,35 +579,8 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         </div>
       )}
 
-      <div className="flex items-center gap-3 flex-wrap">
-        {totalRevenue > 0 && (
-          <button
-            onClick={() => setShowRevenueStats(!showRevenueStats)}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition text-sm font-semibold text-emerald-700"
-          >
-            <DollarSign size={16} />
-            Revenue Statistics
-            <ChevronDown 
-              size={16} 
-              className={`transition-transform duration-200 ${showRevenueStats ? 'rotate-180' : ''}`} 
-            />
-          </button>
-        )}
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition text-sm font-semibold text-orange-700"
-        >
-          <Search size={16} />
-          Filters & Search
-          <ChevronDown 
-            size={16} 
-            className={`transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} 
-          />
-        </button>
-      </div>
-
-      {totalRevenue > 0 && showRevenueStats && (
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+      {totalRevenue > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4">
             <div className="text-sm text-slate-500 font-semibold mb-1">Total Revenue</div>
             <div className="text-2xl font-bold text-emerald-600">${totalRevenue.toLocaleString()}</div>
@@ -815,7 +738,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
 
       <div className="overflow-hidden bg-white border border-slate-200 rounded-lg">
         <div className="max-h-[calc(100vh-350px)] overflow-y-auto">
-          <table className="w-full divide-y divide-slate-200 text-sm table-fixed">
+          <table className="w-full text-sm table-auto border-separate border-spacing-y-2 border-spacing-x-1">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="text-left text-slate-500">
                   <th className="px-1.5 py-2 font-semibold w-10">
@@ -842,7 +765,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                   <th className="px-3 py-2 font-semibold">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {filteredData.map((row) => {
                   const scheduledDate = row.scheduledTime
                     ? format(parseISO(row.scheduledTime), 'MMM d, yyyy • h:mm a')
@@ -857,7 +780,9 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                   return (
                     <tr
                       key={row.id}
-                      className={`hover:bg-slate-50/60 transition ${isSelected ? 'bg-orange-50' : ''}`}
+                      className={`transition rounded-xl border ${
+                        isSelected ? 'bg-orange-50 border-orange-200 shadow-sm' : 'bg-white border-slate-200 shadow'
+                      }`}
                     >
                       <td className="px-1.5 py-2">
                         <button
@@ -878,7 +803,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                             Lead
                           </span>
                           {row.totalBookings && row.totalBookings > 1 && (
-                            <span className="text-[10px] text-slate-500">
+                            <span className="text-xs text-slate-500">
                               {row.totalBookings} bookings
                             </span>
                           )}
@@ -894,13 +819,13 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                         {row.phone && row.phone !== 'Not Specified' ? (
                           <a
                             href={`tel:${row.phone}`}
-                            className="text-[10px] text-orange-600 font-semibold hover:text-orange-700 truncate block"
+                            className="text-xs text-orange-600 font-semibold hover:text-orange-700 truncate block"
                             title={row.phone}
                           >
                             {row.phone}
                           </a>
                         ) : (
-                          <span className="text-slate-400 text-[10px]">—</span>
+                          <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -917,7 +842,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                             {row.source}
                           </span>
                         ) : (
-                          <span className="text-slate-400 text-[10px]">—</span>
+                          <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -1030,7 +955,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                     }
                                   }}
                                   disabled={updatingBookingId === row.bookingId}
-                                  className="w-full text-[10px] border border-emerald-200 rounded px-1.5 py-0.5 bg-emerald-50 text-emerald-800"
+                                  className="w-full text-xs border border-emerald-200 rounded-lg px-2 py-1 bg-emerald-50 text-emerald-800"
                                 >
                                   {PLAN_OPTIONS.map((plan) => (
                                     <option key={plan.key} value={plan.key}>
@@ -1049,13 +974,13 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                     }
                                   }}
                                   disabled={updatingBookingId === row.bookingId}
-                                  className="w-full text-[10px] border border-slate-200 rounded px-1.5 py-0.5 bg-white"
+                                  className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white"
                                 />
                               </>
                             )}
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-[10px]">—</span>
+                          <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -1226,7 +1151,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
           </div>
         )}
         </div>
-      {/* </div> */}
+      </div>
 
       {isNotesModalOpen && selectedBookingForNotes && (
         <NotesModal
@@ -1340,4 +1265,3 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
     </div>
   );
 }
-

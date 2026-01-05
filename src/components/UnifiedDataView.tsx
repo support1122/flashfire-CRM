@@ -25,6 +25,7 @@ import {
   AlertCircle,
   Trash2,
   DollarSign,
+  ChevronUp,
 } from 'lucide-react';
 import {
   format,
@@ -57,6 +58,7 @@ const PLAN_OPTIONS: PlanOption[] = [
   { key: 'PROFESSIONAL', label: 'PROFESSIONAL', price: 349, displayPrice: '$349', currency: 'USD' },
   { key: 'EXECUTIVE', label: 'EXECUTIVE', price: 599, displayPrice: '$599', currency: 'USD' },
 ];
+const NOTE_TRUNCATE_LENGTH = 80;
 type DataType = 'booking' | 'user';
 
 interface Booking {
@@ -197,6 +199,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
   const [planFilter, setPlanFilter] = useState<PlanName | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'booking' | 'user'>('all');
@@ -226,12 +229,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const [loadingMeetingsToday, setLoadingMeetingsToday] = useState(false);
   const [showMeetingsToday, setShowMeetingsToday] = useState(false);
   const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null);
-  const [openCalendlyNotes, setOpenCalendlyNotes] = useState<string | null>(null);
   const [planPickerFor, setPlanPickerFor] = useState<string | null>(null);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [selectedBookingForFollowUp, setSelectedBookingForFollowUp] = useState<Booking | null>(null);
-  const [showUsersWithoutMeetings, setShowUsersWithoutMeetings] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
 
   // Indexes for fast lookups
   const bookingsById = useMemo(() => {
@@ -369,16 +369,13 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       if (openStatusDropdown && !(event.target as Element).closest('.status-dropdown-container')) {
         setOpenStatusDropdown(null);
       }
-      if (openCalendlyNotes && !(event.target as Element).closest('.calendly-notes-container')) {
-        setOpenCalendlyNotes(null);
-      }
     };
 
-    if (openStatusDropdown || openCalendlyNotes) {
+    if (openStatusDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [openStatusDropdown, openCalendlyNotes]);
+  }, [openStatusDropdown]);
 
   useEffect(() => {
     fetchData();
@@ -579,6 +576,18 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       reason: 'bulk_action',
     });
   }, [selectedRows, filteredData, onOpenWhatsAppCampaign]);
+
+  const toggleNoteExpansion = useCallback((key: string) => {
+    setExpandedNotes((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
 
   const openEmailFollowUp = useCallback(
     (email: string | undefined, reason: string) => {
@@ -1012,14 +1021,14 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       </div>
 
       <div className="flex flex-col items-center gap-4">
-        {/* <div className="text-center">
+        <div className="text-center">
           <h3 className="text-sm uppercase tracking-wide text-slate-500 font-semibold mb-2">Unified Data View</h3>
           <h2 className="text-3xl font-bold text-slate-900">All Bookings & Users</h2>
           <p className="text-slate-500 mt-2 max-w-2xl mx-auto">
             View and manage all bookings and users who haven't booked meetings in one comprehensive table. Select multiple rows for bulk actions.
           </p>
-        </div> */}
-        <div className="flex items-center gap-3 flex-wrap">
+        </div>
+        <div className="flex items-center gap-3">
           <button
             onClick={handleShowMeetingsToday}
             disabled={loadingMeetingsToday}
@@ -1057,93 +1066,82 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
             <RefreshCcw size={16} className={refreshing ? 'animate-spin' : ''} />
             Refresh Data
           </button>
-          <button
-            onClick={() => setShowUsersWithoutMeetings(!showUsersWithoutMeetings)}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition text-sm font-semibold text-purple-700"
-          >
-            <Users size={16} />
-            Users Without Meetings ({filteredUsersWithoutBookings.length})
-            <ChevronDown 
-              size={16} 
-              className={`transition-transform duration-200 ${showUsersWithoutMeetings ? 'rotate-180' : ''}`} 
-            />
-          </button>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-50 border border-orange-200 rounded-lg hover:bg-orange-100 transition text-sm font-semibold text-orange-700"
-          >
-            <Search size={16} />
-            Filters & Search
-            <ChevronDown 
-              size={16} 
-              className={`transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} 
-            />
-          </button>
         </div>
       </div>
 
       {/* Users Without Meetings Section */}
-      {showUsersWithoutMeetings && (
-          <div className="mt-4">
-            <div className="border-b border-slate-200 px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                    <Users className="text-purple-600" size={20} />
-                    Users Without Meetings
-                  </h3>
-                  <p className="text-sm text-slate-500 mt-1">
-                    High intent users who signed up but haven't booked a meeting ({filteredUsersWithoutBookings.length} users)
-                  </p>
-                </div>
-                {filteredUsersWithoutBookings.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    {onOpenWhatsAppCampaign && (
-                      <button
-                        onClick={() => {
-                          const phones = filteredUsersWithoutBookings
-                            .map((row) => {
-                              if (row.phone && row.phone !== 'Not Specified') {
-                                return row.phone.replace(/[^\d+]/g, '');
-                              }
-                              return null;
-                            })
-                            .filter((phone): phone is string => phone !== null && phone.length > 0);
-                          
-                          if (phones.length === 0) {
-                            alert('No valid phone numbers found in selected users');
-                            return;
-                          }
-                          
-                          onOpenWhatsAppCampaign({
-                            mobileNumbers: phones,
-                            reason: 'users_without_meetings_bulk',
-                          });
-                        }}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-semibold"
-                      >
-                        <MessageCircle size={16} />
-                        WhatsApp All ({filteredUsersWithoutBookings.length})
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        const emails = filteredUsersWithoutBookings.map((row) => row.email).filter(Boolean);
-                        onOpenEmailCampaign({
-                          recipients: emails,
-                          reason: 'users_without_meetings_bulk',
-                        });
-                      }}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition text-sm font-semibold"
-                    >
-                      <Send size={16} />
-                      Email All ({filteredUsersWithoutBookings.length})
-                    </button>
-                  </div>
-                )}
+      <div>
+        <div className="border-b border-slate-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setIsUsersWithoutMeetingsExpanded(!isUsersWithoutMeetingsExpanded)}
+              className="flex items-center gap-3 flex-1 text-left hover:bg-slate-50 -mx-2 px-2 py-1 rounded-lg transition"
+              type="button"
+            >
+              {isUsersWithoutMeetingsExpanded ? (
+                <ChevronDown className="text-slate-600" size={20} />
+              ) : (
+                <ChevronRight className="text-slate-600" size={20} />
+              )}
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                  <Users className="text-purple-600" size={20} />
+                  Users Without Meetings
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  High intent users who signed up but haven't booked a meeting ({filteredUsersWithoutBookings.length} users)
+                </p>
               </div>
-            </div>
-            <div className="p-6">
+            </button>
+            {filteredUsersWithoutBookings.length > 0 && (
+              <div className="flex items-center gap-2">
+                {onOpenWhatsAppCampaign && (
+                  <button
+                    onClick={() => {
+                      const phones = filteredUsersWithoutBookings
+                        .map((row) => {
+                          if (row.phone && row.phone !== 'Not Specified') {
+                            return row.phone.replace(/[^\d+]/g, '');
+                          }
+                          return null;
+                        })
+                        .filter((phone): phone is string => phone !== null && phone.length > 0);
+                      
+                      if (phones.length === 0) {
+                        alert('No valid phone numbers found in selected users');
+                        return;
+                      }
+                      
+                      onOpenWhatsAppCampaign({
+                        mobileNumbers: phones,
+                        reason: 'users_without_meetings_bulk',
+                      });
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-semibold"
+                  >
+                    <MessageCircle size={16} />
+                    WhatsApp All ({filteredUsersWithoutBookings.length})
+                  </button>
+                )}
+              <button
+                onClick={() => {
+                  const emails = filteredUsersWithoutBookings.map((row) => row.email).filter(Boolean);
+                  onOpenEmailCampaign({
+                    recipients: emails,
+                    reason: 'users_without_meetings_bulk',
+                  });
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition text-sm font-semibold"
+              >
+                <Send size={16} />
+                Email All ({filteredUsersWithoutBookings.length})
+              </button>
+              </div>
+            )}
+          </div>
+        </div>
+        {isUsersWithoutMeetingsExpanded && (
+          <div className="p-6">
             {filteredUsersWithoutBookings.length === 0 ? (
               <div className="text-center py-12 text-slate-500">
                 <Users size={48} className="mx-auto mb-4 text-slate-300" />
@@ -1187,13 +1185,13 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                               )}
                             </button>
                           </th>
-                          <th className="px-2 py-3 font-semibold">Name</th>
-                          <th className="px-2 py-3 font-semibold">Email</th>
-                          <th className="px-2 py-3 font-semibold">Phone</th>
-                          <th className="px-4 py-3 font-semibold">Work Authorization</th>
-                          <th className="px-4 py-3 font-semibold">Signed Up</th>
-                          <th className="px-4 py-3 font-semibold">Campaigns Sent</th>
-                          <th className="px-4 py-3 font-semibold">Actions</th>
+                          <th className="px-1.5 md:px-2 py-2 font-semibold">Name</th>
+                          <th className="px-1.5 md:px-2 py-2 font-semibold">Email</th>
+                          <th className="px-1.5 md:px-2 py-2 font-semibold">Phone</th>
+                          <th className="px-3 md:px-4 py-2 font-semibold">Work Authorization</th>
+                          <th className="px-3 md:px-4 py-2 font-semibold">Signed Up</th>
+                          <th className="px-3 md:px-4 py-2 font-semibold">Campaigns Sent</th>
+                          <th className="px-3 md:px-4 py-2 font-semibold">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1207,7 +1205,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                               key={row.id}
                               className={`hover:bg-purple-50/50 transition ${isSelected ? 'bg-purple-50' : ''}`}
                             >
-                              <td className="px-4 py-4">
+                              <td className="px-2 py-2">
                                 <button
                                   onClick={() => handleSelectRow(row.id)}
                                   className="flex items-center justify-center"
@@ -1326,8 +1324,8 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
               </div>
             )}
           </div>
-          </div>
         )}
+      </div>
 
       {selectedRows.size > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 flex items-center justify-between">
@@ -1355,132 +1353,130 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         </div>
       )}
 
-      {showFilters && (
-        <div className="mt-4 flex flex-wrap items-center gap-4 p-4 bg-white border border-slate-200 rounded-lg">
-            <div className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
-              <Search size={16} className="text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by name, email, or source…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="text-sm bg-transparent focus:outline-none"
-              />
-            </div>
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as 'all' | 'booking' | 'user')}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
-            >
-              <option value="all">All types</option>
-              <option value="booking">Bookings only</option>
-              <option value="user">Users without bookings</option>
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
-            >
-              <option value="all">All statuses</option>
-              {(['scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
-                <option key={status} value={status}>
-                  {statusLabels[status]}
-                </option>
-              ))}
-            </select>
-            <select
-              value={planFilter}
-              onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
-            >
-              <option value="all">All plans</option>
-              {PLAN_OPTIONS.map((plan) => (
-                <option key={plan.key} value={plan.key}>
-                  {plan.label} ({plan.displayPrice})
-                </option>
-              ))}
-            </select>
-            <select
-              value={utmFilter}
-              onChange={(e) => setUtmFilter(e.target.value)}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white min-w-[160px]"
-            >
-              <option value="all">All sources</option>
-              {uniqueSources.map((source) => (
-                <option key={source} value={source}>
-                  {source}
-                </option>
-              ))}
-            </select>
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
-              />
-              <span>—</span>
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
-              />
-            </div>
-            {(fromDate || toDate || search || statusFilter !== 'all' || planFilter !== 'all' || utmFilter !== 'all' || typeFilter !== 'all' || showMeetingsToday) && (
-              <button
-                onClick={() => {
-                  setFromDate('');
-                  setToDate('');
-                  setStatusFilter('all');
-                  setTypeFilter('all');
-                  setPlanFilter('all');
-                  setUtmFilter('all');
-                  setSearch('');
-                  setShowMeetingsToday(false);
-                  setBookingsPage(1);
-                  setUsersPage(1);
-                }}
-                className="text-sm text-orange-600 font-semibold"
-              >
-                Clear filters
-              </button>
-            )}
-          </div>
+      <div className="flex flex-wrap items-center gap-4 p-4">
+        <div className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
+          <Search size={16} className="text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search by name, email, or source…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="text-sm bg-transparent focus:outline-none"
+          />
+        </div>
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value as 'all' | 'booking' | 'user')}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+        >
+          <option value="all">All types</option>
+          <option value="booking">Bookings only</option>
+          <option value="user">Users without bookings</option>
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+        >
+          <option value="all">All statuses</option>
+          {(['scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
+            <option key={status} value={status}>
+              {statusLabels[status]}
+            </option>
+          ))}
+        </select>
+        <select
+          value={planFilter}
+          onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+        >
+          <option value="all">All plans</option>
+          {PLAN_OPTIONS.map((plan) => (
+            <option key={plan.key} value={plan.key}>
+              {plan.label} ({plan.displayPrice})
+            </option>
+          ))}
+        </select>
+        <select
+          value={utmFilter}
+          onChange={(e) => setUtmFilter(e.target.value)}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white min-w-[160px]"
+        >
+          <option value="all">All sources</option>
+          {uniqueSources.map((source) => (
+            <option key={source} value={source}>
+              {source}
+            </option>
+          ))}
+        </select>
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
+          />
+          <span>—</span>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
+          />
+        </div>
+        {(fromDate || toDate || search || statusFilter !== 'all' || planFilter !== 'all' || utmFilter !== 'all' || typeFilter !== 'all' || showMeetingsToday) && (
+          <button
+            onClick={() => {
+              setFromDate('');
+              setToDate('');
+              setStatusFilter('all');
+              setTypeFilter('all');
+              setPlanFilter('all');
+              setUtmFilter('all');
+              setSearch('');
+              setShowMeetingsToday(false);
+              setBookingsPage(1);
+              setUsersPage(1);
+            }}
+            className="text-sm text-orange-600 font-semibold"
+          >
+            Clear filters
+          </button>
         )}
+      </div>
 
-      {/* <div className="overflow-hidden"> */}
-        {/* <div className="overflow-x-auto"> */}
-          {/* <div className="max-h-[600px] overflow-y-auto"> */}
-            <table className="min-w-full divide-y divide-slate-200 text-xs">
+        <div className="overflow-hidden bg-white border border-slate-200 rounded-lg">
+          <div className="overflow-x-auto">
+            <div className="max-h-[600px] overflow-y-auto">
+              <table className="w-full min-w-[1200px] text-sm table-fixed border-separate border-spacing-y-2 border-spacing-x-1">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="text-left text-slate-500">
-                  <th className="px-1 py-1.5 font-semibold w-8">
+                  <th className="px-1.5 py-2 font-semibold w-10">
                     <button
                       onClick={handleSelectAll}
                       className="flex items-center justify-center"
                       type="button"
                     >
                       {selectedRows.size === filteredData.length && filteredData.length > 0 ? (
-                        <CheckSquare size={14} className="text-orange-600" />
+                        <CheckSquare size={16} className="text-orange-600" />
                       ) : (
-                        <Square size={14} className="text-slate-400" />
+                        <Square size={16} className="text-slate-400" />
                       )}
                     </button>
                   </th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-14">Type</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-24">Name</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-32">Email</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-24">Phone</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-28">Created</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-28">Meeting</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-24">Source</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-20">Status</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-28">Campaigns</th>
-                  <th className="px-1 py-1.5 font-semibold text-xs w-32">Actions</th>
+                  <th className="px-3 py-2 font-semibold w-16">Type</th>
+                  <th className="px-3 py-2 font-semibold w-40">Name</th>
+                  <th className="px-3 py-2 font-semibold w-48">Email</th>
+                  <th className="px-3 py-2 font-semibold w-28">Phone</th>
+                  <th className="px-3 py-2 font-semibold w-36">Created/Signed Up</th>
+                  <th className="px-3 py-2 font-semibold w-36">Meeting Time</th>
+                  <th className="px-3 py-2 font-semibold w-28">Source</th>
+                  <th className="px-3 py-2 font-semibold w-32">Status</th>
+                  <th className="px-3 py-2 font-semibold w-48">Campaigns</th>
+                  <th className="px-3 py-2 font-semibold">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {filteredData.map((row) => {
                   const isBooking = row.type === 'booking';
                   const scheduledDate = row.scheduledTime
@@ -1488,28 +1484,35 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                     : 'Not scheduled';
                   const createdDate = format(parseISO(row.createdAt), 'MMM d, yyyy • h:mm a');
                   const isSelected = selectedRows.has(row.id);
+                  const booking = isBooking && row.bookingId ? bookingsById.get(row.bookingId) : null;
+                  const calendlyNoteKey = `calendly-${row.id}`;
+                  const meetingNoteKey = `meeting-${row.id}`;
+                  const isCalendlyNoteExpanded = expandedNotes.has(calendlyNoteKey);
+                  const isMeetingNoteExpanded = expandedNotes.has(meetingNoteKey);
 
                   return (
                     <tr
                       key={row.id}
-                      className={`hover:bg-slate-50/60 transition ${isSelected ? 'bg-orange-50' : ''}`}
+                      className={`transition rounded-xl border hover:shadow-md ${
+                        isSelected ? 'bg-orange-50 border-orange-200 shadow-sm' : 'bg-white border-slate-200 shadow'
+                      }`}
                     >
-                      <td className="px-1 py-1.5">
+                      <td className="px-1.5 py-2">
                         <button
                           onClick={() => handleSelectRow(row.id)}
                           className="flex items-center justify-center"
                           type="button"
                         >
                           {isSelected ? (
-                            <CheckSquare size={14} className="text-orange-600" />
+                            <CheckSquare size={16} className="text-orange-600" />
                           ) : (
-                            <Square size={14} className="text-slate-400" />
+                            <Square size={16} className="text-slate-400" />
                           )}
                         </button>
                       </td>
-                      <td className="px-1 py-1.5">
+                      <td className="px-3 py-2">
                         <span
-                          className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${isBooking
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${isBooking
                             ? 'bg-blue-100 text-blue-800'
                             : 'bg-purple-100 text-purple-800'
                             }`}
@@ -1517,64 +1520,206 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           {isBooking ? 'Booking' : 'User'}
                         </span>
                       </td>
-                      <td className="px-1 py-1.5">
-                        <div className="font-semibold text-slate-900 truncate text-xs" title={row.name}>{row.name}</div>
+                      <td className="px-3 py-2">
+                        <div className="font-semibold text-slate-900 truncate text-sm" title={row.name}>{row.name}</div>
                       </td>
-                      <td className="px-1 py-1.5">
-                        <div className="text-slate-700 truncate text-[10px]" title={row.email}>{row.email}</div>
+                      <td className="px-3 py-2">
+                        <div className="text-slate-700 truncate text-xs" title={row.email}>{row.email}</div>
                       </td>
-                      <td className="px-1 py-1.5">
+                      <td className="px-3 py-2">
                         {row.phone && row.phone !== 'Not Specified' ? (
                           <a
                             href={`tel:${row.phone}`}
-                            className="text-[10px] text-orange-600 font-semibold hover:text-orange-700 truncate block"
+                            className="text-xs text-orange-600 font-semibold hover:text-orange-700 truncate block"
                             title={row.phone}
                           >
                             {row.phone}
                           </a>
                         ) : (
-                          <span className="text-slate-400 text-[10px]">—</span>
+                          <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-1 py-1.5 text-slate-600 text-[10px]">{createdDate}</td>
-                      <td className="px-1 py-1.5 text-slate-600 text-[10px]">
+                      <td className="px-3 py-2 text-slate-600 text-xs">{createdDate}</td>
+                      <td className="px-3 py-2 text-slate-600 text-xs">
                         {isBooking ? scheduledDate : <span className="text-slate-400">—</span>}
                       </td>
-                      <td className="px-1 py-1.5">
+                      <td className="px-3 py-2">
                         {row.source ? (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 truncate max-w-full" title={row.source}>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 truncate max-w-full" title={row.source}>
                             {row.source}
                           </span>
                         ) : (
-                          <span className="text-slate-400 text-[10px]">—</span>
+                          <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-1 py-1.5">
-                        {row.status ? (
+                      <td className="px-3 py-2">
+                        {row.status && isBooking && row.bookingId ? (
+                            <div className="relative status-dropdown-container">
+                            <button
+                              onClick={() =>
+                                  row.bookingId ? setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId) : null
+                              }
+                              disabled={updatingBookingId === row.bookingId}
+                              className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition disabled:opacity-60 w-full justify-center ${
+                                statusColors[row.status] || 'text-slate-600 bg-slate-100'
+                              } border-current/20 hover:border-current/40`}
+                            >
+                              {updatingBookingId === row.bookingId ? (
+                                <>
+                                  <Loader2 className="animate-spin" size={14} />
+                                  <span>Updating...</span>
+                                </>
+                              ) : (
+                                  <>
+                                    <span>{statusLabels[row.status]}</span>
+                                    {openStatusDropdown === row.bookingId ? (
+                                      <ChevronUp size={12} className="transition-transform duration-200" />
+                                    ) : (
+                                      <ChevronDown size={12} className="transition-transform duration-200" />
+                                    )}
+                                  </>
+                              )}
+                            </button>
+                            {openStatusDropdown === row.bookingId && (
+                              <>
+                                <div className="fixed inset-0 z-10" onClick={() => setOpenStatusDropdown(null)} />
+                                <div className="absolute right-0 top-full mt-2 z-20 w-52">
+                                  <div className="relative">
+                                    <div className="absolute -top-2 right-6 w-3 h-3 bg-white border-l border-t border-slate-200 rotate-45 z-10"></div>
+                                    <div className="bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden relative z-20">
+                                  <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
+                                    Change Status
+                                  </div>
+                                  {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
+                                    if (status === row.status) return null;
+                                    const StatusIcon =
+                                      status === 'completed'
+                                        ? CheckCircle2
+                                        : status === 'no-show'
+                                        ? AlertTriangle
+                                        : status === 'paid'
+                                        ? DollarSign
+                                        : status === 'rescheduled'
+                                        ? Clock
+                                        : status === 'canceled'
+                                        ? X
+                                        : status === 'ignored'
+                                        ? X
+                                        : Calendar;
+                                    const isPaidOption = status === 'paid';
+                                    const isPlanOpen = isPaidOption && planPickerFor === row.bookingId;
+                                    return (
+                                      <div key={status} className="border-b last:border-b-0 border-slate-100">
+                                        <button
+                                          onClick={() => {
+                                            if (!booking) return;
+                                            if (isPaidOption) {
+                                              setPlanPickerFor(row.bookingId!);
+                                              return;
+                                            }
+                                            setPlanPickerFor(null);
+                                            handleStatusUpdate(booking.bookingId, status);
+                                            setOpenStatusDropdown(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition flex items-center gap-3 group"
+                                        >
+                                          <StatusIcon
+                                            size={14}
+                                            className={`${
+                                              status === 'completed'
+                                                ? 'text-green-600'
+                                                : status === 'no-show'
+                                                ? 'text-rose-600'
+                                                : status === 'rescheduled'
+                                                ? 'text-amber-600'
+                                                : status === 'paid'
+                                                ? 'text-emerald-600'
+                                                : status === 'canceled'
+                                                ? 'text-red-600'
+                                                : status === 'ignored'
+                                                ? 'text-gray-600'
+                                                : 'text-blue-600'
+                                            }`}
+                                          />
+                                          <div className="flex flex-col gap-0.5">
+                                            <span className="font-medium">{statusLabels[status]}</span>
+                                            {isPaidOption && (
+                                              <span className="text-[11px] text-slate-500">Select a plan</span>
+                                            )}
+                                          </div>
+                                        </button>
+                                        {isPlanOpen && (
+                                          <div className="px-4 pb-3 grid grid-cols-1 gap-1">
+                                            {PLAN_OPTIONS.map((plan) => (
+                                              <button
+                                                key={plan.key}
+                                                onClick={() => {
+                                                  if (booking) {
+                                                    handleStatusUpdate(booking.bookingId, 'paid', plan);
+                                                    setOpenStatusDropdown(null);
+                                                  }
+                                                }}
+                                                className="flex items-center justify-between w-full rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
+                                              >
+                                                <div className="flex flex-col text-left">
+                                                  <span>{plan.label}</span>
+                                                  <span className="text-xs font-medium text-emerald-700">
+                                                    {plan.displayPrice}
+                                                  </span>
+                                                </div>
+                                                <DollarSign size={16} className="text-emerald-600" />
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                  <div className="border-t border-slate-200 my-1" />
+                                  <button
+                                    onClick={() => {
+                                      if (booking) {
+                                        handleReschedule(booking);
+                                        setOpenStatusDropdown(null);
+                                      }
+                                    }}
+                                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition flex items-center gap-3 text-amber-600 group"
+                                  >
+                                    <Clock size={16} />
+                                    <span className="font-medium">Reschedule</span>
+                                  </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : row.status ? (
                           <span
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${statusColors[row.status]}`}
+                            className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold border ${statusColors[row.status]} border-current/20`}
                           >
-                            {statusLabels[row.status]}
+                            <span>{statusLabels[row.status]}</span>
+                            <ChevronDown size={12} className="transition-transform duration-200" />
                           </span>
                         ) : (
-                          <span className="text-slate-400 text-[10px]">—</span>
+                          <span className="text-slate-400 text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-1 py-1.5">
+                      <td className="px-3 py-2">
                         {(() => {
                           const emailLower = row.email.toLowerCase();
                           const campaigns = userCampaigns.get(emailLower) || [];
                           const booking = isBooking && row.bookingId ? bookingsById.get(row.bookingId) : null;
 
                           return (
-                            <div className="space-y-1 max-w-xs">
+                            <div className="space-y-1.5 max-w-xs">
                               {/* Email Campaigns */}
                               <button
                                 onClick={() => handleUserCampaignsClick(row.email)}
-                                className="flex items-center gap-1 text-[10px] hover:bg-slate-50 rounded px-1.5 py-0.5 transition cursor-pointer w-full text-left border border-slate-200 hover:border-orange-300"
+                                className="flex items-center gap-2 text-xs hover:bg-slate-50 rounded px-2 py-1 transition cursor-pointer w-full text-left border border-slate-200 hover:border-orange-300"
                                 type="button"
                               >
-                                <Mail className="text-orange-500" size={12} />
+                                <Mail className="text-orange-500" size={14} />
                                 <span className="text-slate-700 font-semibold">
                                   {campaigns.length > 0 ? `${campaigns.length} campaign${campaigns.length > 1 ? 's' : ''}` : 'View Campaigns'}
                                 </span>
@@ -1585,34 +1730,34 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
 
                               {/* Scheduled Information */}
                               {booking && (
-                                <div className="space-y-0.5 pt-0.5 border-t border-slate-200">
+                                <div className="space-y-1 pt-1 border-t border-slate-200">
                                   {booking.scheduledEventStartTime && (
-                                    <div className="flex items-center gap-1 text-[10px] text-slate-600">
-                                      <Calendar size={10} className="text-blue-500" />
+                                    <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                                      <Calendar size={12} className="text-blue-500" />
                                       <span>Meeting: {format(parseISO(booking.scheduledEventStartTime), 'MMM d, h:mm a')}</span>
                                     </div>
                                   )}
                                   {booking.reminderCallJobId && (
-                                    <div className="flex items-center gap-1 text-[10px] text-blue-600">
-                                      <Clock size={10} />
+                                    <div className="flex items-center gap-1.5 text-xs text-blue-600">
+                                      <Clock size={12} />
                                       <span>Reminder call scheduled</span>
                                     </div>
                                   )}
                                   {booking.paymentReminders && booking.paymentReminders.length > 0 && (
-                                    <div className="flex items-center gap-1 text-[10px] text-amber-600">
-                                      <Clock size={10} />
+                                    <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                                      <Clock size={12} />
                                       <span>{booking.paymentReminders.length} payment reminder{booking.paymentReminders.length > 1 ? 's' : ''}</span>
                                     </div>
                                   )}
                                   {booking.rescheduledCount && booking.rescheduledCount > 0 && (
-                                    <div className="flex items-center gap-1 text-[10px] text-purple-600">
-                                      <RefreshCcw size={10} />
+                                    <div className="flex items-center gap-1.5 text-xs text-purple-600">
+                                      <RefreshCcw size={12} />
                                       <span>Rescheduled {booking.rescheduledCount} time{booking.rescheduledCount > 1 ? 's' : ''}</span>
                                     </div>
                                   )}
                                   {booking.whatsappReminderSent && (
-                                    <div className="flex items-center gap-1 text-[10px] text-green-600">
-                                      <Mail size={10} />
+                                    <div className="flex items-center gap-1.5 text-xs text-green-600">
+                                      <Mail size={12} />
                                       <span>WhatsApp sent</span>
                                     </div>
                                   )}
@@ -1622,260 +1767,57 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           );
                         })()}
                       </td>
-                      <td className="px-1 py-1.5">
-                        <div className="space-y-1">
-                        {/* Delete Button */}
-                        <button
-                          onClick={() => handleDeleteClick(row)}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-500 text-white hover:bg-red-600 transition w-full justify-center"
-                        >
-                          <Trash2 size={10} />
-                          Delete
-                        </button>
-                        {isBooking && row.bookingId ? (
-                            <div className="flex flex-col gap-1">
-                              {/* Follow-ups */}
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const booking = bookingsById.get(row.bookingId!);
-                                    openEmailFollowUp(booking?.clientEmail || row.email, 'booking_followup');
-                                  }}
-                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500 text-white hover:bg-orange-600 transition flex-1 justify-center whitespace-nowrap"
-                                >
-                                  <Mail size={10} />
-                                  Follow up
-                                </button>
-                                {onOpenWhatsAppCampaign ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const booking = bookingsById.get(row.bookingId!);
-                                      openWhatsAppFollowUp(booking?.clientPhone || row.phone, 'booking_followup');
-                                    }}
-                                    disabled={!row.phone || row.phone === 'Not Specified'}
-                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-500 text-white hover:bg-green-600 transition disabled:opacity-60 disabled:cursor-not-allowed flex-1 justify-center whitespace-nowrap"
-                                  >
-                                    <MessageCircle size={10} />
-                                    WhatsApp
-                                  </button>
-                                ) : null}
-                              </div>
-                              {/* Status Dropdown */}
-                              <div className="relative status-dropdown-container">
-                                <button
-                                  onClick={() => setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId!)}
-                                  disabled={updatingBookingId === row.bookingId}
-                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border transition disabled:opacity-60 w-full justify-center ${
-                                    row.status ? statusColors[row.status] : 'text-slate-600 bg-slate-100'
-                                  } border-current/20 hover:border-current/40`}
-                                >
-                                  {updatingBookingId === row.bookingId ? (
-                                    <>
-                                      <Loader2 className="animate-spin" size={10} />
-                                      <span>Updating...</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <span>{row.status ? statusLabels[row.status] : 'No Status'}</span>
-                                      <ChevronDown size={10} className={`transition-transform duration-200 ${openStatusDropdown === row.bookingId ? 'rotate-180' : ''}`} />
-                                    </>
-                                  )}
-                                </button>
-                                
-                                {openStatusDropdown === row.bookingId && (
-                                  <>
-                                    <div 
-                                      className="fixed inset-0 z-10" 
-                                      onClick={() => setOpenStatusDropdown(null)}
-                                    />
-                                    <div className="absolute right-0 top-full mt-1 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
-                                      <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
-                                        Change Status
-                                      </div>
-                                      {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
-                                        if (status === row.status) return null;
-                                        const statusIcon = status === 'completed' ? CheckCircle2 : status === 'no-show' ? AlertTriangle : status === 'paid' ? DollarSign : status === 'rescheduled' ? Clock : status === 'canceled' ? X : status === 'ignored' ? X : Calendar;
-                                        const StatusIcon = statusIcon;
-                                        const isPaidOption = status === 'paid';
-                                        const isPlanOpen = isPaidOption && planPickerFor === row.bookingId;
-                                        return (
-                                          <div key={status} className="border-b last:border-b-0 border-slate-100">
-                                            <button
-                                              onClick={() => {
-                                                const booking = bookingsById.get(row.bookingId!);
-                                                if (!booking) return;
-                                                if (isPaidOption) {
-                                                  setPlanPickerFor(row.bookingId!);
-                                                  return;
-                                                }
-                                                setPlanPickerFor(null);
-                                                handleStatusUpdate(booking.bookingId, status);
-                                                setOpenStatusDropdown(null);
-                                              }}
-                                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition flex items-center gap-3 group"
-                                            >
-                                              <StatusIcon size={16} className={`${status === 'completed' ? 'text-green-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-emerald-600' : status === 'canceled' ? 'text-red-600' : status === 'ignored' ? 'text-gray-600' : 'text-blue-600'}`} />
-                                              <div className="flex flex-col gap-0.5">
-                                                <span className="font-medium">{statusLabels[status]}</span>
-                                                {isPaidOption && <span className="text-[11px] text-slate-500">Select a plan</span>}
-                                              </div>
-                                            </button>
-                                            {isPlanOpen && (
-                                              <div className="px-4 pb-3 grid grid-cols-1 gap-1">
-                                                {PLAN_OPTIONS.map((plan) => (
-                                                  <button
-                                                    key={plan.key}
-                                                    onClick={() => {
-                                                      const booking = bookingsById.get(row.bookingId!);
-                                                      if (booking) {
-                                                        handleStatusUpdate(booking.bookingId, 'paid', plan);
-                                                        setOpenStatusDropdown(null);
-                                                      }
-                                                    }}
-                                                    className="flex items-center justify-between w-full rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
-                                                  >
-                                                    <div className="flex flex-col text-left">
-                                                      <span>{plan.label}</span>
-                                                      <span className="text-xs font-medium text-emerald-700">{plan.displayPrice}</span>
-                                                    </div>
-                                                    <DollarSign size={16} className="text-emerald-600" />
-                                                  </button>
-                                                ))}
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                      <div className="border-t border-slate-200 my-1" />
-                                      <button
-                                        onClick={() => {
-                                          const booking = bookingsById.get(row.bookingId!);
-                                          if (booking) {
-                                            handleReschedule(booking);
-                                            setOpenStatusDropdown(null);
-                                          }
-                                        }}
-                                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition flex items-center gap-3 text-amber-600 group"
-                                      >
-                                        <Clock size={16} />
-                                        <span className="font-medium">Reschedule</span>
-                                      </button>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                              {row.paymentPlan && (
-                                <div className="flex items-center gap-1 rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">
-                                  <DollarSign size={10} className="text-emerald-600" />
-                                  <span>{row.paymentPlan.name}</span>
-                                  <span className="text-emerald-700">{row.paymentPlan.displayPrice || `$${row.paymentPlan.price}`}</span>
-                                </div>
-                              )}
-                              {row.status === 'paid' && (
-                                <div className="flex items-center gap-1">
-                                  <select
-                                    value={row.paymentPlan?.name || ''}
-                                    onChange={(e) => {
-                                      const plan = getPlanOptionByName(e.target.value);
-                                      const booking = bookingsById.get(row.bookingId!);
-                                      if (plan && booking) {
-                                        handleStatusUpdate(booking.bookingId, 'paid', plan);
-                                      }
-                                    }}
-                                    disabled={updatingBookingId === row.bookingId}
-                                    className="flex-1 text-[10px] border border-emerald-200 rounded px-1.5 py-0.5 bg-emerald-50 text-emerald-800"
-                                  >
-                                    <option value="">Select plan</option>
-                                    {PLAN_OPTIONS.map((plan) => (
-                                      <option key={plan.key} value={plan.key}>
-                                        {plan.label} ({plan.displayPrice})
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                              )}
-                              {/* Join and Take Notes */}
-                              <div className="flex items-center gap-1">
-                                {row.meetLink && (
-                                  <a
-                                    href={row.meetLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition flex-1 justify-center whitespace-nowrap"
-                                  >
-                                    <ExternalLink size={10} />
-                                    Join
-                                  </a>
-                                )}
-                                <button
-                                  onClick={() => {
-                                    setSelectedBookingForNotes({
-                                      id: row.bookingId!,
-                                      name: row.name,
-                                      notes: row.meetingNotes || '',
-                                    });
-                                    setIsNotesModalOpen(true);
-                                  }}
-                                  className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap flex-1 justify-center"
-                                >
-                                  <Edit size={10} />
-                                  {row.meetingNotes ? 'Edit Notes' : 'Take Notes'}
-                                </button>
-                              </div>
-                              {/* No-Show Follow-up Actions */}
-                              {row.status === 'no-show' && (
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    onClick={() => {
-                                      const booking = bookingsById.get(row.bookingId!);
-                                      if (booking) {
-                                        handleStatusUpdate(booking.bookingId, 'scheduled');
-                                      }
-                                    }}
-                                    disabled={updatingBookingId === row.bookingId}
-                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition disabled:opacity-60 flex-1 justify-center whitespace-nowrap"
-                                  >
-                                    {updatingBookingId === row.bookingId ? (
-                                      <Loader2 className="animate-spin" size={10} />
-                                    ) : (
-                                      <CheckCircle2 size={10} />
-                                    )}
-                                    Unmark
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      const booking = bookingsById.get(row.bookingId!);
-                                      if (booking && booking.clientEmail) {
-                                        openEmailFollowUp(booking.clientEmail, 'no_show_followup');
-                                      }
-                                    }}
-                                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white border border-blue-300 text-blue-600 hover:bg-blue-50 transition flex-1 justify-center whitespace-nowrap"
-                                  >
-                                    <Mail size={10} />
-                                    Follow up
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                        ) : (
-                          <div className="flex flex-col gap-1">
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {isBooking && row.meetLink && (
+                            <a
+                              href={row.meetLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition justify-center whitespace-nowrap"
+                            >
+                              <ExternalLink size={12} />
+                              Join
+                            </a>
+                          )}
+                          {isBooking && row.bookingId && (
+                            <button
+                              onClick={() => {
+                                setSelectedBookingForNotes({
+                                  id: row.bookingId!,
+                                  name: row.name,
+                                  notes: row.meetingNotes || '',
+                                });
+                                setIsNotesModalOpen(true);
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap justify-center"
+                            >
+                              <Edit size={12} />
+                              {row.meetingNotes ? 'Edit Notes' : 'Notes'}
+                            </button>
+                          )}
                           <button
                             onClick={() => {
-                              onOpenEmailCampaign({
-                                recipients: [row.email],
-                                reason: 'user_without_booking',
-                              });
+                              if (isBooking) {
+                                openEmailFollowUp(booking?.clientEmail || row.email, 'booking_followup');
+                              } else {
+                                onOpenEmailCampaign({
+                                  recipients: [row.email],
+                                  reason: 'user_without_booking',
+                                });
+                              }
                             }}
-                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-500 text-white hover:bg-orange-600 transition w-full justify-center"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition justify-center whitespace-nowrap"
                           >
-                            <Mail size={10} />
-                              Email
-                            </button>
-                            {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
-                              <button
-                                onClick={() => {
+                            <Mail size={12} />
+                            Email
+                          </button>
+                          {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
+                            <button
+                              onClick={() => {
+                                if (isBooking) {
+                                  openWhatsAppFollowUp(row.phone, 'booking_followup');
+                                } else {
                                   const phone = row.phone!.replace(/[^\d+]/g, '');
                                   if (phone) {
                                     onOpenWhatsAppCampaign({
@@ -1885,38 +1827,122 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                   } else {
                                     alert('Invalid phone number');
                                   }
-                                }}
-                                className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-500 text-white hover:bg-green-600 transition w-full justify-center"
-                              >
-                                <MessageCircle size={10} />
-                                WhatsApp
+                                }
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition justify-center whitespace-nowrap disabled:opacity-60"
+                            >
+                              <MessageCircle size={12} />
+                              {isBooking ? 'WA' : 'WhatsApp'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeleteClick(row)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition justify-center whitespace-nowrap"
+                          >
+                            <Trash2 size={12} />
+                            Delete
                           </button>
-                            )}
-                          </div>
-                        )}
                         </div>
                         {row.notes && (
-                          <div className="mt-1 calendly-notes-container">
-                            <button
-                              onClick={() => setOpenCalendlyNotes(openCalendlyNotes === row.id ? null : row.id)}
-                              className="w-full text-left text-[10px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded px-1.5 py-0.5 border border-slate-200 transition flex items-center justify-between"
-                            >
-                              <span>Calendly Notes</span>
-                              <ChevronDown 
-                                size={10} 
-                                className={`transition-transform duration-200 ${openCalendlyNotes === row.id ? 'rotate-180' : ''}`} 
-                              />
-                            </button>
-                            {openCalendlyNotes === row.id && (
-                              <div className="text-[10px] text-slate-500 bg-slate-50 rounded px-1.5 py-0.5 border border-slate-200 mt-0.5">
-                                {row.notes}
-                              </div>
+                          <div className="text-xs text-slate-500 bg-slate-100 rounded px-1 py-0.5 border border-slate-200 mt-1">
+                            <span className="font-semibold text-slate-600">Calendly Notes:</span>{' '}
+                            {isCalendlyNoteExpanded || row.notes.length <= NOTE_TRUNCATE_LENGTH ? (
+                              <span>{row.notes}</span>
+                            ) : (
+                              <span>{row.notes.substring(0, NOTE_TRUNCATE_LENGTH)}...</span>
+                            )}
+                            {row.notes.length > NOTE_TRUNCATE_LENGTH && (
+                              <button
+                                onClick={() => toggleNoteExpansion(calendlyNoteKey)}
+                                className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline"
+                              >
+                                {isCalendlyNoteExpanded ? 'Less' : 'More'}
+                              </button>
                             )}
                           </div>
                         )}
                         {row.meetingNotes && (
-                          <div className="text-[10px] text-slate-500 bg-yellow-50 rounded px-1.5 py-0.5 border border-yellow-200 mt-1">
-                            <span className="font-semibold text-slate-600">Meeting Notes:</span> {row.meetingNotes}
+                          <div className="text-xs text-slate-500 bg-yellow-50 rounded px-1 py-0.5 border border-yellow-200 mt-1">
+                            <span className="font-semibold text-slate-600">Meeting Notes:</span>{' '}
+                            {isMeetingNoteExpanded || row.meetingNotes.length <= NOTE_TRUNCATE_LENGTH ? (
+                              <span>{row.meetingNotes}</span>
+                            ) : (
+                              <span>{row.meetingNotes.substring(0, NOTE_TRUNCATE_LENGTH)}...</span>
+                            )}
+                            {row.meetingNotes.length > NOTE_TRUNCATE_LENGTH && (
+                              <button
+                                onClick={() => toggleNoteExpansion(meetingNoteKey)}
+                                className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline"
+                              >
+                                {isMeetingNoteExpanded ? 'Less' : 'More'}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {isBooking && (
+                          <div className="mt-2 space-y-1.5">
+                            {row.paymentPlan && (
+                              <div className="inline-flex items-center gap-0.5 rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+                                <DollarSign size={12} className="text-emerald-600" />
+                                <span className="truncate">{row.paymentPlan.name}</span>
+                                <span className="text-emerald-700 truncate">
+                                  {row.paymentPlan.displayPrice || `$${row.paymentPlan.price}`}
+                                </span>
+                              </div>
+                            )}
+                            {row.status === 'paid' && row.bookingId && (
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={row.paymentPlan?.name || ''}
+                                  onChange={(e) => {
+                                    const plan = getPlanOptionByName(e.target.value);
+                                    if (plan && booking) {
+                                      handleStatusUpdate(booking.bookingId, 'paid', plan);
+                                    }
+                                  }}
+                                  disabled={updatingBookingId === row.bookingId}
+                                  className="flex-1 text-xs border border-emerald-200 rounded-lg px-2 py-1 bg-emerald-50 text-emerald-800"
+                                >
+                                  <option value="">Select plan</option>
+                                  {PLAN_OPTIONS.map((plan) => (
+                                    <option key={plan.key} value={plan.key}>
+                                      {plan.label} ({plan.displayPrice})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                            {row.status === 'no-show' && (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    if (booking) {
+                                      handleStatusUpdate(booking.bookingId, 'scheduled');
+                                    }
+                                  }}
+                                  disabled={updatingBookingId === row.bookingId}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition disabled:opacity-60 flex-1 justify-center whitespace-nowrap"
+                                >
+                                  {updatingBookingId === row.bookingId ? (
+                                    <Loader2 className="animate-spin" size={14} />
+                                  ) : (
+                                    <CheckCircle2 size={14} />
+                                  )}
+                                  Unmark
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (booking && booking.clientEmail) {
+                                      openEmailFollowUp(booking.clientEmail, 'no_show_followup');
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-blue-300 text-blue-600 hover:bg-blue-50 transition flex-1 justify-center whitespace-nowrap"
+                                >
+                                  <Mail size={14} />
+                                  Follow up
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </td>
@@ -1932,9 +1958,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                 )}
               </tbody>
             </table>
-          {/* </div> */}
-        {/* </div> */}
-      {/* </div> */}
+          </div>
+        </div>
+      </div>
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
         <div className="text-sm text-slate-600">
           {showMeetingsToday ? (
@@ -2528,4 +2554,3 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
     </div>
   );
 }
-
