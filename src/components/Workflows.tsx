@@ -27,10 +27,20 @@ import {
   Users,
   Play,
   Info,
+  DollarSign,
+  Calendar as CalendarIcon,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
+
+// Plan options for finalkk template configuration
+const PLAN_OPTIONS = [
+  { key: 'PRIME', label: 'PRIME', price: 119, displayPrice: '$119', currency: 'USD' },
+  { key: 'IGNITE', label: 'IGNITE', price: 199, displayPrice: '$199', currency: 'USD' },
+  { key: 'PROFESSIONAL', label: 'PROFESSIONAL', price: 349, displayPrice: '$349', currency: 'USD' },
+  { key: 'EXECUTIVE', label: 'EXECUTIVE', price: 599, displayPrice: '$599', currency: 'USD' },
+];
 
 interface WatiTemplate {
   name: string;
@@ -59,6 +69,11 @@ interface WorkflowStep {
   senderEmail?: string;
   senderName?: string;
   order: number;
+  templateConfig?: {
+    planName?: string;
+    planAmount?: number;
+    days?: number;
+  };
 }
 
 interface Workflow {
@@ -115,6 +130,10 @@ const TEMPLATE_VARIABLES: Record<string, { variables: string[]; exampleContent?:
   'plan_followup_utility_01dd': {
     variables: ['{{1}}', '{{2}}'],
     exampleContent: 'Hi {{1}},\n\nThis is a reminder regarding your recent plan with Flashfire. The payment of {{2}} is still pending.\n\nPlease let us know if you\'d like us to resend the payment link or if you need assistance.\n\nNeed help ?'
+  },
+  'finalkk': {
+    variables: ['{{1}}', '{{2}}', '{{3}}'],
+    exampleContent: 'Hi {{1}},\n\nThis is a payment reminder for your Flashfire {{2}} plan dated {{3}}.\n\nOur records show that the payment is still pending in the system.\n\nIf the payment has already been made, please disregard this message.'
   },
   // Add more templates as needed
 };
@@ -275,6 +294,16 @@ export default function Workflows() {
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [triggeringBulk, setTriggeringBulk] = useState(false);
   const [bulkResult, setBulkResult] = useState<any>(null);
+
+  // Plan configuration modal state for finalkk template
+  const [showPlanConfigModal, setShowPlanConfigModal] = useState(false);
+  const [planConfigStepIndex, setPlanConfigStepIndex] = useState<number | null>(null);
+  const [planConfigWorkflowId, setPlanConfigWorkflowId] = useState<string | null>(null);
+  const [planConfig, setPlanConfig] = useState<{ planName: string; planAmount: number; days: number }>({
+    planName: 'PRIME',
+    planAmount: 119,
+    days: 7,
+  });
 
   useEffect(() => {
     if (activeTab === 'workflows') {
@@ -976,10 +1005,34 @@ export default function Workflows() {
                                       value={step.templateName || step.templateId || ''}
                                       onChange={(e) => {
                                         const template = watiTemplates.find(t => t.name === e.target.value);
+                                        const templateName = e.target.value;
+                                        
                                         updateStep(null, index, {
                                           templateId: template?.id || e.target.value,
-                                          templateName: e.target.value
+                                          templateName: templateName
                                         });
+
+                                        // If finalkk template is selected, show plan configuration modal
+                                        if (templateName === 'finalkk') {
+                                          setPlanConfigStepIndex(index);
+                                          setPlanConfigWorkflowId(null);
+                                          // Pre-fill with existing config or defaults
+                                          const existingConfig = step.templateConfig;
+                                          if (existingConfig) {
+                                            setPlanConfig({
+                                              planName: existingConfig.planName || 'PRIME',
+                                              planAmount: existingConfig.planAmount || PLAN_OPTIONS.find(p => p.key === existingConfig.planName)?.price || 119,
+                                              days: existingConfig.days || 7,
+                                            });
+                                          } else {
+                                            setPlanConfig({
+                                              planName: 'PRIME',
+                                              planAmount: 119,
+                                              days: 7,
+                                            });
+                                          }
+                                          setShowPlanConfigModal(true);
+                                        }
                                       }}
                                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
                                       required
@@ -1349,10 +1402,34 @@ export default function Workflows() {
                                             value={step.templateName || step.templateId || ''}
                                             onChange={(e) => {
                                               const template = watiTemplates.find(t => t.name === e.target.value);
+                                              const templateName = e.target.value;
+                                              
                                               updateStep(workflow.workflowId, index, {
                                                 templateId: template?.id || e.target.value,
-                                                templateName: e.target.value
+                                                templateName: templateName
                                               });
+
+                                              // If finalkk template is selected, show plan configuration modal
+                                              if (templateName === 'finalkk') {
+                                                setPlanConfigStepIndex(index);
+                                                setPlanConfigWorkflowId(workflow.workflowId);
+                                                // Pre-fill with existing config or defaults
+                                                const existingConfig = step.templateConfig;
+                                                if (existingConfig) {
+                                                  setPlanConfig({
+                                                    planName: existingConfig.planName || 'PRIME',
+                                                    planAmount: existingConfig.planAmount || PLAN_OPTIONS.find(p => p.key === existingConfig.planName)?.price || 119,
+                                                    days: existingConfig.days || 7,
+                                                  });
+                                                } else {
+                                                  setPlanConfig({
+                                                    planName: 'PRIME',
+                                                    planAmount: 119,
+                                                    days: 7,
+                                                  });
+                                                }
+                                                setShowPlanConfigModal(true);
+                                              }
                                             }}
                                             className="w-full px-2 py-1.5 border border-slate-300 rounded text-sm"
                                             required
@@ -2147,6 +2224,159 @@ export default function Workflows() {
           </>
         )}
       </div>
+
+      {/* Plan Configuration Modal for finalkk template */}
+      {showPlanConfigModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4" onClick={() => setShowPlanConfigModal(false)}>
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Configure Plan Details</h3>
+                <p className="text-sm text-slate-500">Set plan information for finalkk template</p>
+              </div>
+              <button
+                onClick={() => setShowPlanConfigModal(false)}
+                className="p-2 hover:bg-slate-200 rounded-lg transition text-slate-500"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Plan Selection */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  <DollarSign size={16} className="inline mr-2" />
+                  Plan <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={planConfig.planName}
+                  onChange={(e) => {
+                    const selectedPlan = PLAN_OPTIONS.find(p => p.key === e.target.value);
+                    if (selectedPlan) {
+                      setPlanConfig({
+                        ...planConfig,
+                        planName: selectedPlan.key,
+                        planAmount: selectedPlan.price,
+                      });
+                    }
+                  }}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700"
+                >
+                  {PLAN_OPTIONS.map((plan) => (
+                    <option key={plan.key} value={plan.key}>
+                      {plan.label} - {plan.displayPrice}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Plan Amount (Customizable) */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  Plan Amount <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={planConfig.planAmount}
+                  onChange={(e) => {
+                    const amount = parseFloat(e.target.value) || 0;
+                    setPlanConfig({
+                      ...planConfig,
+                      planAmount: amount,
+                    });
+                  }}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700"
+                  placeholder="Enter amount"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Default amount from plan: {PLAN_OPTIONS.find(p => p.key === planConfig.planName)?.displayPrice || '$0'}
+                </p>
+              </div>
+
+              {/* Days */}
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                  <CalendarIcon size={16} className="inline mr-2" />
+                  Days from Execution <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={planConfig.days}
+                  onChange={(e) => {
+                    const days = parseInt(e.target.value) || 0;
+                    setPlanConfig({
+                      ...planConfig,
+                      days: days,
+                    });
+                  }}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700"
+                  placeholder="7"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Default: 7 days. This will be used to calculate the date for {'{{3}}'} variable.
+                </p>
+              </div>
+
+              {/* Info Box */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                <p className="font-semibold mb-1">Template Variables:</p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li><strong>{'{{1}}'}</strong> = Client Name</li>
+                  <li><strong>{'{{2}}'}</strong> = Plan Name ({planConfig.planName})</li>
+                  <li><strong>{'{{3}}'}</strong> = Date ({planConfig.days} days from execution)</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+              <button
+                onClick={() => setShowPlanConfigModal(false)}
+                className="px-4 py-2 text-slate-600 font-semibold hover:bg-slate-200 rounded-lg transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (planConfigStepIndex !== null) {
+                    if (planConfigWorkflowId) {
+                      // Update existing workflow step
+                      updateStep(planConfigWorkflowId, planConfigStepIndex, {
+                        templateConfig: {
+                          planName: planConfig.planName,
+                          planAmount: planConfig.planAmount,
+                          days: planConfig.days,
+                        },
+                      });
+                    } else {
+                      // Update new workflow step
+                      updateStep(null, planConfigStepIndex, {
+                        templateConfig: {
+                          planName: planConfig.planName,
+                          planAmount: planConfig.planAmount,
+                          days: planConfig.days,
+                        },
+                      });
+                    }
+                  }
+                  setShowPlanConfigModal(false);
+                  showToast('Plan configuration saved', 'success');
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition font-semibold"
+              >
+                <Save size={18} />
+                Save Configuration
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

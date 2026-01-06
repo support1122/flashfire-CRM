@@ -39,6 +39,7 @@ import {
 import NotesModal from './NotesModal';
 import InsertDataModal, { type InsertDataFormData } from './InsertDataModal';
 import FollowUpModal, { type FollowUpData } from './FollowUpModal';
+import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -232,6 +233,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const [planPickerFor, setPlanPickerFor] = useState<string | null>(null);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [selectedBookingForFollowUp, setSelectedBookingForFollowUp] = useState<Booking | null>(null);
+  const [isPlanDetailsModalOpen, setIsPlanDetailsModalOpen] = useState(false);
+  const [selectedBookingForPlanDetails, setSelectedBookingForPlanDetails] = useState<{ bookingId: string; status: BookingStatus; booking: Booking } | null>(null);
+  const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{ bookingId: string; status: BookingStatus; plan?: PlanOption } | null>(null);
 
   // Indexes for fast lookups
   const bookingsById = useMemo(() => {
@@ -720,7 +724,53 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const handleStatusUpdate = async (bookingId: string, status: BookingStatus, plan?: PlanOption) => {
     try {
       setUpdatingBookingId(bookingId);
-      const planPayload = plan
+      
+      // Check if workflows need plan details for this status
+      const checkResponse = await fetch(`${API_BASE_URL}/api/workflows/check-plan-details?action=${status}`);
+      const checkData = await checkResponse.json();
+      
+      if (checkData.success && checkData.needsPlanDetails) {
+        // Store pending status update and show plan details modal
+        const booking = bookings.find(b => b.bookingId === bookingId);
+        if (booking) {
+          setPendingStatusUpdate({ bookingId, status, plan });
+          setSelectedBookingForPlanDetails({
+            bookingId,
+            status,
+            booking,
+          });
+          setIsPlanDetailsModalOpen(true);
+          setUpdatingBookingId(null);
+          setPlanPickerFor(null);
+          setOpenStatusDropdown(null);
+          return;
+        }
+      }
+      
+      // If no plan details needed, proceed with status update
+      await performStatusUpdate(bookingId, status, plan);
+    } catch (err) {
+      console.error(err);
+      showToast(err instanceof Error ? err.message : 'Failed to update booking status', 'error');
+      setUpdatingBookingId(null);
+      setPlanPickerFor(null);
+      setOpenStatusDropdown(null);
+    }
+  };
+
+  const performStatusUpdate = async (bookingId: string, status: BookingStatus, plan?: PlanOption, planDetails?: PlanDetailsData) => {
+    try {
+      setUpdatingBookingId(bookingId);
+      
+      // Use planDetails if provided, otherwise use plan
+      const planPayload = planDetails
+        ? {
+            name: planDetails.planName as PlanName,
+            price: planDetails.planAmount,
+            currency: 'USD',
+            displayPrice: `$${planDetails.planAmount}`,
+          }
+        : plan
         ? {
             name: plan.key,
             price: plan.price,
@@ -728,15 +778,28 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
             displayPrice: plan.displayPrice,
           }
         : undefined;
+      
+      const requestBody: any = {
+        status,
+      };
+      
+      if (planPayload) {
+        requestBody.plan = planPayload;
+      }
+      
+      // If planDetails provided, also send days for finalkk template
+      if (planDetails) {
+        requestBody.planDetails = {
+          days: planDetails.days,
+        };
+      }
+      
       const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${bookingId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          status,
-          ...(planPayload ? { plan: planPayload } : {}),
-        }),
+        body: JSON.stringify(requestBody),
       });
       const data = await response.json();
       if (!data.success) {
@@ -780,6 +843,20 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       setUpdatingBookingId(null);
       setPlanPickerFor(null);
     }
+  };
+
+  const handlePlanDetailsSave = async (planDetails: PlanDetailsData) => {
+    if (!pendingStatusUpdate) return;
+    
+    await performStatusUpdate(
+      pendingStatusUpdate.bookingId,
+      pendingStatusUpdate.status,
+      pendingStatusUpdate.plan,
+      planDetails
+    );
+    
+    setPendingStatusUpdate(null);
+    setSelectedBookingForPlanDetails(null);
   };
 
   const handleScheduleFollowUp = async (followUpData: FollowUpData) => {
@@ -2481,6 +2558,20 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           clientPhone={selectedBookingForFollowUp.clientPhone}
         />
       )}
+      
+      {/* Plan Details Modal */}
+      <PlanDetailsModal
+        isOpen={isPlanDetailsModalOpen}
+        onClose={() => {
+          setIsPlanDetailsModalOpen(false);
+          setSelectedBookingForPlanDetails(null);
+          setPendingStatusUpdate(null);
+        }}
+        onSave={handlePlanDetailsSave}
+        clientName={selectedBookingForPlanDetails?.booking.clientName || ''}
+        currentPlan={selectedBookingForPlanDetails?.booking.paymentPlan}
+        defaultDays={7}
+      />
 
       {/* Delete Confirmation Modal */}
       {isDeleteModalOpen && selectedUserForDelete && (
