@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, TrendingUp, Users, CheckCircle2, DollarSign, BarChart3, ArrowLeft } from 'lucide-react';
+import { Loader2, TrendingUp, Users, CheckCircle2, BarChart3, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
@@ -31,7 +31,7 @@ interface AnalysisData {
 
 export default function BdaAnalysisPage() {
   const navigate = useNavigate();
-  const [adminToken, setAdminToken] = useState<string | null>(() => sessionStorage.getItem(ADMIN_TOKEN_KEY));
+  const [adminToken] = useState<string | null>(() => sessionStorage.getItem(ADMIN_TOKEN_KEY));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AnalysisData | null>(null);
