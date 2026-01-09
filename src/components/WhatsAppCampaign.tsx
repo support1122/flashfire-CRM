@@ -101,6 +101,12 @@ export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAp
       { label: 'Meeting Link ({{4}})', placeholder: 'https://meet.example.com/...' },
       { label: 'Reschedule Link ({{5}})', placeholder: 'https://calendly.com/...' },
     ],
+    cancelled1: [
+      { label: 'Client Name ({{1}})', placeholder: 'e.g., Alex' },
+      { label: 'Date ({{2}})', placeholder: 'e.g., Jan 05' },
+      { label: 'Time with Timezone ({{3}})', placeholder: 'e.g., 4pm – 4:15pm ET' },
+      { label: 'Reschedule Link ({{4}})', placeholder: 'https://calendly.com/...' },
+    ],
   };
 
   const getParamConfig = (name: string) => {
@@ -692,6 +698,19 @@ export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAp
                     <p className="mt-2">👉 Join the call here: {'{{4}}'}</p>
                     <p className="mt-1">Need to reschedule? You can select another time here: {'{{5}}'}</p>
                     <p className="mt-2">Looking forward to speaking with you!</p>
+                  </div>
+                </div>
+              )}
+
+              {templateName.toLowerCase() === 'cancelled1' && (
+                <div className="bg-white border border-emerald-200 rounded-xl p-4 shadow-sm">
+                  <p className="text-sm font-semibold text-emerald-800 mb-2">Template Preview</p>
+                  <div className="text-sm text-emerald-900 leading-relaxed">
+                    <p>Hi {'{{1}}'},</p>
+                    <p className="mt-2">The Flashfire consultation scheduled for {'{{2}}'} at {'{{3}}'} could not take place.</p>
+                    <p className="mt-2">You can use the link below to choose a new time:</p>
+                    <p className="mt-1">{'{{4}}'}</p>
+                    <p className="mt-2">If you need any assistance, feel free to reply to this message.</p>
                   </div>
                 </div>
               )}

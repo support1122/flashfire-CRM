@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, KeyRound, Plus, Shield, Trash2, UserRound } from 'lucide-react';
+import { CheckCircle2, KeyRound, Plus, Shield, Trash2, UserRound, BarChart3 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 const ADMIN_TOKEN_KEY = 'flashfire_crm_admin_token';
@@ -11,7 +12,8 @@ type CrmPermission =
   | 'analytics'
   | 'all_data'
   | 'workflows'
-  | 'leads';
+  | 'leads'
+  | 'claim_leads';
 
 const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: string }> = [
   { key: 'campaign_manager', label: 'Campaign Manager', description: 'UTM campaigns + bookings overview' },
@@ -21,6 +23,7 @@ const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: strin
   { key: 'all_data', label: 'All Data', description: 'Unified data view + notes/actions' },
   { key: 'workflows', label: 'Workflows', description: 'Workflow builder + logs' },
   { key: 'leads', label: 'Leads', description: 'Paid clients management + revenue tracking' },
+  { key: 'claim_leads', label: 'Claim Leads', description: 'BDA lead claiming and management' },
 ];
 
 type CrmUserRow = {
@@ -256,14 +259,23 @@ export default function AdminDashboardPage() {
               <p className="text-sm text-slate-600">Users, permissions, access control</p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={logoutAdmin}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors"
-          >
-            <CheckCircle2 size={16} />
-            Logout
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              to="/admin/analysis"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors"
+            >
+              <BarChart3 size={16} />
+              BDA Analysis
+            </Link>
+            <button
+              type="button"
+              onClick={logoutAdmin}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 transition-colors"
+            >
+              <CheckCircle2 size={16} />
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 

@@ -5,7 +5,8 @@ export type CrmPermission =
   | 'analytics'
   | 'all_data'
   | 'workflows'
-  | 'leads';
+  | 'leads'
+  | 'claim_leads';
 
 export interface CrmUser {
   email: string;

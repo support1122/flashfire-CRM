@@ -3,6 +3,7 @@ import { useCrmAuth } from './auth/CrmAuthContext';
 import LoginPage from './pages/LoginPage';
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import CrmDashboardPage from './pages/CrmDashboardPage';
+import BdaAnalysisPage from './pages/admin/BdaAnalysisPage';
 
 function RequireUser({ children }: { children: React.ReactNode }) {
   const { status } = useCrmAuth();
@@ -22,11 +23,29 @@ function RequireUser({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const adminToken = sessionStorage.getItem('flashfire_crm_admin_token');
+  
+  if (!adminToken) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  
+  return <>{children}</>;
+}
+
 export default function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
+      <Route
+        path="/admin/analysis"
+        element={
+          <RequireAdmin>
+            <BdaAnalysisPage />
+          </RequireAdmin>
+        }
+      />
       <Route
         path="/"
         element={

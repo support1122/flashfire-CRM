@@ -88,6 +88,11 @@ interface Booking {
   meetingNotes?: string;
   anythingToKnow?: string;
   totalBookings?: number;
+  claimedBy?: {
+    email: string;
+    name: string;
+    claimedAt: string;
+  };
 }
 
 interface LeadsViewProps {
@@ -243,6 +248,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         paymentPlan: booking.paymentPlan,
         bookingId: booking.bookingId,
         totalBookings: booking.totalBookings || 1,
+        claimedBy: booking.claimedBy,
       };
     }).filter((row) => {
       if (row.name === 'Unknown Client' && row.email.includes('calendly.placeholder')) {
@@ -908,11 +914,17 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                   const isMeetingNoteExpanded = expandedNotes.has(meetingNoteKey);
                   const TRUNCATE_LENGTH = 80;
 
+                  const isClaimed = row.claimedBy && row.claimedBy.email;
+                  
                   return (
                     <tr
                       key={row.id}
                       className={`transition rounded-xl border ${
-                        isSelected ? 'bg-orange-50 border-orange-200 shadow-sm' : 'bg-white border-slate-200 shadow'
+                        isSelected 
+                          ? 'bg-orange-50 border-orange-200 shadow-sm' 
+                          : isClaimed
+                          ? 'bg-white border-l-4 border-l-emerald-400 border-slate-200 shadow'
+                          : 'bg-white border-slate-200 shadow'
                       }`}
                     >
                       <td className="px-1.5 py-2">
@@ -933,6 +945,11 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                             Lead
                           </span>
+                          {isClaimed && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              Claimed
+                            </span>
+                          )}
                           {row.totalBookings && row.totalBookings > 1 && (
                             <span className="text-xs text-slate-500">
                               {row.totalBookings} bookings

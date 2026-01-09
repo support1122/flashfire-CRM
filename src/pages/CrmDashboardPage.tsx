@@ -12,6 +12,7 @@ import {
   UserRound,
   Workflow,
   Users,
+  UserCheck,
 } from 'lucide-react';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
@@ -24,8 +25,9 @@ import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import UnifiedDataView from '../components/UnifiedDataView';
 import Workflows from '../components/Workflows';
 import LeadsView from '../components/LeadsView';
+import ClaimLeadsView from '../components/ClaimLeadsView';
 
-type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads';
+type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'claim_leads';
 
 const TAB_CONFIG: Array<{
   tab: Tab;
@@ -40,6 +42,7 @@ const TAB_CONFIG: Array<{
   { tab: 'data', permission: 'all_data', label: 'All Data', icon: Database },
   { tab: 'workflows', permission: 'workflows', label: 'Workflows', icon: Workflow },
   { tab: 'leads', permission: 'leads', label: 'Leads', icon: Users },
+  { tab: 'claim_leads', permission: 'claim_leads', label: 'Claim Your Leads', icon: UserCheck },
 ];
 
 export default function CrmDashboardPage() {
@@ -49,7 +52,12 @@ export default function CrmDashboardPage() {
   const [whatsappPrefill, setWhatsappPrefill] = useState<WhatsAppPrefillPayload | null>(null);
 
   const allowedTabs = useMemo(() => {
-    return TAB_CONFIG.filter((t) => hasPermission(t.permission));
+    return TAB_CONFIG.filter((t) => {
+      if (t.permission === 'claim_leads') {
+        return true;
+      }
+      return hasPermission(t.permission);
+    });
   }, [hasPermission]);
 
   const [activeTab, setActiveTab] = useState<Tab>('campaigns');
@@ -57,7 +65,7 @@ export default function CrmDashboardPage() {
   const safeSetActiveTab = (tab: Tab) => {
     const cfg = TAB_CONFIG.find((t) => t.tab === tab);
     if (!cfg) return;
-    if (!hasPermission(cfg.permission)) return;
+    if (cfg.permission !== 'claim_leads' && !hasPermission(cfg.permission)) return;
     setActiveTab(tab);
   };
 
@@ -87,7 +95,14 @@ export default function CrmDashboardPage() {
   useEffect(() => {
     if (!hasAnyAccess) return;
     const isAllowed = allowedTabs.some((t) => t.tab === activeTab);
-    if (!isAllowed) setActiveTab(allowedTabs[0].tab);
+    if (!isAllowed) {
+      const claimLeadsTab = TAB_CONFIG.find((t) => t.tab === 'claim_leads');
+      if (claimLeadsTab) {
+        setActiveTab('claim_leads');
+      } else {
+        setActiveTab(allowedTabs[0].tab);
+      }
+    }
   }, [activeTab, allowedTabs, hasAnyAccess]);
 
   return (
@@ -187,7 +202,7 @@ export default function CrmDashboardPage() {
 
         <section className="flex-1 overflow-y-auto w-full">
           <div className="w-full h-full">
-            {!hasAnyAccess ? (
+            {allowedTabs.length === 0 ? (
               <div className="min-h-[70vh] flex items-center justify-center px-4">
                 <div className="max-w-xl w-full bg-white border border-slate-200 rounded-2xl shadow-xl p-8">
                   <div className="flex items-center gap-3">
@@ -227,6 +242,7 @@ export default function CrmDashboardPage() {
                     onOpenWhatsAppCampaign={handleOpenWhatsAppCampaign}
                   />
                 )}
+                {activeTab === 'claim_leads' && <ClaimLeadsView />}
               </>
             )}
           </div>

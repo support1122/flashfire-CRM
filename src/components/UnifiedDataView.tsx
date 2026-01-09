@@ -89,6 +89,11 @@ interface Booking {
   }>;
   rescheduledCount?: number;
   whatsappReminderSent?: boolean;
+  claimedBy?: {
+    email: string;
+    name: string;
+    claimedAt: string;
+  };
 }
 
 interface UserWithoutBooking {
@@ -116,6 +121,11 @@ interface UnifiedRow {
   bookingId?: string;
   workAuthorization?: string;
   paymentPlan?: PaymentPlan;
+  claimedBy?: {
+    email: string;
+    name: string;
+    claimedAt: string;
+  };
 }
 
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
@@ -444,6 +454,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           meetingNotes: booking.meetingNotes,
           paymentPlan: booking.paymentPlan,
           bookingId: booking.bookingId,
+          claimedBy: booking.claimedBy,
         });
       });
       return rows;
@@ -466,6 +477,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           meetingNotes: booking.meetingNotes,
         paymentPlan: booking.paymentPlan,
           bookingId: booking.bookingId,
+          claimedBy: booking.claimedBy,
         });
       });
     }
@@ -1571,7 +1583,11 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                     <tr
                       key={row.id}
                       className={`transition rounded-xl border hover:shadow-md ${
-                        isSelected ? 'bg-orange-50 border-orange-200 shadow-sm' : 'bg-white border-slate-200 shadow'
+                        isSelected 
+                          ? 'bg-orange-50 border-orange-200 shadow-sm' 
+                          : row.claimedBy && row.claimedBy.email
+                          ? 'bg-white border-l-4 border-l-emerald-400 border-slate-200 shadow'
+                          : 'bg-white border-slate-200 shadow'
                       }`}
                     >
                       <td className="px-1.5 py-2">
@@ -1588,14 +1604,21 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                         </button>
                       </td>
                       <td className="px-3 py-2">
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${isBooking
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-purple-100 text-purple-800'
-                            }`}
-                        >
-                          {isBooking ? 'Booking' : 'User'}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${isBooking
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-purple-100 text-purple-800'
+                              }`}
+                          >
+                            {isBooking ? 'Booking' : 'User'}
+                          </span>
+                          {row.claimedBy && row.claimedBy.email && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              Claimed
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <div className="font-semibold text-slate-900 truncate text-sm" title={row.name}>{row.name}</div>

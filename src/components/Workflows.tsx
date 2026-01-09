@@ -135,18 +135,48 @@ const TEMPLATE_VARIABLES: Record<string, { variables: string[]; exampleContent?:
     variables: ['{{1}}', '{{2}}', '{{3}}'],
     exampleContent: 'Hi {{1}},\n\nThis is a payment reminder for your Flashfire {{2}} plan dated {{3}}.\n\nOur records show that the payment is still pending in the system.\n\nIf the payment has already been made, please disregard this message.'
   },
-  // Add more templates as needed
+  'cancelled1': {
+    variables: ['{{1}}', '{{2}}', '{{3}}', '{{4}}'],
+    exampleContent: 'Hi {{1}},\n\nThe Flashfire consultation scheduled for {{2}} at {{3}} could not take place.\n\nYou can use the link below to choose a new time:\n{{4}}.\n\nIf you need any assistance, feel free to reply to this message.'
+  },
+  'flashfire_appointment_reminder': {
+    variables: ['{{1}}', '{{2}}', '{{3}}', '{{4}}', '{{5}}'],
+    exampleContent: 'Hi {{1}}, your Flashfire consultation is confirmed for {{2}} at {{3}}.\n\n👉 Join the call here: {{4}}\n\nNeed to reschedule? You can select another time here: {{5}}\n\nLooking forward to speaking with you!'
+  },
 };
 
 // Common variable mappings
 const VARIABLE_DESCRIPTIONS: Record<string, string> = {
   '{{1}}': 'Client Name',
-  '{{2}}': 'Plan Cost / Payment Amount',
-  '{{3}}': 'Plan Name',
-  '{{4}}': 'Meeting Date',
-  '{{5}}': 'Meeting Time',
+  '{{2}}': 'Plan Cost / Payment Amount / Date',
+  '{{3}}': 'Plan Name / Time with Timezone',
+  '{{4}}': 'Meeting Date / Reschedule Link',
+  '{{5}}': 'Meeting Time / Reschedule Link',
   '{{6}}': 'Reschedule Link',
   '{{7}}': 'Meeting Link',
+};
+
+const getVariableDescription = (templateName: string | undefined, variable: string): string => {
+  if (templateName === 'cancelled1') {
+    switch (variable) {
+      case '{{1}}': return 'Client Name';
+      case '{{2}}': return 'Date (e.g., Jan 05)';
+      case '{{3}}': return 'Time with Timezone (e.g., 4pm – 4:15pm ET)';
+      case '{{4}}': return 'Reschedule Link';
+      default: return VARIABLE_DESCRIPTIONS[variable] || 'Variable';
+    }
+  }
+  if (templateName === 'flashfire_appointment_reminder') {
+    switch (variable) {
+      case '{{1}}': return 'Client Name';
+      case '{{2}}': return 'Date';
+      case '{{3}}': return 'Time with Timezone';
+      case '{{4}}': return 'Meeting Link';
+      case '{{5}}': return 'Reschedule Link';
+      default: return VARIABLE_DESCRIPTIONS[variable] || 'Variable';
+    }
+  }
+  return VARIABLE_DESCRIPTIONS[variable] || 'Variable';
 };
 
 // Helper function to get variables for a template
@@ -230,18 +260,21 @@ const TemplatePreview = ({ templateName, variables }: { templateName?: string; v
       
       <div className="flex flex-wrap gap-1.5">
         <span className="text-xs font-semibold text-blue-900">Available Variables:</span>
-        {variables.map((variable, idx) => (
-          <span
-            key={idx}
-            className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 text-blue-700 font-semibold text-xs"
-            title={VARIABLE_DESCRIPTIONS[variable] || 'Variable'}
-          >
-            <span>{variable}</span>
-            {VARIABLE_DESCRIPTIONS[variable] && (
-              <span className="text-blue-600 text-[10px]">({VARIABLE_DESCRIPTIONS[variable]})</span>
-            )}
-          </span>
-        ))}
+        {variables.map((variable, idx) => {
+          const description = getVariableDescription(templateName, variable);
+          return (
+            <span
+              key={idx}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-100 text-blue-700 font-semibold text-xs"
+              title={description}
+            >
+              <span>{variable}</span>
+              {description && (
+                <span className="text-blue-600 text-[10px]">({description})</span>
+              )}
+            </span>
+          );
+        })}
       </div>
       
       <div className="mt-2 text-xs text-blue-700">
