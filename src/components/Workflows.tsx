@@ -327,6 +327,7 @@ export default function Workflows() {
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [triggeringBulk, setTriggeringBulk] = useState(false);
   const [bulkResult, setBulkResult] = useState<any>(null);
+  const [includeCountries, setIncludeCountries] = useState<string[]>([]);
 
   // Plan configuration modal state for finalkk template
   const [showPlanConfigModal, setShowPlanConfigModal] = useState(false);
@@ -726,12 +727,15 @@ export default function Workflows() {
     return colors[action] || 'bg-slate-100 text-slate-700';
   };
 
-  const fetchBookingsByStatus = async () => {
+  const fetchBookingsByStatus = async (includeCountriesOverride?: string[]) => {
     if (!selectedStatus) return;
     
     try {
       setLoadingBookings(true);
-      const response = await fetch(`${API_BASE_URL}/api/workflows/bulk/bookings-by-status?status=${selectedStatus}`);
+      const countriesToInclude = includeCountriesOverride !== undefined ? includeCountriesOverride : includeCountries;
+      const includeCountriesParam = countriesToInclude && countriesToInclude.length > 0 ? JSON.stringify(countriesToInclude) : '';
+      const url = `${API_BASE_URL}/api/workflows/bulk/bookings-by-status?status=${selectedStatus}${includeCountriesParam ? `&includeCountries=${encodeURIComponent(includeCountriesParam)}` : ''}`;
+      const response = await fetch(url);
       const data = await response.json();
 
       if (data.success) {
@@ -753,7 +757,12 @@ export default function Workflows() {
       return;
     }
 
-    if (!confirm(`Are you sure you want to trigger workflows for all bookings with status "${selectedStatus}"? This will send workflows to ${bookingsData?.summary?.withoutScheduledWorkflows || 0} bookings that don't already have workflows scheduled.`)) {
+    const includedList = [];
+    if (includeCountries.includes('IN')) includedList.push('India');
+    if (includeCountries.includes('US')) includedList.push('USA/Canada');
+    const includeText = includedList.length > 0 ? ` (only ${includedList.join(' and ')})` : ' (all countries)';
+    
+    if (!confirm(`Are you sure you want to trigger workflows for all bookings with status "${selectedStatus}"${includeText}? This will send workflows to ${bookingsData?.summary?.withoutScheduledWorkflows || 0} bookings that don't already have workflows scheduled.`)) {
       return;
     }
 
@@ -768,7 +777,8 @@ export default function Workflows() {
         },
         body: JSON.stringify({
           status: selectedStatus,
-          skipExisting: true
+          skipExisting: true,
+          includeCountries: includeCountries || []
         }),
       });
 
@@ -777,9 +787,7 @@ export default function Workflows() {
       if (data.success) {
         setBulkResult(data.data);
         showToast(`Successfully processed ${data.data.processed} bookings`, 'success');
-        // Refresh bookings data
         await fetchBookingsByStatus();
-        // Refresh logs
         if (activeTab === 'logs') {
           fetchLogs();
           fetchLogStats();
@@ -1073,6 +1081,11 @@ export default function Workflows() {
                                       {!step.templateName && !step.templateId ? (
                                         <option value="">Select WhatsApp Template</option>
                                       ) : null}
+                                      {step.templateName && !watiTemplates.find(t => t.name === step.templateName) && (
+                                        <option value={step.templateName} key={`stored-new-${step.templateName}`}>
+                                          {step.templateName}
+                                        </option>
+                                      )}
                                       {watiTemplates.map((template) => (
                                         <option key={template.id} value={template.name}>
                                           {template.name}
@@ -1175,6 +1188,27 @@ export default function Workflows() {
                               )}
                             </div>
                           </div>
+                          {step.channel === 'whatsapp' && (
+                            <div className="mt-2 space-y-2">
+                              {step.templateName && (
+                                <div className="text-xs text-slate-600 font-semibold px-2 py-1 bg-slate-50 rounded border border-slate-200">
+                                  Template: {step.templateName}
+                                </div>
+                              )}
+                              {step.templateName && step.templateId && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    showToast('WhatsApp template configuration saved!', 'success');
+                                  }}
+                                  className="w-full px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-semibold hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
+                                >
+                                  <Save size={14} />
+                                  Save Template
+                                </button>
+                              )}
+                            </div>
+                          )}
                           {step.channel === 'email' && (
                             <div className="mt-2 space-y-2">
                               {step.templateName && (
@@ -1470,6 +1504,11 @@ export default function Workflows() {
                                             {!step.templateName && !step.templateId ? (
                                               <option value="">Select Template</option>
                                             ) : null}
+                                            {step.templateName && !watiTemplates.find(t => t.name === step.templateName) && (
+                                              <option value={step.templateName} key={`stored-${step.templateName}`}>
+                                                {step.templateName}
+                                              </option>
+                                            )}
                                             {watiTemplates.map((template) => (
                                               <option key={template.id} value={template.name}>
                                                 {template.name}
@@ -1573,6 +1612,28 @@ export default function Workflows() {
                                     />
                                   )}
                                 </div>
+                                {step.channel === 'whatsapp' && (
+                                  <div className="mt-2 space-y-2">
+                                    {step.templateName && (
+                                      <div className="text-xs text-slate-600 font-semibold px-2 py-1 bg-slate-50 rounded border border-slate-200">
+                                        Template: {step.templateName}
+                                      </div>
+                                    )}
+                                    {step.templateName && step.templateId && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          showToast('WhatsApp template configuration saved!', 'success');
+                                          saveWorkflow(workflow);
+                                        }}
+                                        className="w-full px-3 py-2 bg-blue-500 text-white rounded text-sm font-semibold hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-2"
+                                      >
+                                        <Save size={14} />
+                                        Save Template
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
                                 {step.channel === 'email' && (
                                   <div className="mt-2 space-y-2">
                                     {step.templateName && (
@@ -2112,24 +2173,72 @@ export default function Workflows() {
                     </div>
 
                     {bookingsData.summary.withoutScheduledWorkflows > 0 && (
-                      <div className="flex items-center gap-2 pt-4 border-t border-slate-200">
-                        <button
-                          onClick={handleTriggerBulkWorkflows}
-                          disabled={triggeringBulk || bookingsData.summary.withoutScheduledWorkflows === 0}
-                          className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {triggeringBulk ? (
-                            <>
-                              <Loader2 className="animate-spin" size={18} />
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              <Play size={18} />
-                              Trigger Workflows for {bookingsData.summary.withoutScheduledWorkflows} Bookings
-                            </>
-                          )}
-                        </button>
+                      <div className="pt-4 border-t border-slate-200 space-y-4">
+                        <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                          <div className="text-sm font-semibold text-slate-900 mb-3">
+                            Include Countries Only
+                          </div>
+                          <div className="text-xs text-slate-600 mb-3">
+                            Select countries to include in workflow triggers. Only bookings with phone numbers from selected countries will be included. Leave all unchecked to include all countries.
+                          </div>
+                          <div className="space-y-2">
+                            <label className="flex items-center gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={includeCountries.includes('US')}
+                                onChange={(e) => {
+                                  const newInclude = e.target.checked
+                                    ? [...includeCountries, 'US']
+                                    : includeCountries.filter(c => c !== 'US');
+                                  setIncludeCountries(newInclude);
+                                  fetchBookingsByStatus(newInclude);
+                                }}
+                                className="w-4 h-4 text-orange-500 border-slate-300 rounded focus:ring-orange-500 focus:ring-2"
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-slate-900">USA & Canada</div>
+                                <div className="text-xs text-slate-600">Include only numbers starting with +1</div>
+                              </div>
+                            </label>
+                            <label className="flex items-center gap-3 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={includeCountries.includes('IN')}
+                                onChange={(e) => {
+                                  const newInclude = e.target.checked
+                                    ? [...includeCountries, 'IN']
+                                    : includeCountries.filter(c => c !== 'IN');
+                                  setIncludeCountries(newInclude);
+                                  fetchBookingsByStatus(newInclude);
+                                }}
+                                className="w-4 h-4 text-orange-500 border-slate-300 rounded focus:ring-orange-500 focus:ring-2"
+                              />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-slate-900">India</div>
+                                <div className="text-xs text-slate-600">Include only numbers starting with +91</div>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleTriggerBulkWorkflows}
+                            disabled={triggeringBulk || bookingsData.summary.withoutScheduledWorkflows === 0}
+                            className="inline-flex items-center gap-2 px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {triggeringBulk ? (
+                              <>
+                                <Loader2 className="animate-spin" size={18} />
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                <Play size={18} />
+                                Trigger Workflows for {bookingsData.summary.withoutScheduledWorkflows} Bookings
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     )}
 
