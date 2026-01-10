@@ -63,9 +63,9 @@ const statusLabels: Record<BookingStatus, string> = {
 };
 
 const statusColors: Record<BookingStatus, string> = {
-  scheduled: 'text-blue-600 bg-blue-100',
+  scheduled: 'text-blue-600 w-fit bg-blue-100',
   completed: 'text-green-600 bg-green-100',
-  canceled: 'text-red-600 bg-red-100',
+  canceled: 'text-red-600 w-fit bg-red-100',
   rescheduled: 'text-amber-600 bg-amber-100',
   'no-show': 'text-rose-600 bg-rose-100',
   ignored: 'text-gray-600 bg-gray-100',
@@ -143,6 +143,30 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
     }, 4000);
   };
 
+  const safeJsonParse = async (response: Response) => {
+    if (!response.ok) {
+      const text = await response.text();
+      try {
+        const errorData = JSON.parse(text);
+        throw new Error(errorData.message || `Server error: ${response.status}`);
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message.includes('Server error')) {
+          throw parseErr;
+        }
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      }
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      console.error('Non-JSON response received:', text.substring(0, 200));
+      throw new Error('Server returned non-JSON response. Please check the API endpoint.');
+    }
+
+    return await response.json();
+  };
+
   const fetchLeads = useCallback(async (page: number = 1) => {
     try {
       setRefreshing(true);
@@ -179,7 +203,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       }
 
       const response = await fetch(`${API_BASE_URL}/api/leads/paginated?${params}`);
-      const data = await response.json();
+      const data = await safeJsonParse(response);
 
       if (data.success) {
         setBookings(data.data);
@@ -193,7 +217,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         throw new Error(data.message || 'Failed to fetch leads');
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error fetching leads:', err);
       setError(err instanceof Error ? err.message : 'Failed to load leads');
     } finally {
       setRefreshing(false);
@@ -228,10 +252,10 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
     return bookings.map((booking) => {
       // Use phone number for ID if available, otherwise use email
       // This ensures proper grouping when phone numbers are normalized
-      const idKey = booking.clientPhone && booking.clientPhone !== 'Not Specified' 
+      const idKey = booking.clientPhone && booking.clientPhone !== 'Not Specified'
         ? booking.clientPhone.replace(/\D/g, '').slice(-10) // Last 10 digits for matching
         : booking.clientEmail;
-      
+
       return {
         id: `lead-${idKey}`,
         type: 'lead' as const,
@@ -304,7 +328,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
   // Format date range for display
   const dateRangeDisplay = useMemo(() => {
     if (!fromDate && !toDate) return null;
-    
+
     const formatDate = (dateStr: string) => {
       if (!dateStr) return '';
       try {
@@ -401,29 +425,34 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
   const handleStatusUpdate = async (bookingId: string, status: BookingStatus, plan?: PlanOption) => {
     try {
       setUpdatingBookingId(bookingId);
-      
-      // Check if workflows need plan details for this status
-      const checkResponse = await fetch(`${API_BASE_URL}/api/workflows/check-plan-details?action=${status}`);
-      const checkData = await checkResponse.json();
-      
-      if (checkData.success && checkData.needsPlanDetails) {
-        // Store pending status update and show plan details modal
-        const booking = bookings.find(b => b.bookingId === bookingId);
-        if (booking) {
-          setPendingStatusUpdate({ bookingId, status, plan });
-          setSelectedBookingForPlanDetails({
-            bookingId,
-            status,
-            booking,
-          });
-          setIsPlanDetailsModalOpen(true);
-          setUpdatingBookingId(null);
-          setPlanPickerFor(null);
-          setOpenStatusDropdown(null);
-          return;
+
+      // Check if workflows need plan details for this status (fail gracefully if endpoint doesn't exist)
+      try {
+        const checkResponse = await fetch(`${API_BASE_URL}/api/workflows/check-plan-details?action=${status}`);
+        const checkData = await safeJsonParse(checkResponse);
+
+        if (checkData.success && checkData.needsPlanDetails) {
+          // Store pending status update and show plan details modal
+          const booking = bookings.find(b => b.bookingId === bookingId);
+          if (booking) {
+            setPendingStatusUpdate({ bookingId, status, plan });
+            setSelectedBookingForPlanDetails({
+              bookingId,
+              status,
+              booking,
+            });
+            setIsPlanDetailsModalOpen(true);
+            setUpdatingBookingId(null);
+            setPlanPickerFor(null);
+            setOpenStatusDropdown(null);
+            return;
+          }
         }
+      } catch (checkErr) {
+        // If workflow check fails, log but continue with status update
+        console.warn('Workflow check failed, proceeding with status update:', checkErr);
       }
-      
+
       // If no plan details needed, proceed with status update
       await performStatusUpdate(bookingId, status, plan);
     } catch (err) {
@@ -438,39 +467,39 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
   const performStatusUpdate = async (bookingId: string, status: BookingStatus, plan?: PlanOption, planDetails?: PlanDetailsData) => {
     try {
       setUpdatingBookingId(bookingId);
-      
+
       // Use planDetails if provided, otherwise use plan
       const planPayload = planDetails
         ? {
-            name: planDetails.planName as PlanName,
-            price: planDetails.planAmount,
-            currency: 'USD',
-            displayPrice: `$${planDetails.planAmount}`,
-          }
+          name: planDetails.planName as PlanName,
+          price: planDetails.planAmount,
+          currency: 'USD',
+          displayPrice: `$${planDetails.planAmount}`,
+        }
         : plan
-        ? {
+          ? {
             name: plan.key,
             price: plan.price,
             currency: plan.currency || 'USD',
             displayPrice: plan.displayPrice,
           }
-        : undefined;
-      
+          : undefined;
+
       const requestBody: any = {
         status,
       };
-      
+
       if (planPayload) {
         requestBody.plan = planPayload;
       }
-      
+
       // If planDetails provided, also send days for finalkk template
       if (planDetails) {
         requestBody.planDetails = {
           days: planDetails.days,
         };
       }
-      
+
       const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${bookingId}/status`, {
         method: 'PUT',
         headers: {
@@ -478,12 +507,12 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         },
         body: JSON.stringify(requestBody),
       });
-      const data = await response.json();
+      const data = await safeJsonParse(response);
       if (!data.success) {
         throw new Error(data.message || 'Failed to update booking status');
       }
       const updatedBooking = data.data as Booking | undefined;
-      
+
       // Update local bookings state and prepare updated booking for follow-up modal
       let updatedBookingForFollowUp: Booking | null = null;
       setBookings((prev) => {
@@ -502,7 +531,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
           return booking;
         });
       });
-      
+
       // Show toast notification if workflow was triggered
       if (data.workflowTriggered) {
         showToast(`Workflow triggered for ${status} action`, 'success');
@@ -512,7 +541,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         setSelectedBookingForFollowUp(updatedBookingForFollowUp);
         setIsFollowUpModalOpen(true);
       }
-      
+
       await fetchLeads(bookingsPage);
     } catch (err) {
       console.error(err);
@@ -526,14 +555,14 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
 
   const handlePlanDetailsSave = async (planDetails: PlanDetailsData) => {
     if (!pendingStatusUpdate) return;
-    
+
     await performStatusUpdate(
       pendingStatusUpdate.bookingId,
       pendingStatusUpdate.status,
       pendingStatusUpdate.plan,
       planDetails
     );
-    
+
     setPendingStatusUpdate(null);
     setSelectedBookingForPlanDetails(null);
   };
@@ -553,7 +582,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         }),
       });
 
-      const data = await response.json();
+      const data = await safeJsonParse(response);
       if (!data.success) {
         throw new Error(data.message || 'Failed to schedule follow-up');
       }
@@ -579,7 +608,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
           planName,
         }),
       });
-      const data = await response.json();
+      const data = await safeJsonParse(response);
       if (!data.success) {
         throw new Error(data.message || 'Failed to update amount');
       }
@@ -621,7 +650,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         },
         body: JSON.stringify({ notes }),
       });
-      const data = await response.json();
+      const data = await safeJsonParse(response);
       if (!data.success) {
         throw new Error(data.message || 'Failed to save notes');
       }
@@ -651,7 +680,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         method: 'DELETE',
       });
 
-      const data = await response.json();
+      const data = await safeJsonParse(response);
 
       if (data.success) {
         showToast(`Successfully deleted all records for ${selectedLeadForDelete.name}`, 'success');
@@ -678,7 +707,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-6 ">
       <div>
         <p className="text-sm uppercase tracking-wider text-slate-500 font-semibold mb-1">UNIFIED DATA</p>
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Leads</h1>
@@ -693,23 +722,23 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
           </h2>
           <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
             <div className="flex items-baseline gap-2">
-              <span className="text-slate-600 text-sm font-medium">Booked</span>
+              <span className="text-slate-600 text-[11px] font-medium">Booked</span>
               <span className="text-lg font-bold text-blue-600">{statusStats.booked}</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-slate-600 text-sm font-medium">Cancelled</span>
+              <span className="text-slate-600 text-[11px] font-medium">Cancelled</span>
               <span className="text-lg font-bold text-red-600">{statusStats.canceled}</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-slate-600 text-sm font-medium">No-Show</span>
+              <span className="text-slate-600 text-[11px] font-medium">No-Show</span>
               <span className="text-lg font-bold text-red-600">{statusStats.noShow}</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-slate-600 text-sm font-medium">Completed</span>
+              <span className="text-slate-600 text-[11px] font-medium">Completed</span>
               <span className="text-lg font-bold text-green-600">{statusStats.completed}</span>
             </div>
             <div className="flex items-baseline gap-2 ml-auto">
-              <span className="text-slate-500 text-sm font-medium">Total:</span>
+              <span className="text-slate-500 text-[11px] font-medium">Total:</span>
               <span className="text-lg font-bold text-slate-700">{statusStats.total}</span>
             </div>
           </div>
@@ -719,15 +748,15 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       {totalRevenue > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white border border-slate-200 rounded-xl p-4">
-            <div className="text-sm text-slate-500 font-semibold mb-1">Total Revenue</div>
+            <div className="text-[11px] text-slate-500 font-semibold mb-1">Total Revenue</div>
             <div className="text-2xl font-bold text-emerald-600">${totalRevenue.toLocaleString()}</div>
-            <div className="text-xs text-slate-400 mt-1">From {bookingsPagination.total} lead{bookingsPagination.total !== 1 ? 's' : ''}</div>
+            <div className="text-[11px] text-slate-400 mt-1">From {bookingsPagination.total} lead{bookingsPagination.total !== 1 ? 's' : ''}</div>
           </div>
           {planBreakdown.map((plan) => (
             <div key={plan._id} className="bg-white border border-slate-200 rounded-xl p-4">
-              <div className="text-sm text-slate-500 font-semibold mb-1">{plan._id || 'Unknown'}</div>
+              <div className="text-[11px] text-slate-500 font-semibold mb-1">{plan._id || 'Unknown'}</div>
               <div className="text-lg font-bold text-slate-900">{plan.count} lead{plan.count !== 1 ? 's' : ''}</div>
-              <div className="text-sm text-emerald-600">${plan.revenue.toLocaleString()}</div>
+              <div className="text-[11px] text-emerald-600">${plan.revenue.toLocaleString()}</div>
             </div>
           ))}
         </div>
@@ -741,14 +770,14 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
 
       {selectedRows.size > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 flex items-center justify-between">
-          <span className="text-sm font-semibold text-orange-900">
+          <span className="text-xs font-semibold text-orange-900">
             {selectedRows.size} row{selectedRows.size > 1 ? 's' : ''} selected
           </span>
           <div className="flex items-center gap-2">
             {onOpenWhatsAppCampaign && (
               <button
                 onClick={handleBulkWhatsApp}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-semibold"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-[11px] font-semibold"
               >
                 <MessageCircle size={16} />
                 Send WhatsApp ({selectedRows.size})
@@ -756,7 +785,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
             )}
             <button
               onClick={handleBulkEmail}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-semibold"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-[11px] font-semibold"
             >
               <Send size={16} />
               Send Email ({selectedRows.size})
@@ -773,13 +802,13 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
             placeholder="Search by name, email, phone, or source…"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            className="text-sm bg-transparent focus:outline-none"
+            className="text-[11px] bg-transparent focus:outline-none"
           />
         </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+          className="text-[11px] border border-slate-200 rounded-lg px-3 py-2 bg-white"
         >
           <option value="all">All statuses</option>
           {(['scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
@@ -791,7 +820,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         <select
           value={planFilter}
           onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+          className="text-[11px] border border-slate-200 rounded-lg px-3 py-2 bg-white"
         >
           <option value="all">All plans</option>
           {PLAN_OPTIONS.map((plan) => (
@@ -803,7 +832,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         <select
           value={utmFilter}
           onChange={(e) => setUtmFilter(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white min-w-[160px]"
+          className="text-[11px] border border-slate-200 rounded-lg px-3 py-2 bg-white min-w-[160px]"
         >
           <option value="all">All sources</option>
           {uniqueSources.map((source) => (
@@ -812,7 +841,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
             </option>
           ))}
         </select>
-        <div className="flex items-center gap-2 text-sm text-slate-500">
+        <div className="flex items-center gap-2 text-[11px] text-slate-500">
           <input
             type="date"
             value={fromDate}
@@ -827,7 +856,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
             className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
           />
         </div>
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-[11px]">
           <input
             type="number"
             placeholder="Min $"
@@ -858,7 +887,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
               setMaxAmount('');
               setBookingsPage(1);
             }}
-            className="text-sm text-orange-600 font-semibold"
+            className="text-[11px] text-orange-600 font-semibold"
           >
             Clear filters
           </button>
@@ -866,7 +895,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         <button
           onClick={() => fetchLeads(bookingsPage)}
           disabled={refreshing}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm font-semibold disabled:opacity-60"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-[11px] font-semibold disabled:opacity-60"
         >
           <RefreshCcw size={16} className={refreshing ? 'animate-spin' : ''} />
           Refresh
@@ -874,402 +903,406 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       </div>
 
       <div className="overflow-hidden bg-white border border-slate-200 rounded-lg">
-        <div className="max-h-[calc(100vh-350px)] overflow-y-auto">
-          <table className="w-full text-sm table-auto border-separate border-spacing-y-2 border-spacing-x-1">
-              <thead className="bg-slate-50 sticky top-0 z-10">
-                <tr className="text-left text-slate-500">
-                  <th className="px-1.5 py-2 font-semibold w-10">
-                    <button
-                      onClick={handleSelectAll}
-                      className="flex items-center justify-center"
-                      type="button"
-                    >
-                      {selectedRows.size === filteredData.length && filteredData.length > 0 ? (
-                        <CheckSquare size={14} className="text-orange-600" />
-                      ) : (
-                        <Square size={14} className="text-slate-400" />
-                      )}
-                    </button>
-                  </th>
-                  <th className="px-3 py-2 font-semibold w-16">Type</th>
-                  <th className="px-3 py-2 font-semibold w-28">Name</th>
-                  <th className="px-3 py-2 font-semibold w-36">Email</th>
-                  <th className="px-3 py-2 font-semibold w-24">Phone</th>
-                  <th className="px-3 py-2 font-semibold w-32">Latest Meeting</th>
-                  <th className="px-3 py-2 font-semibold w-24">Source</th>
-                  <th className="px-3 py-2 font-semibold w-20">Status</th>
-                  <th className="px-3 py-2 font-semibold w-24">Amount</th>
-                  <th className="px-3 py-2 font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredData.map((row) => {
-                  const scheduledDate = row.scheduledTime
-                    ? format(parseISO(row.scheduledTime), 'MMM d, yyyy • h:mm a')
-                    : 'Not scheduled';
-                  const isSelected = selectedRows.has(row.id);
-                  const calendlyNoteKey = `calendly-${row.id}`;
-                  const meetingNoteKey = `meeting-${row.id}`;
-                  const isCalendlyNoteExpanded = expandedNotes.has(calendlyNoteKey);
-                  const isMeetingNoteExpanded = expandedNotes.has(meetingNoteKey);
-                  const TRUNCATE_LENGTH = 80;
+        
+          <table className="w-full text-[10px] table-auto border-separate border-spacing-y-1 border-spacing-x-0.5">
+            <thead className="bg-slate-50 sticky top-0 z-10">
+              <tr className="text-left text-slate-500">
+                <th className="px-1 py-1.5 font-semibold w-8">
+                  <button
+                    onClick={handleSelectAll}
+                    className="flex items-center justify-center"
+                    type="button"
+                    title="Select All"
+                  >
+                    {selectedRows.size === filteredData.length && filteredData.length > 0 ? (
+                      <CheckSquare size={11} className="text-orange-600" />
+                    ) : (
+                      <Square size={11} className="text-slate-400" />
+                    )}
+                  </button>
+                </th>
+                <th className="px-1 py-1.5 font-semibold text-[10px] w-10">Type</th>
+                <th className="px-1 py-1.5 font-semibold text-[10px] w-20">Name</th>
+                <th className="px-1 py-1.5 font-semibold text-[10px] w-24">Email</th>
+                <th className="px-1 py-1.5 font-semibold text-[10px] w-20">Phone</th>
+                <th className="px-1 py-1.5 font-semibold text-[10px] w-20">Meeting</th>
+                <th className="px-1 py-1.5 font-semibold text-[10px] w-14">Source</th>
+                <th className="px-1 py-1.5 font-semibold text-[10px] w-14">Status</th>
+                <th className="px-1 py-1.5 font-semibold text-[10px] w-16">Amount</th>
+                <th className="px-1 py-1.5 font-semibold text-[10px] w-28">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredData.map((row) => {
+                const scheduledDate = row.scheduledTime
+                  ? format(parseISO(row.scheduledTime), 'MMM d, yyyy • h:mm a')
+                  : 'Not scheduled';
+                const isSelected = selectedRows.has(row.id);
+                const calendlyNoteKey = `calendly-${row.id}`;
+                const meetingNoteKey = `meeting-${row.id}`;
+                const isCalendlyNoteExpanded = expandedNotes.has(calendlyNoteKey);
+                const isMeetingNoteExpanded = expandedNotes.has(meetingNoteKey);
+                const TRUNCATE_LENGTH = 80;
 
-                  const isClaimed = row.claimedBy && row.claimedBy.email;
-                  
-                  return (
-                    <tr
-                      key={row.id}
-                      className={`transition rounded-xl border ${
-                        isSelected 
-                          ? 'bg-orange-50 border-orange-200 shadow-sm' 
-                          : isClaimed
+                const isClaimed = row.claimedBy && row.claimedBy.email;
+
+                return (
+                  <tr
+                    key={row.id}
+                    className={`transition rounded-xl border ${isSelected
+                        ? 'bg-orange-50 border-orange-200 shadow-sm'
+                        : isClaimed
                           ? 'bg-white border-l-4 border-l-emerald-400 border-slate-200 shadow'
                           : 'bg-white border-slate-200 shadow'
                       }`}
-                    >
-                      <td className="px-1.5 py-2">
-                        <button
-                          onClick={() => handleSelectRow(row.id)}
-                          className="flex items-center justify-center"
-                          type="button"
+                  >
+                    <td className="px-1 py-1.5">
+                      <button
+                        onClick={() => handleSelectRow(row.id)}
+                        className="flex items-center justify-center"
+                        type="button"
+                        title={isSelected ? "Deselect" : "Select"}
+                      >
+                        {isSelected ? (
+                          <CheckSquare size={11} className="text-orange-600" />
+                        ) : (
+                          <Square size={11} className="text-slate-400" />
+                        )}
+                      </button>
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="inline-flex w-fit items-center text-[11px] px-1 py-0.5 font-semibold bg-emerald-100 text-emerald-800 rounded">
+                          Lead
+                        </span>
+                        {isClaimed && (
+                          <span className="inline-flex items-center px-1 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Claimed
+                          </span>
+                        )}
+                        {row.totalBookings && row.totalBookings > 1 && (
+                          <span className="text-xs text-slate-500">
+                            {row.totalBookings} bookings
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <div className="font-semibold text-slate-900 truncate text-[10px]" title={row.name}>{row.name}</div>
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <div className="text-slate-700 truncate text-[9px]" title={row.email}>{row.email}</div>
+                    </td>
+                    <td className="px-1 py-1.5">
+                      {row.phone && row.phone !== 'Not Specified' ? (
+                        <a
+                          href={`tel:${row.phone}`}
+                          className="text-[9px] text-orange-600 font-semibold hover:text-orange-700 truncate block"
+                          title={row.phone}
                         >
-                          {isSelected ? (
-                            <CheckSquare size={14} className="text-orange-600" />
+                          {row.phone}
+                        </a>
+                      ) : (
+                        <span className="text-slate-400 text-[9px]">—</span>
+                      )}
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <div className="text-slate-600 text-[9px]">
+                        <div className="font-semibold truncate" title={scheduledDate}>
+                          {row.scheduledTime ? format(parseISO(row.scheduledTime), 'MMM d, h:mm a') : 'Not scheduled'}
+                        </div>
+                        {row.totalBookings && row.totalBookings > 1 && (
+                          <div className="text-slate-400 mt-0.5 text-[8px]">{row.totalBookings} b</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-1 py-1.5">
+                      {row.source ? (
+                        <span className="inline-flex items-center px-1 py-0.5 rounded-full bg-slate-100 text-[9px] font-semibold text-slate-600 truncate max-w-full" title={row.source}>
+                          {row.source}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[9px]">—</span>
+                      )}
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <div className="relative status-dropdown-container">
+                        <button
+                          onClick={() => setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId!)}
+                          disabled={updatingBookingId === row.bookingId}
+                          className={`inline-flex items-center gap-0.5 px-1 py-0.5 w-fit rounded text-[9px] font-semibold border transition disabled:opacity-60 w-full justify-center ${row.status ? statusColors[row.status] : 'text-slate-600 bg-slate-100'
+                            } border-current/20 hover:border-current/40`}
+                          title={row.status ? statusLabels[row.status] : 'No Status'}
+                        >
+                          {updatingBookingId === row.bookingId ? (
+                            <>
+                              <Loader2 className="animate-spin" size={9} />
+                              <span className="text-[8px]">Updating...</span>
+                            </>
                           ) : (
-                            <Square size={14} className="text-slate-400" />
+                            <>
+                              <span className="truncate">{row.status ? statusLabels[row.status] : 'No Status'}</span>
+                              <ChevronDown size={8} className={`transition-transform duration-200 flex-shrink-0 ${openStatusDropdown === row.bookingId ? 'rotate-180' : ''}`} />
+                            </>
                           )}
                         </button>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex flex-col gap-1">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                            Lead
-                          </span>
-                          {isClaimed && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              Claimed
-                            </span>
-                          )}
-                          {row.totalBookings && row.totalBookings > 1 && (
-                            <span className="text-xs text-slate-500">
-                              {row.totalBookings} bookings
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="font-semibold text-slate-900 truncate text-sm" title={row.name}>{row.name}</div>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="text-slate-700 truncate text-xs" title={row.email}>{row.email}</div>
-                      </td>
-                      <td className="px-3 py-2">
-                        {row.phone && row.phone !== 'Not Specified' ? (
-                          <a
-                            href={`tel:${row.phone}`}
-                            className="text-xs text-orange-600 font-semibold hover:text-orange-700 truncate block"
-                            title={row.phone}
-                          >
-                            {row.phone}
-                          </a>
-                        ) : (
-                          <span className="text-slate-400 text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="text-slate-600 text-xs">
-                          <div className="font-semibold">{scheduledDate}</div>
-                          {row.totalBookings && row.totalBookings > 1 && (
-                            <div className="text-slate-400 mt-0.5">Latest of {row.totalBookings}</div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        {row.source ? (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 truncate max-w-full" title={row.source}>
-                            {row.source}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="relative status-dropdown-container">
-                          <button
-                            onClick={() => setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId!)}
-                            disabled={updatingBookingId === row.bookingId}
-                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold border transition disabled:opacity-60 w-full justify-center ${
-                              row.status ? statusColors[row.status] : 'text-slate-600 bg-slate-100'
-                            } border-current/20 hover:border-current/40`}
-                          >
-                            {updatingBookingId === row.bookingId ? (
-                              <>
-                                <Loader2 className="animate-spin" size={11} />
-                                <span>Updating...</span>
-                              </>
-                            ) : (
-                              <>
-                                <span>{row.status ? statusLabels[row.status] : 'No Status'}</span>
-                                <ChevronDown size={10} className={`transition-transform duration-200 ${openStatusDropdown === row.bookingId ? 'rotate-180' : ''}`} />
-                              </>
-                            )}
-                          </button>
-                          
-                          {openStatusDropdown === row.bookingId && (
-                            <>
-                              <div 
-                                className="fixed inset-0 z-10" 
-                                onClick={() => setOpenStatusDropdown(null)}
-                              />
-                              <div className="absolute left-full ml-1 top-0 z-20 w-52 bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden">
-                                <div className="px-2 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
-                                  Change Status
-                                </div>
-                                {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
-                                  if (status === row.status) return null;
-                                  const statusIcon = status === 'completed' ? CheckCircle2 : status === 'no-show' ? AlertTriangle : status === 'paid' ? DollarSign : status === 'rescheduled' ? Clock : status === 'canceled' ? X : status === 'ignored' ? X : Calendar;
-                                  const StatusIcon = statusIcon;
-                                  const isPaidOption = status === 'paid';
-                                  const isPlanOpen = isPaidOption && planPickerFor === row.bookingId;
-                                  return (
-                                    <div key={status} className="border-b last:border-b-0 border-slate-100">
-                                      <button
-                                        onClick={() => {
-                                          const booking = bookingsById.get(row.bookingId!);
-                                          if (!booking) return;
-                                          if (isPaidOption) {
-                                            setPlanPickerFor(row.bookingId!);
-                                            return;
-                                          }
-                                          setPlanPickerFor(null);
-                                          handleStatusUpdate(booking.bookingId, status);
-                                          setOpenStatusDropdown(null);
-                                        }}
-                                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition flex items-center gap-2 group"
-                                      >
-                                        <StatusIcon size={14} className={`${status === 'completed' ? 'text-green-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-emerald-600' : status === 'canceled' ? 'text-red-600' : status === 'ignored' ? 'text-gray-600' : 'text-blue-600'}`} />
-                                        <div className="flex flex-col gap-0.5">
-                                          <span className="font-medium">{statusLabels[status]}</span>
-                                          {isPaidOption && <span className="text-[10px] text-slate-500">Select a plan</span>}
-                                        </div>
-                                      </button>
-                                      {isPlanOpen && (
-                                        <div className="px-3 pb-2 grid grid-cols-1 gap-1">
-                                          {PLAN_OPTIONS.map((plan) => (
-                                            <button
-                                              key={plan.key}
-                                              onClick={() => {
-                                                const booking = bookingsById.get(row.bookingId!);
-                                                if (booking) {
-                                                  handleStatusUpdate(booking.bookingId, 'paid', plan);
-                                                  setOpenStatusDropdown(null);
-                                                }
-                                              }}
-                                              className="flex items-center justify-between w-full rounded border border-emerald-100 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
-                                            >
-                                              <div className="flex flex-col text-left">
-                                                <span>{plan.label}</span>
-                                                <span className="text-[10px] font-medium text-emerald-700">{plan.displayPrice}</span>
-                                              </div>
-                                              <DollarSign size={14} className="text-emerald-600" />
-                                            </button>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
+
+                        {openStatusDropdown === row.bookingId && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-10"
+                              onClick={() => setOpenStatusDropdown(null)}
+                            />
+                            <div className="absolute left-full ml-1 top-0 z-20 w-44 bg-white rounded-lg shadow-xl border border-slate-200 py-1 overflow-hidden max-h-[350px] overflow-y-auto">
+                              <div className="px-2 py-1 text-[9px] font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100 sticky top-0 bg-white">
+                                Change Status
                               </div>
+                              {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
+                                if (status === row.status) return null;
+                                const statusIcon = status === 'completed' ? CheckCircle2 : status === 'no-show' ? AlertTriangle : status === 'paid' ? DollarSign : status === 'rescheduled' ? Clock : status === 'canceled' ? X : status === 'ignored' ? X : Calendar;
+                                const StatusIcon = statusIcon;
+                                const isPaidOption = status === 'paid';
+                                const isPlanOpen = isPaidOption && planPickerFor === row.bookingId;
+                                return (
+                                  <div key={status} className="border-b last:border-b-0 border-slate-100">
+                                    <button
+                                      onClick={() => {
+                                        const booking = bookingsById.get(row.bookingId!);
+                                        if (!booking) return;
+                                        if (isPaidOption) {
+                                          setPlanPickerFor(row.bookingId!);
+                                          return;
+                                        }
+                                        setPlanPickerFor(null);
+                                        handleStatusUpdate(booking.bookingId, status);
+                                        setOpenStatusDropdown(null);
+                                      }}
+                                      className="w-full text-left px-2 py-1 text-[9px] hover:bg-slate-50 transition flex items-center gap-1.5 group"
+                                    >
+                                      <StatusIcon size={11} className={`${status === 'completed' ? 'text-green-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-emerald-600' : status === 'canceled' ? 'text-red-600' : status === 'ignored' ? 'text-gray-600' : 'text-blue-600'}`} />
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="font-medium">{statusLabels[status]}</span>
+                                        {isPaidOption && <span className="text-[8px] text-slate-500">Select a plan</span>}
+                                      </div>
+                                    </button>
+                                    {isPlanOpen && (
+                                      <div className="px-2 pb-1.5 grid grid-cols-1 gap-0.5">
+                                        {PLAN_OPTIONS.map((plan) => (
+                                          <button
+                                            key={plan.key}
+                                            onClick={() => {
+                                              const booking = bookingsById.get(row.bookingId!);
+                                              if (booking) {
+                                                handleStatusUpdate(booking.bookingId, 'paid', plan);
+                                                setOpenStatusDropdown(null);
+                                              }
+                                            }}
+                                            className="flex items-center justify-between w-full rounded border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
+                                          >
+                                            <div className="flex flex-col text-left">
+                                              <span>{plan.label}</span>
+                                              <span className="text-[8px] inline-flex w-fit items-center px-1.5 py-0.5 font-medium text-emerald-700">{plan.displayPrice}</span>
+                                            </div>
+                                            <DollarSign size={11} className="text-emerald-600" />
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-1 py-1.5">
+                      {row.paymentPlan ? (
+                        <div className="space-y-0.5">
+                          <div className="flex items-center w-fit gap-0.5 rounded border border-emerald-100 bg-emerald-50 px-1 py-0.5 text-[9px] font-semibold text-emerald-800">
+                            <DollarSign size={8} className="text-emerald-600 flex-shrink-0" />
+                            <span className="truncate text-[8px]">{row.paymentPlan.name}</span>
+                            <span className="text-emerald-700 truncate text-[8px]">{row.paymentPlan.displayPrice || `$${row.paymentPlan.price}`}</span>
+                          </div>
+                          {row.status === 'paid' && (
+                            <>
+                              <select
+                                value={row.paymentPlan.name}
+                                onChange={(e) => {
+                                  const plan = PLAN_OPTIONS.find(p => p.key === e.target.value);
+                                  if (plan && row.bookingId) {
+                                    handleUpdateAmount(row.bookingId, plan.price, plan.key);
+                                  }
+                                }}
+                                disabled={updatingBookingId === row.bookingId}
+                                className="w-full text-[9px] border border-emerald-200 rounded px-1 py-0.5 bg-emerald-50 text-emerald-800"
+                                title={row.paymentPlan.name}
+                              >
+                                {PLAN_OPTIONS.map((plan) => (
+                                  <option key={plan.key} value={plan.key}>
+                                    {plan.label} ({plan.displayPrice})
+                                  </option>
+                                ))}
+                              </select>
+                              <input
+                                type="number"
+                                placeholder="Custom $"
+                                defaultValue={row.paymentPlan.price}
+                                onBlur={(e) => {
+                                  const amount = parseFloat(e.target.value);
+                                  if (!isNaN(amount) && amount > 0 && row.bookingId && row.paymentPlan) {
+                                    handleUpdateAmount(row.bookingId, amount, row.paymentPlan.name);
+                                  }
+                                }}
+                                disabled={updatingBookingId === row.bookingId}
+                                className="w-full text-[9px] border border-slate-200 rounded px-1 py-0.5 bg-white"
+                              />
                             </>
                           )}
                         </div>
-                      </td>
-                      <td className="px-3 py-2">
-                        {row.paymentPlan ? (
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-0.5 rounded border border-emerald-100 bg-emerald-50 px-1 py-0.5 text-xs font-semibold text-emerald-800">
-                              <DollarSign size={10} className="text-emerald-600" />
-                              <span className="truncate">{row.paymentPlan.name}</span>
-                              <span className="text-emerald-700 truncate">{row.paymentPlan.displayPrice || `$${row.paymentPlan.price}`}</span>
-                            </div>
-                            {row.status === 'paid' && (
-                              <>
-                                <select
-                                  value={row.paymentPlan.name}
-                                  onChange={(e) => {
-                                    const plan = PLAN_OPTIONS.find(p => p.key === e.target.value);
-                                    if (plan && row.bookingId) {
-                                      handleUpdateAmount(row.bookingId, plan.price, plan.key);
-                                    }
-                                  }}
-                                  disabled={updatingBookingId === row.bookingId}
-                                  className="w-full text-xs border border-emerald-200 rounded-lg px-2 py-1 bg-emerald-50 text-emerald-800"
-                                >
-                                  {PLAN_OPTIONS.map((plan) => (
-                                    <option key={plan.key} value={plan.key}>
-                                      {plan.label} ({plan.displayPrice})
-                                    </option>
-                                  ))}
-                                </select>
-                                <input
-                                  type="number"
-                                  placeholder="Custom amount"
-                                  defaultValue={row.paymentPlan.price}
-                                  onBlur={(e) => {
-                                    const amount = parseFloat(e.target.value);
-                                    if (!isNaN(amount) && amount > 0 && row.bookingId && row.paymentPlan) {
-                                      handleUpdateAmount(row.bookingId, amount, row.paymentPlan.name);
-                                    }
-                                  }}
-                                  disabled={updatingBookingId === row.bookingId}
-                                  className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white"
-                                />
-                              </>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 text-xs">—</span>
+                      ) : (
+                        <span className="text-slate-400 text-[9px]">—</span>
+                      )}
+                    </td>
+                    <td className="px-1 py-1.5">
+                      <div className="flex items-center gap-0.5 flex-nowrap min-w-fit">
+                        {row.meetLink && (
+                          <a
+                            href={row.meetLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Join Meeting"
+                            className="inline-flex items-center justify-center p-0.5 rounded border border-slate-200 bg-white hover:border-orange-400 hover:text-orange-600 transition flex-shrink-0"
+                          >
+                            <ExternalLink size={9} />
+                          </a>
                         )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-1 flex-wrap">
-                          {row.meetLink && (
-                            <a
-                              href={row.meetLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition justify-center whitespace-nowrap"
-                            >
-                              <ExternalLink size={12} />
-                              Join
-                            </a>
+                        <button
+                          onClick={() => {
+                            setSelectedBookingForNotes({
+                              id: row.bookingId!,
+                              name: row.name,
+                              notes: row.meetingNotes || '',
+                            });
+                            setIsNotesModalOpen(true);
+                          }}
+                          title="Edit Notes"
+                          className="inline-flex items-center justify-center p-0.5 rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition flex-shrink-0"
+                        >
+                          <Edit size={9} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            onOpenEmailCampaign({
+                              recipients: [row.email],
+                              reason: 'lead_followup',
+                            });
+                          }}
+                          title="Send Email"
+                          className="inline-flex items-center justify-center p-0.5 rounded bg-orange-500 text-white hover:bg-orange-600 transition flex-shrink-0"
+                        >
+                          <Mail size={9} />
+                        </button>
+                        {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
+                          <button
+                            onClick={() => {
+                              const phone = row.phone!.replace(/[^\d+]/g, '');
+                              if (phone) {
+                                onOpenWhatsAppCampaign({
+                                  mobileNumbers: [phone],
+                                  reason: 'lead_followup',
+                                });
+                              }
+                            }}
+                            title="Send WhatsApp"
+                            className="inline-flex items-center justify-center p-0.5 rounded bg-green-500 text-white hover:bg-green-600 transition flex-shrink-0"
+                          >
+                            <MessageCircle size={9} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteClick(row)}
+                          title="Delete Lead"
+                          className="inline-flex items-center justify-center p-0.5 rounded bg-red-500 text-white hover:bg-red-600 transition flex-shrink-0"
+                        >
+                          <Trash2 size={9} />
+                        </button>
+                      </div>
+                      {row.notes && (
+                        <div className="text-[9px] text-slate-500 bg-slate-100 rounded px-1 py-0.5 border border-slate-200 mt-1">
+                          <span className="font-semibold text-slate-600">Calendly:</span>{' '}
+                          {isCalendlyNoteExpanded || row.notes.length <= TRUNCATE_LENGTH ? (
+                            <span>{row.notes}</span>
+                          ) : (
+                            <span>{row.notes.substring(0, TRUNCATE_LENGTH)}...</span>
                           )}
-                          <button
-                            onClick={() => {
-                              setSelectedBookingForNotes({
-                                id: row.bookingId!,
-                                name: row.name,
-                                notes: row.meetingNotes || '',
-                              });
-                              setIsNotesModalOpen(true);
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap justify-center"
-                          >
-                            <Edit size={12} />
-                            Notes
-                          </button>
-                          <button
-                            onClick={() => {
-                              onOpenEmailCampaign({
-                                recipients: [row.email],
-                                reason: 'lead_followup',
-                              });
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition justify-center whitespace-nowrap"
-                          >
-                            <Mail size={12} />
-                            Email
-                          </button>
-                          {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
+                          {row.notes.length > TRUNCATE_LENGTH && (
                             <button
                               onClick={() => {
-                                const phone = row.phone!.replace(/[^\d+]/g, '');
-                                if (phone) {
-                                  onOpenWhatsAppCampaign({
-                                    mobileNumbers: [phone],
-                                    reason: 'lead_followup',
-                                  });
+                                const newExpanded = new Set(expandedNotes);
+                                if (isCalendlyNoteExpanded) {
+                                  newExpanded.delete(calendlyNoteKey);
+                                } else {
+                                  newExpanded.add(calendlyNoteKey);
                                 }
+                                setExpandedNotes(newExpanded);
                               }}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition justify-center whitespace-nowrap"
+                              className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline text-[9px]"
                             >
-                              <MessageCircle size={12} />
-                              WA
+                              {isCalendlyNoteExpanded ? 'Less' : 'More'}
                             </button>
                           )}
-                          <button
-                            onClick={() => handleDeleteClick(row)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition justify-center whitespace-nowrap"
-                          >
-                            <Trash2 size={12} />
-                            Delete
-                          </button>
                         </div>
-                        {row.notes && (
-                          <div className="text-xs text-slate-500 bg-slate-100 rounded px-1.5 py-1 border border-slate-200 mt-1">
-                            <span className="font-semibold text-slate-600">Calendly Notes:</span>{' '}
-                            {isCalendlyNoteExpanded || row.notes.length <= TRUNCATE_LENGTH ? (
-                              <span>{row.notes}</span>
-                            ) : (
-                              <span>{row.notes.substring(0, TRUNCATE_LENGTH)}...</span>
-                            )}
-                            {row.notes.length > TRUNCATE_LENGTH && (
-                              <button
-                                onClick={() => {
-                                  const newExpanded = new Set(expandedNotes);
-                                  if (isCalendlyNoteExpanded) {
-                                    newExpanded.delete(calendlyNoteKey);
-                                  } else {
-                                    newExpanded.add(calendlyNoteKey);
-                                  }
-                                  setExpandedNotes(newExpanded);
-                                }}
-                                className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline"
-                              >
-                                {isCalendlyNoteExpanded ? 'Less' : 'More'}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                        {row.meetingNotes && (
-                          <div className="text-xs text-slate-500 bg-yellow-50 rounded px-1.5 py-1 border border-yellow-200 mt-1">
-                            <span className="font-semibold text-slate-600">Meeting Notes:</span>{' '}
-                            {isMeetingNoteExpanded || row.meetingNotes.length <= TRUNCATE_LENGTH ? (
-                              <span>{row.meetingNotes}</span>
-                            ) : (
-                              <span>{row.meetingNotes.substring(0, TRUNCATE_LENGTH)}...</span>
-                            )}
-                            {row.meetingNotes.length > TRUNCATE_LENGTH && (
-                              <button
-                                onClick={() => {
-                                  const newExpanded = new Set(expandedNotes);
-                                  if (isMeetingNoteExpanded) {
-                                    newExpanded.delete(meetingNoteKey);
-                                  } else {
-                                    newExpanded.add(meetingNoteKey);
-                                  }
-                                  setExpandedNotes(newExpanded);
-                                }}
-                                className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline"
-                              >
-                                {isMeetingNoteExpanded ? 'Less' : 'More'}
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {filteredData.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="text-center py-12 text-sm text-slate-500">
-                      No leads found. Try adjusting the filters.
+                      )}
+                      {row.meetingNotes && (
+                        <div className="text-[9px] text-slate-500 bg-yellow-50 rounded px-1 py-0.5 border border-yellow-200 mt-1">
+                          <span className="font-semibold text-slate-600">Meeting:</span>{' '}
+                          {isMeetingNoteExpanded || row.meetingNotes.length <= TRUNCATE_LENGTH ? (
+                            <span>{row.meetingNotes}</span>
+                          ) : (
+                            <span>{row.meetingNotes.substring(0, TRUNCATE_LENGTH)}...</span>
+                          )}
+                          {row.meetingNotes.length > TRUNCATE_LENGTH && (
+                            <button
+                              onClick={() => {
+                                const newExpanded = new Set(expandedNotes);
+                                if (isMeetingNoteExpanded) {
+                                  newExpanded.delete(meetingNoteKey);
+                                } else {
+                                  newExpanded.add(meetingNoteKey);
+                                }
+                                setExpandedNotes(newExpanded);
+                              }}
+                              className="ml-1 text-orange-600 hover:text-orange-700 font-semibold underline text-[9px]"
+                            >
+                              {isMeetingNoteExpanded ? 'Less' : 'More'}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50">
-            <div className="text-sm text-slate-600">
+                );
+              })}
+              {filteredData.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="text-center py-8 text-[10px] text-slate-500">
+                    No leads found. Try adjusting the filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        
+        <div className="flex items-center justify-between px-3 py-2 border-t border-slate-200 bg-slate-50">
+          <div className="text-[10px] text-slate-600">
             {bookingsPagination.pages > 1 ? (
               <>Page {bookingsPagination.page} of {bookingsPagination.pages} • </>
             ) : null}
             Total unique leads: <span className="font-semibold text-slate-900">{bookingsPagination.total}</span>
-            </div>
+          </div>
           {bookingsPagination.pages > 1 && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={() => {
                   const newPage = bookingsPage - 1;
@@ -1278,9 +1311,9 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                   }
                 }}
                 disabled={bookingsPage === 1}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <ChevronLeft size={16} />
+                <ChevronLeft size={12} />
                 Previous
               </button>
               <button
@@ -1291,13 +1324,13 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                   }
                 }}
                 disabled={bookingsPage === bookingsPagination.pages}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-semibold bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-white border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
-                <ChevronRight size={16} />
+                <ChevronRight size={12} />
               </button>
-          </div>
-        )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1328,7 +1361,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
           clientPhone={selectedBookingForFollowUp.clientPhone}
         />
       )}
-      
+
       {/* Plan Details Modal */}
       <PlanDetailsModal
         isOpen={isPlanDetailsModalOpen}
@@ -1357,7 +1390,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                 </div>
                 <h3 className="text-xl font-bold text-slate-900">Delete Lead Records</h3>
               </div>
-              
+
               <p className="text-slate-600 mb-6">
                 Are you sure you want to delete all entries of this user? This action cannot be undone.
               </p>
@@ -1418,13 +1451,12 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-white min-w-[300px] animate-in slide-in-from-right ${
-              toast.type === 'success'
+            className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-white min-w-[300px] animate-in slide-in-from-right ${toast.type === 'success'
                 ? 'bg-green-500'
                 : toast.type === 'error'
-                ? 'bg-red-500'
-                : 'bg-blue-500'
-            }`}
+                  ? 'bg-red-500'
+                  : 'bg-blue-500'
+              }`}
           >
             {toast.type === 'success' && <CheckCircle2 size={20} />}
             {toast.type === 'error' && <AlertCircle size={20} />}

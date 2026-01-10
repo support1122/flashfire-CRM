@@ -1103,7 +1103,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
               onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
               className="hover:opacity-80"
             >
-              <X size={18} />
+              <X size={12} />
             </button>
           </div>
         ))}
@@ -1111,7 +1111,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
 
       <div className="flex flex-col items-center gap-4">
         <div className="text-center">
-          <h3 className="text-sm uppercase tracking-wide text-slate-500 font-semibold mb-2">Unified Data View</h3>
+          <h3 className="text-[10px] uppercase tracking-wide text-slate-500 font-semibold mb-2">Unified Data View</h3>
           <h2 className="text-3xl font-bold text-slate-900">All Bookings & Users</h2>
           <p className="text-slate-500 mt-2 max-w-2xl mx-auto">
             View and manage all bookings and users who haven't booked meetings in one comprehensive table. Select multiple rows for bulk actions.
@@ -1121,25 +1121,25 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           <button
             onClick={handleShowMeetingsToday}
             disabled={loadingMeetingsToday}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-[10px] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loadingMeetingsToday ? (
               <>
-                <Loader2 className="animate-spin" size={16} />
+                <Loader2 className="animate-spin" size={12} />
                 Loading...
               </>
             ) : (
               <>
-                <Calendar size={16} />
+                <Calendar size={12} />
                 Meetings Booked Today {meetingsBookedTodayCount > 0 && `(${meetingsBookedTodayCount})`}
               </>
             )}
           </button>
           <button
             onClick={() => setIsInsertModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm font-semibold"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-[10px] font-semibold"
           >
-            <Plus size={16} />
+            <Plus size={12} />
             Insert Data
           </button>
           <button
@@ -1150,9 +1150,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
               setShowMeetingsToday(false);
               fetchData();
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition text-sm font-semibold"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition text-[10px] font-semibold"
           >
-            <RefreshCcw size={16} className={refreshing ? 'animate-spin' : ''} />
+            <RefreshCcw size={12} className={refreshing ? 'animate-spin' : ''} />
             Refresh Data
           </button>
         </div>
@@ -1177,7 +1177,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                   <Users className="text-purple-600" size={20} />
                   Users Without Meetings
                 </h3>
-                <p className="text-sm text-slate-500 mt-1">
+                <p className="text-[10px] text-slate-500 mt-1">
                   High intent users who signed up but haven't booked a meeting ({filteredUsersWithoutBookings.length} users)
                 </p>
               </div>
@@ -1206,9 +1206,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                         reason: 'users_without_meetings_bulk',
                       });
                     }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-semibold"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-[10px] font-semibold"
                   >
-                    <MessageCircle size={16} />
+                    <MessageCircle size={12} />
                     WhatsApp All ({filteredUsersWithoutBookings.length})
                   </button>
                 )}
@@ -1220,9 +1220,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                     reason: 'users_without_meetings_bulk',
                   });
                 }}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition text-sm font-semibold"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition text-[10px] font-semibold"
               >
-                <Send size={16} />
+                <Send size={12} />
                 Email All ({filteredUsersWithoutBookings.length})
               </button>
               </div>
@@ -1235,16 +1235,16 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
               <div className="text-center py-12 text-slate-500">
                 <Users size={48} className="mx-auto mb-4 text-slate-300" />
                 <p className="font-semibold">No users without bookings found</p>
-                <p className="text-sm mt-1">All users who signed up have booked meetings.</p>
+                <p className="text-[10px] mt-1">All users who signed up have booked meetings.</p>
               </div>
             ) : (
               <div className="border border-slate-200 rounded-xl overflow-hidden">
                 <div className="overflow-x-auto">
                   <div className="max-h-[400px] overflow-y-auto">
-                    <table className="min-w-full divide-y divide-slate-200 text-sm">
+                    <table className="min-w-full divide-y divide-slate-200 text-[10px]">
                       <thead className="bg-purple-50 sticky top-0 z-10">
                         <tr className="text-left text-slate-600">
-                          <th className="px-4 py-3 font-semibold w-12">
+                          <th className="px-4 py-3 font-semibold w-10">
                             <button
                               onClick={() => {
                                 const allUserIds = filteredUsersWithoutBookings.map((row) => row.id);
@@ -1268,9 +1268,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                             >
                               {filteredUsersWithoutBookings.length > 0 &&
                                 filteredUsersWithoutBookings.every((row) => selectedRows.has(row.id)) ? (
-                                <CheckSquare size={18} className="text-purple-600" />
+                                <CheckSquare size={12} className="text-purple-600" />
                               ) : (
-                                <Square size={18} className="text-slate-400" />
+                                <Square size={12} className="text-slate-400" />
                               )}
                             </button>
                           </th>
@@ -1301,9 +1301,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                   type="button"
                                 >
                                   {isSelected ? (
-                                    <CheckSquare size={18} className="text-purple-600" />
+                                    <CheckSquare size={12} className="text-purple-600" />
                                   ) : (
-                                    <Square size={18} className="text-slate-400" />
+                                    <Square size={12} className="text-slate-400" />
                                   )}
                                 </button>
                               </td>
@@ -1317,17 +1317,17 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                 {row.phone && row.phone !== 'Not Specified' ? (
                                   <a
                                     href={`tel:${row.phone}`}
-                                    className="text-xs text-purple-600 font-semibold hover:text-purple-700"
+                                    className="text-[10px] text-purple-600 font-semibold hover:text-purple-700"
                                   >
                                     {row.phone}
                                   </a>
                                 ) : (
-                                  <span className="text-slate-400 text-xs">—</span>
+                                  <span className="text-slate-400 text-[10px]">—</span>
                                 )}
                               </td>
                               <td className="px-4 py-4">
                                 <span
-                                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${userData?.workAuthorization?.toLowerCase() === 'yes'
+                                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold ${userData?.workAuthorization?.toLowerCase() === 'yes'
                                     ? 'bg-green-100 text-green-800'
                                     : 'bg-slate-100 text-slate-600'
                                     }`}
@@ -1345,7 +1345,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                     <div className="space-y-1 max-w-xs">
                                       <button
                                         onClick={() => handleUserCampaignsClick(row.email)}
-                                        className="flex items-center gap-2 text-xs hover:bg-purple-50 rounded px-2 py-1 transition cursor-pointer w-full text-left border border-purple-200 hover:border-purple-300"
+                                        className="flex items-center gap-2 text-[10px] hover:bg-purple-50 rounded px-2 py-1 transition cursor-pointer w-full text-left border border-purple-200 hover:border-purple-300"
                                         type="button"
                                       >
                                         <Mail className="text-purple-500" size={14} />
@@ -1365,7 +1365,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                 {/* Delete Button */}
                                 <button
                                   onClick={() => handleDeleteClick(row)}
-                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition w-full justify-center"
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-red-500 text-white hover:bg-red-600 transition w-full justify-center"
                                 >
                                   <Trash2 size={14} />
                                   Delete
@@ -1377,7 +1377,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                       reason: 'user_without_booking',
                                     });
                                   }}
-                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-500 text-white hover:bg-purple-600 transition w-full justify-center"
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-purple-500 text-white hover:bg-purple-600 transition w-full justify-center"
                                 >
                                   <Mail size={14} />
                                     Email
@@ -1395,7 +1395,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                           alert('Invalid phone number');
                                         }
                                       }}
-                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition w-full justify-center"
+                                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-green-500 text-white hover:bg-green-600 transition w-full justify-center"
                                     >
                                       <MessageCircle size={14} />
                                       WhatsApp
@@ -1418,24 +1418,24 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
 
       {selectedRows.size > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-lg px-4 py-3 flex items-center justify-between">
-          <span className="text-sm font-semibold text-orange-900">
+          <span className="text-[10px] font-semibold text-orange-900">
             {selectedRows.size} row{selectedRows.size > 1 ? 's' : ''} selected
           </span>
           <div className="flex items-center gap-2">
             {onOpenWhatsAppCampaign && (
               <button
                 onClick={handleBulkWhatsApp}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-semibold"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-[10px] font-semibold"
               >
-                <MessageCircle size={16} />
+                <MessageCircle size={12} />
                 Send WhatsApp ({selectedRows.size})
               </button>
             )}
           <button
             onClick={handleBulkEmail}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-sm font-semibold"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-[10px] font-semibold"
           >
-            <Send size={16} />
+            <Send size={12} />
               Send Email ({selectedRows.size})
           </button>
           </div>
@@ -1444,19 +1444,19 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
 
       <div className="flex flex-wrap items-center gap-4 p-4">
         <div className="flex items-center gap-3 border border-slate-200 rounded-lg px-3 py-2">
-          <Search size={16} className="text-slate-400" />
+          <Search size={12} className="text-slate-400" />
           <input
             type="text"
             placeholder="Search by name, email, or source…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="text-sm bg-transparent focus:outline-none"
+            className="text-[10px] bg-transparent focus:outline-none"
           />
         </div>
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as 'all' | 'booking' | 'user')}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+          className="text-[10px] border border-slate-200 rounded-lg px-1 py-1.5 text-[11px] bg-white"
         >
           <option value="all">All types</option>
           <option value="booking">Bookings only</option>
@@ -1465,7 +1465,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+          className="text-[10px] border border-slate-200 rounded-lg px-1 py-1.5 text-[11px] bg-white"
         >
           <option value="all">All statuses</option>
           {(['scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
@@ -1477,7 +1477,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         <select
           value={planFilter}
           onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+          className="text-[10px] border border-slate-200 rounded-lg px-3 py-2 bg-white"
         >
           <option value="all">All plans</option>
           {PLAN_OPTIONS.map((plan) => (
@@ -1489,28 +1489,28 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         <select
           value={utmFilter}
           onChange={(e) => setUtmFilter(e.target.value)}
-          className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white min-w-[160px]"
+          className="text-[10px] border border-slate-200 rounded-lg px-1 text-[11px] py-1.5 bg-white min-w-[160px]"
         >
           <option value="all">All sources</option>
           {uniqueSources.map((source) => (
-            <option key={source} value={source}>
-              {source}
-            </option>
-          ))}
-        </select>
-        <div className="flex items-center gap-2 text-sm text-slate-500">
+              <option key={source} value={source}>
+                {source}
+              </option>
+            ))}
+          </select>
+        <div className="flex items-center gap-2 text-[11px] text-slate-500">
           <input
             type="date"
             value={fromDate}
             onChange={(e) => setFromDate(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
+            className="border border-slate-200 rounded-lg px-1.5 py-1 text-[11px] bg-white"
           />
           <span>—</span>
           <input
             type="date"
             value={toDate}
             onChange={(e) => setToDate(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 bg-white"
+            className="border border-slate-200 rounded-lg px-1.5 py-1 text-[11px] bg-white"
           />
         </div>
         {(fromDate || toDate || search || statusFilter !== 'all' || planFilter !== 'all' || utmFilter !== 'all' || typeFilter !== 'all' || showMeetingsToday) && (
@@ -1527,7 +1527,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
               setBookingsPage(1);
               setUsersPage(1);
             }}
-            className="text-sm text-orange-600 font-semibold"
+            className="text-[10px] text-orange-600 font-semibold"
           >
             Clear filters
           </button>
@@ -1535,34 +1535,33 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       </div>
 
         <div className="overflow-hidden bg-white border border-slate-200 rounded-lg">
-          <div className="overflow-x-auto">
-            <div className="max-h-[600px] overflow-y-auto">
-              <table className="w-full min-w-[1200px] text-sm table-fixed border-separate border-spacing-y-2 border-spacing-x-1">
+          
+              <table className="w-full text-[11px] table-auto border-separate border-spacing-y-1 border-spacing-x-1">
               <thead className="bg-slate-50 sticky top-0 z-10">
                 <tr className="text-left text-slate-500">
-                  <th className="px-1.5 py-2 font-semibold w-10">
+                  <th className="px-1.5 py-2 font-semibold w-8">
                     <button
                       onClick={handleSelectAll}
                       className="flex items-center justify-center"
                       type="button"
                     >
                       {selectedRows.size === filteredData.length && filteredData.length > 0 ? (
-                        <CheckSquare size={16} className="text-orange-600" />
+                        <CheckSquare size={12} className="text-orange-600" />
                       ) : (
-                        <Square size={16} className="text-slate-400" />
+                        <Square size={12} className="text-slate-400" />
                       )}
                     </button>
                   </th>
-                  <th className="px-3 py-2 font-semibold w-16">Type</th>
-                  <th className="px-3 py-2 font-semibold w-40">Name</th>
-                  <th className="px-3 py-2 font-semibold w-48">Email</th>
-                  <th className="px-3 py-2 font-semibold w-28">Phone</th>
-                  <th className="px-3 py-2 font-semibold w-36">Created/Signed Up</th>
-                  <th className="px-3 py-2 font-semibold w-36">Meeting Time</th>
-                  <th className="px-3 py-2 font-semibold w-28">Source</th>
-                  <th className="px-3 py-2 font-semibold w-32">Status</th>
-                  <th className="px-3 py-2 font-semibold w-48">Campaigns</th>
-                  <th className="px-3 py-2 font-semibold">Actions</th>
+                  <th className="px-1 py-1.5 font-semibold text-[10px] w-12">Type</th>
+                  <th className="px-1 py-1.5 font-semibold text-[10px] w-20">Name</th>
+                  <th className="px-1 py-1.5 font-semibold text-[10px] w-24">Email</th>
+                  <th className="px-1 py-1.5 font-semibold text-[10px] w-20">Phone</th>
+                  <th className="px-1 py-1.5 font-semibold text-[10px] w-20">Created/Signed Up</th>
+                  <th className="px-1 py-1.5 font-semibold text-[10px] w-20">Meeting Time</th>
+                  <th className="px-1 py-1.5 font-semibold text-[10px] w-14">Source</th>
+                  <th className="px-1 py-1.5 font-semibold text-[10px] w-14">Status</th>
+                  <th className="px-1 py-1.5 font-semibold text-[10px] w-20">Campaigns</th>
+                  <th className="px-1 py-1.5 font-semibold text-[10px] w-20">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1597,16 +1596,16 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           type="button"
                         >
                           {isSelected ? (
-                            <CheckSquare size={16} className="text-orange-600" />
+                            <CheckSquare size={12} className="text-orange-600" />
                           ) : (
-                            <Square size={16} className="text-slate-400" />
+                            <Square size={12} className="text-slate-400" />
                           )}
                         </button>
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-1 py-1.5">
                         <div className="flex flex-col gap-1">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${isBooking
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${isBooking
                               ? 'bg-blue-100 text-blue-800'
                               : 'bg-purple-100 text-purple-800'
                               }`}
@@ -1614,45 +1613,45 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                             {isBooking ? 'Booking' : 'User'}
                           </span>
                           {row.claimedBy && row.claimedBy.email && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                               Claimed
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="font-semibold text-slate-900 truncate text-sm" title={row.name}>{row.name}</div>
+                      <td className="px-1 py-1.5">
+                        <div className="font-semibold text-slate-900 truncate text-[10px]" title={row.name}>{row.name}</div>
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="text-slate-700 truncate text-xs" title={row.email}>{row.email}</div>
+                      <td className="px-1 py-1.5">
+                        <div className="text-slate-700 truncate text-[10px]" title={row.email}>{row.email}</div>
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-1 py-1.5">
                         {row.phone && row.phone !== 'Not Specified' ? (
                           <a
                             href={`tel:${row.phone}`}
-                            className="text-xs text-orange-600 font-semibold hover:text-orange-700 truncate block"
+                            className="text-[10px] text-orange-600 font-semibold hover:text-orange-700 truncate block"
                             title={row.phone}
                           >
                             {row.phone}
                           </a>
                         ) : (
-                          <span className="text-slate-400 text-xs">—</span>
+                          <span className="text-slate-400 text-[10px]">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-slate-600 text-xs">{createdDate}</td>
-                      <td className="px-3 py-2 text-slate-600 text-xs">
+                      <td className="px-1 py-1.5 text-slate-600 text-[10px]">{createdDate}</td>
+                      <td className="px-1 py-1.5 text-slate-600 text-[10px]">
                         {isBooking ? scheduledDate : <span className="text-slate-400">—</span>}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-1 py-1.5">
                         {row.source ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-xs font-semibold text-slate-600 truncate max-w-full" title={row.source}>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-[10px] font-semibold text-slate-600 truncate max-w-full" title={row.source}>
                             {row.source}
                           </span>
                         ) : (
-                          <span className="text-slate-400 text-xs">—</span>
+                          <span className="text-slate-400 text-[10px]">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2">
+                        <td className="px-1 py-1.5">
                         {row.status && isBooking && row.bookingId ? (
                             <div className="relative status-dropdown-container">
                             <button
@@ -1660,7 +1659,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                   row.bookingId ? setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId) : null
                               }
                               disabled={updatingBookingId === row.bookingId}
-                              className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition disabled:opacity-60 w-full justify-center ${
+                              className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border transition disabled:opacity-60 w-full justify-center ${
                                 statusColors[row.status] || 'text-slate-600 bg-slate-100'
                               } border-current/20 hover:border-current/40`}
                             >
@@ -1683,11 +1682,11 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                             {openStatusDropdown === row.bookingId && (
                               <>
                                 <div className="fixed inset-0 z-10" onClick={() => setOpenStatusDropdown(null)} />
-                                <div className="absolute right-0 top-full mt-2 z-20 w-52">
+                                <div className="absolute right-0 top-full mt-2 z-20 w-44">
                                   <div className="relative">
                                     <div className="absolute -top-2 right-6 w-3 h-3 bg-white border-l border-t border-slate-200 rotate-45 z-10"></div>
                                     <div className="bg-white rounded-lg shadow-xl border border-slate-200 py-1.5 overflow-hidden relative z-20">
-                                  <div className="px-2 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
+                                  <div className="px-2 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
                                     Change Status
                                   </div>
                                   {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
@@ -1721,7 +1720,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                             handleStatusUpdate(booking.bookingId, status);
                                             setOpenStatusDropdown(null);
                                           }}
-                                          className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition flex items-center gap-3 group"
+                                          className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-slate-50 transition flex items-center gap-3 group"
                                         >
                                           <StatusIcon
                                             size={14}
@@ -1759,15 +1758,15 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                                     setOpenStatusDropdown(null);
                                                   }
                                                 }}
-                                                className="flex items-center justify-between w-full rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
+                                                className="flex items-center justify-between w-full rounded-lg border border-emerald-100 bg-emerald-50 px-1.5 py-1 text-[10px] font-semibold text-emerald-800 hover:border-emerald-200 hover:bg-emerald-100 transition"
                                               >
                                                 <div className="flex flex-col text-left">
                                                   <span>{plan.label}</span>
-                                                  <span className="text-xs font-medium text-emerald-700">
+                                                  <span className="text-[11px] font-medium text-emerald-700">
                                                     {plan.displayPrice}
                                                   </span>
                                                 </div>
-                                                <DollarSign size={16} className="text-emerald-600" />
+                                                <DollarSign size={12} className="text-emerald-600" />
                                               </button>
                                             ))}
                                           </div>
@@ -1783,9 +1782,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                         setOpenStatusDropdown(null);
                                       }
                                     }}
-                                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-amber-50 transition flex items-center gap-3 text-amber-600 group"
+                                    className="w-full text-left px-4 py-2.5 text-[10px] hover:bg-amber-50 transition flex items-center gap-3 text-amber-600 group"
                                   >
-                                    <Clock size={16} />
+                                    <Clock size={12} />
                                     <span className="font-medium">Reschedule</span>
                                   </button>
                                     </div>
@@ -1796,16 +1795,16 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           </div>
                         ) : row.status ? (
                           <span
-                            className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold border ${statusColors[row.status]} border-current/20`}
+                            className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border ${statusColors[row.status]} border-current/20`}
                           >
                             <span>{statusLabels[row.status]}</span>
                             <ChevronDown size={12} className="transition-transform duration-200" />
                           </span>
                         ) : (
-                          <span className="text-slate-400 text-xs">—</span>
+                          <span className="text-slate-400 text-[10px]">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-1 py-1.5">
                         {(() => {
                           const emailLower = row.email.toLowerCase();
                           const campaigns = userCampaigns.get(emailLower) || [];
@@ -1816,7 +1815,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                               {/* Email Campaigns */}
                               <button
                                 onClick={() => handleUserCampaignsClick(row.email)}
-                                className="flex items-center gap-2 text-xs hover:bg-slate-50 rounded px-2 py-1 transition cursor-pointer w-full text-left border border-slate-200 hover:border-orange-300"
+                                className="flex items-center gap-2 text-[10px] hover:bg-slate-50 rounded px-2 py-1 transition cursor-pointer w-full text-left border border-slate-200 hover:border-orange-300"
                                 type="button"
                               >
                                 <Mail className="text-orange-500" size={14} />
@@ -1832,31 +1831,31 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                               {booking && (
                                 <div className="space-y-1 pt-1 border-t border-slate-200">
                                   {booking.scheduledEventStartTime && (
-                                    <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-600">
                                       <Calendar size={12} className="text-blue-500" />
                                       <span>Meeting: {format(parseISO(booking.scheduledEventStartTime), 'MMM d, h:mm a')}</span>
                                     </div>
                                   )}
                                   {booking.reminderCallJobId && (
-                                    <div className="flex items-center gap-1.5 text-xs text-blue-600">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-blue-600">
                                       <Clock size={12} />
                                       <span>Reminder call scheduled</span>
                                     </div>
                                   )}
                                   {booking.paymentReminders && booking.paymentReminders.length > 0 && (
-                                    <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-amber-600">
                                       <Clock size={12} />
                                       <span>{booking.paymentReminders.length} payment reminder{booking.paymentReminders.length > 1 ? 's' : ''}</span>
                                     </div>
                                   )}
                                   {booking.rescheduledCount && booking.rescheduledCount > 0 && (
-                                    <div className="flex items-center gap-1.5 text-xs text-purple-600">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-purple-600">
                                       <RefreshCcw size={12} />
                                       <span>Rescheduled {booking.rescheduledCount} time{booking.rescheduledCount > 1 ? 's' : ''}</span>
                                     </div>
                                   )}
                                   {booking.whatsappReminderSent && (
-                                    <div className="flex items-center gap-1.5 text-xs text-green-600">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-green-600">
                                       <Mail size={12} />
                                       <span>WhatsApp sent</span>
                                     </div>
@@ -1867,17 +1866,18 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           );
                         })()}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-1 py-1.5">
                         <div className="flex items-center gap-1 flex-wrap">
                           {isBooking && row.meetLink && (
                             <a
                               href={row.meetLink}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition justify-center whitespace-nowrap"
+                              title="Join Meeting"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-white border border-slate-200 hover:border-orange-400 hover:text-orange-600 transition justify-center whitespace-nowrap"
                             >
                               <ExternalLink size={12} />
-                              Join
+                              
                             </a>
                           )}
                           {isBooking && row.bookingId && (
@@ -1890,10 +1890,11 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                 });
                                 setIsNotesModalOpen(true);
                               }}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap justify-center"
+                              title="Edit Notes"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-white border border-slate-300 text-slate-600 hover:bg-slate-50 transition whitespace-nowrap justify-center"
                             >
                               <Edit size={12} />
-                              {row.meetingNotes ? 'Edit Notes' : 'Notes'}
+                             
                             </button>
                           )}
                           <button
@@ -1907,10 +1908,11 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                 });
                               }
                             }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition justify-center whitespace-nowrap"
+                            title="Send Email"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-orange-500 text-white hover:bg-orange-600 transition justify-center whitespace-nowrap"
                           >
                             <Mail size={12} />
-                            Email
+                            
                           </button>
                           {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
                             <button
@@ -1929,22 +1931,23 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                   }
                                 }
                               }}
-                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition justify-center whitespace-nowrap disabled:opacity-60"
+                              title="Send WhatsApp"
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-green-500 text-white hover:bg-green-600 transition justify-center whitespace-nowrap disabled:opacity-60"
                             >
                               <MessageCircle size={12} />
-                              {isBooking ? 'WA' : 'WhatsApp'}
+                             
                             </button>
                           )}
                           <button
                             onClick={() => handleDeleteClick(row)}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition justify-center whitespace-nowrap"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-[10px] font-semibold bg-red-500 text-white hover:bg-red-600 transition justify-center whitespace-nowrap"
                           >
                             <Trash2 size={12} />
-                            Delete
+                            
                           </button>
                         </div>
                         {row.notes && (
-                          <div className="text-xs text-slate-500 bg-slate-100 rounded px-1 py-0.5 border border-slate-200 mt-1">
+                          <div className="text-[10px] text-slate-500 bg-slate-100 rounded px-1 py-0.5 border border-slate-200 mt-1">
                             <span className="font-semibold text-slate-600">Calendly Notes:</span>{' '}
                             {isCalendlyNoteExpanded || row.notes.length <= NOTE_TRUNCATE_LENGTH ? (
                               <span>{row.notes}</span>
@@ -1962,7 +1965,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           </div>
                         )}
                         {row.meetingNotes && (
-                          <div className="text-xs text-slate-500 bg-yellow-50 rounded px-1 py-0.5 border border-yellow-200 mt-1">
+                          <div className="text-[10px] text-slate-500 bg-yellow-50 rounded px-1 py-0.5 border border-yellow-200 mt-1">
                             <span className="font-semibold text-slate-600">Meeting Notes:</span>{' '}
                             {isMeetingNoteExpanded || row.meetingNotes.length <= NOTE_TRUNCATE_LENGTH ? (
                               <span>{row.meetingNotes}</span>
@@ -1982,7 +1985,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                         {isBooking && (
                           <div className="mt-2 space-y-1.5">
                             {row.paymentPlan && (
-                              <div className="inline-flex items-center gap-0.5 rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+                              <div className="inline-flex items-center gap-0.5 rounded border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
                                 <DollarSign size={12} className="text-emerald-600" />
                                 <span className="truncate">{row.paymentPlan.name}</span>
                                 <span className="text-emerald-700 truncate">
@@ -2001,7 +2004,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                     }
                                   }}
                                   disabled={updatingBookingId === row.bookingId}
-                                  className="flex-1 text-xs border border-emerald-200 rounded-lg px-2 py-1 bg-emerald-50 text-emerald-800"
+                                  className="flex-1 text-[10px] border border-emerald-200 rounded-lg px-2 py-1 bg-emerald-50 text-emerald-800"
                                 >
                                   <option value="">Select plan</option>
                                   {PLAN_OPTIONS.map((plan) => (
@@ -2021,7 +2024,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                     }
                                   }}
                                   disabled={updatingBookingId === row.bookingId}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition disabled:opacity-60 flex-1 justify-center whitespace-nowrap"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold bg-white border border-gray-300 text-gray-600 hover:bg-gray-50 transition disabled:opacity-60 flex-1 justify-center whitespace-nowrap"
                                 >
                                   {updatingBookingId === row.bookingId ? (
                                     <Loader2 className="animate-spin" size={14} />
@@ -2036,7 +2039,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                       openEmailFollowUp(booking.clientEmail, 'no_show_followup');
                                     }
                                   }}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-blue-300 text-blue-600 hover:bg-blue-50 transition flex-1 justify-center whitespace-nowrap"
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold bg-white border border-blue-300 text-blue-600 hover:bg-blue-50 transition flex-1 justify-center whitespace-nowrap"
                                 >
                                   <Mail size={14} />
                                   Follow up
@@ -2051,18 +2054,17 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                 })}
                 {filteredData.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="text-center py-12 text-sm text-slate-500">
+                    <td colSpan={11} className="text-center py-12 text-[10px] text-slate-500">
                       No data matches your filters. Try adjusting the criteria.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
-          </div>
-        </div>
+          
       </div>
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
-        <div className="text-sm text-slate-600">
+        <div className="text-[10px] text-slate-600">
           {showMeetingsToday ? (
             <>Showing {meetingsBookedTodayCount} meetings booked today</>
           ) : typeFilter === 'all' ? (
@@ -2085,9 +2087,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                     fetchBookings(newPage);
                   }}
                   disabled={bookingsPage === 1}
-                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-[10px] font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <ChevronLeft size={16} className="inline" />
+                  <ChevronLeft size={12} className="inline" />
                   Previous
                 </button>
                 <div className="flex items-center gap-1">
@@ -2109,7 +2111,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           setBookingsPage(pageNum);
                           fetchBookings(pageNum);
                         }}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                        className={`px-3 py-2 rounded-lg text-[10px] font-medium transition ${
                           bookingsPage === pageNum
                             ? 'bg-orange-500 text-white'
                             : 'text-slate-700 hover:bg-slate-100'
@@ -2127,10 +2129,10 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                     fetchBookings(newPage);
                   }}
                   disabled={bookingsPage === bookingsPagination.pages}
-                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-[10px] font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
-                  <ChevronRight size={16} className="inline" />
+                  <ChevronRight size={12} className="inline" />
                 </button>
               </div>
             )}
@@ -2144,9 +2146,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                     fetchUsers(newPage);
                   }}
                   disabled={usersPage === 1}
-                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-[10px] font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <ChevronLeft size={16} className="inline" />
+                  <ChevronLeft size={12} className="inline" />
                   Previous
                 </button>
                 <div className="flex items-center gap-1">
@@ -2168,7 +2170,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           setUsersPage(pageNum);
                           fetchUsers(pageNum);
                         }}
-                        className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                        className={`px-3 py-2 rounded-lg text-[10px] font-medium transition ${
                           usersPage === pageNum
                             ? 'bg-orange-500 text-white'
                             : 'text-slate-700 hover:bg-slate-100'
@@ -2186,10 +2188,10 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                     fetchUsers(newPage);
                   }}
                   disabled={usersPage === usersPagination.pages}
-                  className="px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-2 border border-slate-300 rounded-lg text-[10px] font-medium text-slate-700 hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
-                  <ChevronRight size={16} className="inline" />
+                  <ChevronRight size={12} className="inline" />
                 </button>
               </div>
             )}
@@ -2226,7 +2228,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                 </div>
               ) : userCampaignsList.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <table className="min-w-full divide-y divide-slate-200 text-[10px]">
                     <thead className="bg-slate-50">
                       <tr>
                         <th className="px-4 py-3 text-left font-semibold text-slate-700">Provider</th>
@@ -2241,7 +2243,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                         <tr key={campaign._id} className="hover:bg-slate-50 transition">
                           <td className="px-4 py-4">
                             <span
-                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${campaign.provider === 'mailchimp'
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold ${campaign.provider === 'mailchimp'
                                 ? 'bg-purple-100 text-purple-800'
                                 : 'bg-blue-100 text-blue-800'
                                 }`}
@@ -2254,7 +2256,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           </td>
                           <td className="px-4 py-4">
                             <span
-                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${campaign.status === 'SUCCESS' || campaign.status === 'success'
+                              className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold ${campaign.status === 'SUCCESS' || campaign.status === 'success'
                                 ? 'bg-green-100 text-green-800'
                                 : 'bg-red-100 text-red-800'
                                 }`}
@@ -2271,7 +2273,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                 // Keep the user campaigns modal open, just open details modal on top
                                 handleCampaignClick(campaign._id, selectedUserEmail);
                               }}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-orange-500 text-white hover:bg-orange-600 transition"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-orange-500 text-white hover:bg-orange-600 transition"
                               type="button"
                             >
                               <Info size={14} />
@@ -2287,7 +2289,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                 <div className="text-center py-12">
                   <Mail className="mx-auto mb-4 text-slate-300" size={48} />
                   <p className="text-slate-600 font-semibold">No campaigns found</p>
-                  <p className="text-slate-400 text-sm mt-1">No emails have been sent to this user yet.</p>
+                  <p className="text-slate-400 text-[10px] mt-1">No emails have been sent to this user yet.</p>
                 </div>
               )}
             </div>
@@ -2341,19 +2343,19 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                     <h4 className="text-lg font-semibold text-slate-900 mb-4">Campaign Overview</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div>
-                        <p className="text-xs text-slate-500 mb-1">Provider</p>
+                        <p className="text-[10px] text-slate-500 mb-1">Provider</p>
                         <p className="font-semibold text-slate-900">
                           {campaignDetails.campaign.provider === 'mailchimp' ? 'Mailchimp' : 'SendGrid'}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 mb-1">Template Name</p>
+                        <p className="text-[10px] text-slate-500 mb-1">Template Name</p>
                         <p className="font-semibold text-slate-900">{campaignDetails.campaign.templateName}</p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 mb-1">Status</p>
+                        <p className="text-[10px] text-slate-500 mb-1">Status</p>
                         <span
-                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${campaignDetails.campaign.status === 'SUCCESS'
+                          className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold ${campaignDetails.campaign.status === 'SUCCESS'
                             ? 'bg-green-100 text-green-800'
                             : campaignDetails.campaign.status === 'PARTIAL'
                               ? 'bg-amber-100 text-amber-800'
@@ -2364,7 +2366,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                         </span>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 mb-1">Total Sent</p>
+                        <p className="text-[10px] text-slate-500 mb-1">Total Sent</p>
                         <p className="font-semibold text-slate-900">{campaignDetails.campaign.total}</p>
                       </div>
                     </div>
@@ -2374,7 +2376,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                   <div className="bg-white rounded-xl border border-slate-200 p-6">
                     <h4 className="text-lg font-semibold text-slate-900 mb-4">What Was Sent</h4>
                     <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-slate-200 text-sm">
+                      <table className="min-w-full divide-y divide-slate-200 text-[10px]">
                         <thead className="bg-slate-50">
                           <tr>
                             <th className="px-4 py-3 text-left font-semibold text-slate-700">Field</th>
@@ -2390,7 +2392,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                             <td className="px-4 py-3 text-slate-600 font-medium">Send Status</td>
                             <td className="px-4 py-3">
                               <span
-                                className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${campaignDetails.userEmailDetails.status === 'SUCCESS'
+                                className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold ${campaignDetails.userEmailDetails.status === 'SUCCESS'
                                   ? 'bg-green-100 text-green-800'
                                   : 'bg-red-100 text-red-800'
                                   }`}
@@ -2407,7 +2409,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           </tr>
                           <tr>
                             <td className="px-4 py-3 text-slate-600 font-medium">Template ID</td>
-                            <td className="px-4 py-3 text-slate-900 font-mono text-xs">
+                            <td className="px-4 py-3 text-slate-900 font-mono text-[10px]">
                               {campaignDetails.campaign.templateId}
                             </td>
                           </tr>
@@ -2432,7 +2434,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                       <Clock className="text-blue-600" size={20} />
                       Time Window Analysis
                     </h4>
-                    <div className="space-y-2 text-sm">
+                    <div className="space-y-2 text-[10px]">
                       <div className="flex items-center justify-between">
                         <span className="text-slate-600">Window Start:</span>
                         <span className="font-semibold text-slate-900">
@@ -2485,7 +2487,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                       <div className="mt-4">
                         <h5 className="font-semibold text-slate-900 mb-3">Bookings Made:</h5>
                         <div className="overflow-x-auto">
-                          <table className="min-w-full divide-y divide-slate-200 text-sm">
+                          <table className="min-w-full divide-y divide-slate-200 text-[10px]">
                             <thead className="bg-white">
                               <tr>
                                 <th className="px-4 py-2 text-left font-semibold text-slate-700">Booking ID</th>
@@ -2499,7 +2501,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                             <tbody className="divide-y divide-slate-100">
                               {campaignDetails.bookingsAfterEmail.map((booking) => (
                                 <tr key={booking.bookingId}>
-                                  <td className="px-4 py-3 text-slate-900 font-mono text-xs">{booking.bookingId}</td>
+                                  <td className="px-4 py-3 text-slate-900 font-mono text-[10px]">{booking.bookingId}</td>
                                   <td className="px-4 py-3 text-slate-900">{booking.clientName}</td>
                                   <td className="px-4 py-3 text-slate-600">
                                     {format(parseISO(booking.bookingCreatedAt), 'MMM d, yyyy • h:mm a')}
@@ -2511,7 +2513,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                   </td>
                                   <td className="px-4 py-3">
                                     <span
-                                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${statusColors[booking.bookingStatus as BookingStatus]}`}
+                                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-semibold ${statusColors[booking.bookingStatus as BookingStatus]}`}
                                     >
                                       {statusLabels[booking.bookingStatus as BookingStatus]}
                                     </span>
@@ -2522,13 +2524,13 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                         href={booking.calendlyMeetLink}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-500 text-white hover:bg-blue-600 transition"
+                                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-semibold bg-blue-500 text-white hover:bg-blue-600 transition"
                                       >
                                         <ExternalLink size={14} />
-                                        Join
+                                        
                                       </a>
                                     ) : (
-                                      <span className="text-slate-400 text-xs">—</span>
+                                      <span className="text-slate-400 text-[10px]">—</span>
                                     )}
                                   </td>
                                 </tr>
@@ -2617,17 +2619,17 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
 
               <div className="bg-slate-50 rounded-lg p-4 mb-6 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-700">Name:</span>
-                  <span className="text-sm text-slate-900">{selectedUserForDelete.name}</span>
+                  <span className="text-[10px] font-semibold text-slate-700">Name:</span>
+                  <span className="text-[10px] text-slate-900">{selectedUserForDelete.name}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-700">Email:</span>
-                  <span className="text-sm text-slate-900">{selectedUserForDelete.email}</span>
+                  <span className="text-[10px] font-semibold text-slate-700">Email:</span>
+                  <span className="text-[10px] text-slate-900">{selectedUserForDelete.email}</span>
                 </div>
                 {selectedUserForDelete.phone && selectedUserForDelete.phone !== 'Not Specified' && (
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-700">Mobile:</span>
-                    <span className="text-sm text-slate-900">{selectedUserForDelete.phone}</span>
+                    <span className="text-[10px] font-semibold text-slate-700">Mobile:</span>
+                    <span className="text-[10px] text-slate-900">{selectedUserForDelete.phone}</span>
                   </div>
                 )}
               </div>
@@ -2650,12 +2652,12 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                 >
                   {deletingUser ? (
                     <>
-                      <Loader2 className="animate-spin" size={18} />
+                      <Loader2 className="animate-spin" size={12} />
                       Deleting...
                     </>
                   ) : (
                     <>
-                      <Trash2 size={18} />
+                      <Trash2 size={12} />
                       Confirm Delete
                     </>
                   )}

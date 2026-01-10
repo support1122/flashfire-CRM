@@ -113,7 +113,7 @@ export default function CrmDashboardPage() {
 
       <aside
         className={`fixed md:relative z-50 bg-slate-900 text-white flex-col transition-all duration-300 ease-in-out ${
-          sidebarOpen ? 'translate-x-0 w-64 lg:w-72' : '-translate-x-full md:translate-x-0 md:w-12'
+          sidebarOpen ? 'translate-x-0 w-48 lg:w-56' : '-translate-x-full md:translate-x-0 md:w-12'
         } h-screen flex`}
       >
         <div className="px-6 py-8 border-b border-white/10 md:px-3 md:py-4">
