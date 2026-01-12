@@ -314,6 +314,8 @@ export default function Workflows() {
   const [totalLogPages, setTotalLogPages] = useState(1);
   const [totalLogs, setTotalLogs] = useState(0);
   const [sendingLogId, setSendingLogId] = useState<string | null>(null);
+  const [deletingLogId, setDeletingLogId] = useState<string | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ show: boolean; log: WorkflowLog | null }>({ show: false, log: null });
   const [logStats, setLogStats] = useState({
     total: 0,
     scheduled: 0,
@@ -826,13 +828,143 @@ export default function Workflows() {
             Failed
           </span>
         );
+      case 'cancelled':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700">
+            <XCircle size={12} />
+            Cancelled
+          </span>
+        );
       default:
         return null;
     }
   };
 
+  const handleDeleteWorkflow = async (log: WorkflowLog, deleteAll: boolean = false) => {
+    try {
+      setDeletingLogId(log.logId);
+
+      if (deleteAll) {
+        const response = await fetch(
+          `${API_BASE_URL}/api/workflow-logs/booking/${log.bookingId}/status/${log.triggerAction}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        if (data.success) {
+          showToast(`Deleted ${data.data.deleted} workflow(s) for this user`, 'success');
+          fetchLogs();
+          fetchLogStats();
+        } else {
+          showToast(data.message || 'Failed to delete workflows', 'error');
+        }
+      } else {
+        const response = await fetch(
+          `${API_BASE_URL}/api/workflow-logs/${log.logId}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        if (data.success) {
+          showToast('Workflow deleted successfully', 'success');
+          fetchLogs();
+          fetchLogStats();
+        } else {
+          showToast(data.message || 'Failed to delete workflow', 'error');
+        }
+      }
+
+      setDeleteModal({ show: false, log: null });
+    } catch (error) {
+      console.error('Error deleting workflow:', error);
+      showToast('Failed to delete workflow', 'error');
+    } finally {
+      setDeletingLogId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
+      {/* Delete Confirmation Modal */}
+      {deleteModal.show && deleteModal.log && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="bg-red-100 rounded-full p-2">
+                <Trash2 className="text-red-600" size={20} />
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900">Delete Workflow</h3>
+            </div>
+            <p className="text-slate-600 mb-6">
+              Are you sure you want to remove this scheduled workflow?
+            </p>
+            <div className="bg-slate-50 rounded-lg p-4 mb-6">
+              <div className="text-sm text-slate-700 space-y-1">
+                <p><strong>Client:</strong> {deleteModal.log.clientName || deleteModal.log.clientEmail}</p>
+                <p><strong>Status:</strong> {getActionLabel(deleteModal.log.triggerAction)}</p>
+                <p><strong>Channel:</strong> {deleteModal.log.step.channel === 'email' ? 'Email' : 'WhatsApp'}</p>
+                <p><strong>Scheduled For:</strong> {format(new Date(deleteModal.log.scheduledFor), 'MMM d, yyyy • h:mm a')}</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => handleDeleteWorkflow(deleteModal.log!, false)}
+                disabled={deletingLogId === deleteModal.log!.logId}
+                className="w-full px-4 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {deletingLogId === deleteModal.log!.logId ? (
+                  <>
+                    <Loader2 className="animate-spin" size={16} />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    <span>Delete This Workflow</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => handleDeleteWorkflow(deleteModal.log!, true)}
+                disabled={deletingLogId === deleteModal.log!.logId}
+                className="w-full px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {deletingLogId === deleteModal.log!.logId ? (
+                  <>
+                    <Loader2 className="animate-spin" size={16} />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={16} />
+                    <span>Delete All Workflows for This User ({getActionLabel(deleteModal.log!.triggerAction)})</span>
+                  </>
+                )}
+              </button>
+              <button
+                onClick={() => setDeleteModal({ show: false, log: null })}
+                disabled={deletingLogId === deleteModal.log!.logId}
+                className="w-full px-4 py-2.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast Notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
         {toasts.map((toast) => (
@@ -1944,60 +2076,74 @@ export default function Workflows() {
                                 </div>
                               </td>
                               <td className="py-4 px-4">
-                                {log.step.channel === 'email' && log.status !== 'executed' && (
-                                  <button
-                                    onClick={async () => {
-                                      if (sendingLogId === log.logId) return;
+                                <div className="flex items-center gap-2">
+                                  {log.step.channel === 'email' && log.status !== 'executed' && log.status !== 'cancelled' && (
+                                    <button
+                                      onClick={async () => {
+                                        if (sendingLogId === log.logId) return;
 
-                                      try {
-                                        setSendingLogId(log.logId);
-                                        const response = await fetch(
-                                          `${API_BASE_URL}/api/workflow-logs/${log.logId}/send-now`,
-                                          {
-                                            method: 'POST',
-                                            headers: {
-                                              'Content-Type': 'application/json',
-                                            },
+                                        try {
+                                          setSendingLogId(log.logId);
+                                          const response = await fetch(
+                                            `${API_BASE_URL}/api/workflow-logs/${log.logId}/send-now`,
+                                            {
+                                              method: 'POST',
+                                              headers: {
+                                                'Content-Type': 'application/json',
+                                              },
+                                            }
+                                          );
+
+                                          const data = await response.json();
+
+                                          if (data.success) {
+                                            showToast('Email sent successfully!', 'success');
+                                            fetchLogs();
+                                            fetchLogStats();
+                                          } else {
+                                            showToast(data.message || 'Failed to send email', 'error');
                                           }
-                                        );
-
-                                        const data = await response.json();
-
-                                        if (data.success) {
-                                          showToast('Email sent successfully!', 'success');
-                                          // Refresh logs
-                                          fetchLogs();
-                                          fetchLogStats();
-                                        } else {
-                                          showToast(data.message || 'Failed to send email', 'error');
+                                        } catch (error) {
+                                          console.error('Error sending email:', error);
+                                          showToast('Failed to send email', 'error');
+                                        } finally {
+                                          setSendingLogId(null);
                                         }
-                                      } catch (error) {
-                                        console.error('Error sending email:', error);
-                                        showToast('Failed to send email', 'error');
-                                      } finally {
-                                        setSendingLogId(null);
-                                      }
-                                    }}
-                                    disabled={sendingLogId === log.logId}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Send email now"
-                                  >
-                                    {sendingLogId === log.logId ? (
-                                      <>
-                                        <Loader2 className="animate-spin" size={14} />
-                                        <span>Sending...</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Send size={14} />
-                                        <span>Send Now</span>
-                                      </>
-                                    )}
-                                  </button>
-                                )}
-                                {log.status === 'executed' && (
-                                  <span className="text-xs text-green-600 font-medium">Sent</span>
-                                )}
+                                      }}
+                                      disabled={sendingLogId === log.logId}
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Send email now"
+                                    >
+                                      {sendingLogId === log.logId ? (
+                                        <>
+                                          <Loader2 className="animate-spin" size={14} />
+                                          <span>Sending...</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Send size={14} />
+                                          <span>Send Now</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  )}
+                                  {log.status === 'scheduled' && (
+                                    <button
+                                      onClick={() => setDeleteModal({ show: true, log })}
+                                      disabled={deletingLogId === log.logId}
+                                      className="inline-flex items-center gap-1.5 px-2 py-1.5 bg-red-500 text-white text-xs font-medium rounded-lg hover:bg-red-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                      title="Delete workflow"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
+                                  {log.status === 'executed' && (
+                                    <span className="text-xs text-green-600 font-medium">Sent</span>
+                                  )}
+                                  {log.status === 'cancelled' && (
+                                    <span className="text-xs text-slate-500 font-medium">Cancelled</span>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           ))}
