@@ -79,7 +79,7 @@ interface WorkflowStep {
 interface Workflow {
   _id?: string;
   workflowId: string;
-  triggerAction: 'no-show' | 'complete' | 'cancel' | 're-schedule';
+  triggerAction: 'no-show' | 'complete' | 'cancel' | 're-schedule' | 'paid';
   steps: WorkflowStep[];
   isActive: boolean;
   name?: string;
@@ -330,6 +330,8 @@ export default function Workflows() {
   const [triggeringBulk, setTriggeringBulk] = useState(false);
   const [bulkResult, setBulkResult] = useState<any>(null);
   const [includeCountries, setIncludeCountries] = useState<string[]>([]);
+  const [resendingFailedWhatsApp, setResendingFailedWhatsApp] = useState(false);
+  const [resendFailedResult, setResendFailedResult] = useState<any>(null);
 
   // Plan configuration modal state for finalkk template
   const [showPlanConfigModal, setShowPlanConfigModal] = useState(false);
@@ -805,6 +807,42 @@ export default function Workflows() {
     }
   };
 
+  const handleResendAllFailedWhatsApp = async () => {
+    if (!confirm('Are you sure you want to resend all failed WhatsApp workflow messages? This will delete the old failed records and create new ones for successful sends.')) {
+      return;
+    }
+
+    try {
+      setResendingFailedWhatsApp(true);
+      setResendFailedResult(null);
+      
+      const response = await fetch(`${API_BASE_URL}/api/workflows/bulk/resend-failed-whatsapp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setResendFailedResult(data.data);
+        showToast(`Successfully resent ${data.data.resent} failed WhatsApp messages, deleted ${data.data.deleted} old records`, 'success');
+        if (activeTab === 'logs') {
+          fetchLogs();
+          fetchLogStats();
+        }
+      } else {
+        showToast(data.message || 'Failed to resend failed WhatsApp messages', 'error');
+      }
+    } catch (error) {
+      console.error('Error resending failed WhatsApp workflows:', error);
+      showToast('Error resending failed WhatsApp workflows', 'error');
+    } finally {
+      setResendingFailedWhatsApp(false);
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'scheduled':
@@ -1068,6 +1106,7 @@ export default function Workflows() {
                     <option value="complete">Complete</option>
                     <option value="cancel">Cancel</option>
                     <option value="re-schedule">Re-schedule</option>
+                    <option value="paid">Paid</option>
                   </select>
                 </div>
 
@@ -2442,6 +2481,78 @@ export default function Workflows() {
                   </div>
                 )}
               </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+              <h2 className="text-xl font-semibold text-slate-900 mb-4">Send to All Failed WhatsApp</h2>
+              <p className="text-slate-600 mb-6">
+                Resend all failed WhatsApp workflow messages. The system will use the correct template name and parameters, and delete old failed records to reduce the count.
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleResendAllFailedWhatsApp}
+                  disabled={resendingFailedWhatsApp}
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {resendingFailedWhatsApp ? (
+                    <>
+                      <Loader2 className="animate-spin" size={18} />
+                      Resending...
+                    </>
+                  ) : (
+                    <>
+                      <MessageCircle size={18} />
+                      Send to All Failed WhatsApp
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {resendFailedResult && (
+                <div className={`mt-4 p-4 rounded-lg border ${
+                  resendFailedResult.errors && resendFailedResult.errors.length > 0
+                    ? 'bg-yellow-50 border-yellow-200'
+                    : 'bg-green-50 border-green-200'
+                }`}>
+                  <div className="flex items-start gap-3">
+                    {resendFailedResult.errors && resendFailedResult.errors.length > 0 ? (
+                      <AlertCircle className="text-yellow-600 mt-0.5" size={20} />
+                    ) : (
+                      <CheckCircle2 className="text-green-600 mt-0.5" size={20} />
+                    )}
+                    <div className="flex-1">
+                      <div className="font-semibold text-slate-900 mb-2">
+                        {resendFailedResult.errors && resendFailedResult.errors.length > 0
+                          ? 'Resend completed with some errors'
+                          : 'Resend completed successfully'}
+                      </div>
+                      <div className="space-y-1 text-sm">
+                        <div className="text-green-700">Resent: {resendFailedResult.resent}</div>
+                        <div className="text-slate-600">Deleted old records: {resendFailedResult.deleted}</div>
+                        <div className="text-slate-600">Total failed: {resendFailedResult.total}</div>
+                        {resendFailedResult.errors && resendFailedResult.errors.length > 0 && (
+                          <div className="text-red-700 mt-2">
+                            Errors: {resendFailedResult.errors.length}
+                            <div className="mt-2 space-y-1">
+                              {resendFailedResult.errors.slice(0, 5).map((error: any, idx: number) => (
+                                <div key={idx} className="text-xs">
+                                  {error.bookingId}: {error.error}
+                                </div>
+                              ))}
+                              {resendFailedResult.errors.length > 5 && (
+                                <div className="text-xs text-slate-500">
+                                  ... and {resendFailedResult.errors.length - 5} more errors
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Bookings List */}
