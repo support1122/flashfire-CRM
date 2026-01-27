@@ -35,7 +35,7 @@ interface TranscriptData {
 
 export default function MeetingNotesModal({ isOpen, onClose, bookingId, clientName, existingTranscriptId }: MeetingNotesModalProps) {
   const [transcriptId, setTranscriptId] = useState('');
-  const [loading, setLoading] = useState(false);
+  // const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [error, setError] = useState('');
   const [transcriptData, setTranscriptData] = useState<TranscriptData | null>(null);
@@ -83,7 +83,7 @@ export default function MeetingNotesModal({ isOpen, onClose, bookingId, clientNa
       setTranscriptId('');
       setError('');
       setTranscriptData(null);
-      setLoading(false);
+      // setLoading(false);
       setFetching(false);
       setCheckingExisting(false);
 
