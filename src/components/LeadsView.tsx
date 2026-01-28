@@ -22,7 +22,6 @@ import {
   AlertCircle,
   Info,
   Trash2,
-  FileText,
 } from 'lucide-react';
 import {
   format,
