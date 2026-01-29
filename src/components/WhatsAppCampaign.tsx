@@ -287,11 +287,10 @@ export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAp
     try {
       // First, get the campaign details to check recipient status
       const campaignResponse = await fetch(`${API_BASE_URL}/api/whatsapp-campaigns/${campaignId}`);
+      const campaignData = await campaignResponse.json().catch(() => ({}));
       if (!campaignResponse.ok) {
-        throw new Error(`Failed to fetch campaign details: ${campaignResponse.statusText}`);
+        throw new Error(campaignData.message || `Failed to fetch campaign: ${campaignResponse.statusText}`);
       }
-      const campaignData = await campaignResponse.json();
-      
       if (!campaignData.success) {
         throw new Error(campaignData.message || 'Failed to fetch campaign details');
       }
@@ -335,17 +334,14 @@ export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAp
         }),
       });
 
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(data.message || `HTTP error! status: ${response.status}`);
       }
-
-      const data = await response.json();
-
       if (data.success) {
-        const message = data.skippedPaid > 0 
+        const message = data.skippedPaid > 0
           ? `Campaign sent! ${data.skippedPaid} contacts were skipped because they are marked as paid.`
           : 'Campaign messages are being sent! Check back in a few minutes.';
-        
         alert(message);
         fetchScheduledCampaigns(true);
         fetchCampaigns(1, true);
@@ -410,8 +406,6 @@ export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAp
         ...(scheduledAtIso ? { scheduledAt: scheduledAtIso } : {})
       };
 
-      console.log('Creating WhatsApp campaign:', payload);
-
       const response = await fetch(`${API_BASE_URL}/api/whatsapp-campaigns`, {
         method: 'POST',
         headers: {
@@ -420,26 +414,20 @@ export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAp
         body: JSON.stringify(payload),
       });
 
+      const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(data.message || `HTTP error! status: ${response.status}`);
       }
-
-      const data = await response.json();
-      console.log('Campaign creation response:', data);
 
       if (data.success) {
         setSuccess(data.message || 'WhatsApp campaign created successfully!');
         setMobileNumbers('');
         setParamValues((prev) => prev.map(() => ''));
         setScheduledAt('');
-        
-        // Refresh campaigns in background (don't wait) with cache busting
         setTimeout(() => {
-          fetchCampaigns(1, true); // true = bust cache
-          fetchScheduledCampaigns(true); // true = bust cache
+          fetchCampaigns(1, true);
+          fetchScheduledCampaigns(true);
         }, 500);
-        
-        // Switch to appropriate tab
         if (data.campaign?.status === 'SCHEDULED') {
           setActiveTab('scheduled');
         } else {

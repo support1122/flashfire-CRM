@@ -73,6 +73,7 @@ const statusColors: Record<BookingStatus, string> = {
 };
 
 type BookingStatus = 'scheduled' | 'completed' | 'canceled' | 'rescheduled' | 'no-show' | 'ignored' | 'paid';
+type Qualification = 'MQL' | 'SQL' | 'Converted';
 
 interface Booking {
   bookingId: string;
@@ -83,6 +84,7 @@ interface Booking {
   scheduledEventStartTime?: string;
   bookingCreatedAt: string;
   bookingStatus: BookingStatus;
+  qualification?: Qualification;
   utmSource?: string;
   paymentPlan?: PaymentPlan;
   meetingNotes?: string;
@@ -109,6 +111,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [planFilter, setPlanFilter] = useState<PlanName | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
+  const [qualificationFilter, setQualificationFilter] = useState<'all' | 'mql' | 'sql' | 'converted'>('all');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState<string>('');
@@ -123,6 +126,9 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
   const [bookingsPagination, setBookingsPagination] = useState({ page: 1, limit: 50, total: 0, pages: 1 });
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [planBreakdown, setPlanBreakdown] = useState<Array<{ _id: string; count: number; revenue: number }>>([]);
+  const [mqlCount, setMqlCount] = useState(0);
+  const [sqlCount, setSqlCount] = useState(0);
+  const [convertedCount, setConvertedCount] = useState(0);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [selectedBookingForNotes, setSelectedBookingForNotes] = useState<{ id: string; name: string; notes: string } | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -185,7 +191,9 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       if (planFilter !== 'all') {
         params.append('planName', planFilter);
       }
-      if (statusFilter !== 'all') {
+      if (qualificationFilter !== 'all') {
+        params.append('qualification', qualificationFilter);
+      } else if (statusFilter !== 'all') {
         params.append('status', statusFilter);
       }
       if (search) {
@@ -214,6 +222,9 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         if (data.stats) {
           setTotalRevenue(data.stats.totalRevenue || 0);
           setPlanBreakdown(data.stats.planBreakdown || []);
+          setMqlCount(data.stats.mqlCount ?? 0);
+          setSqlCount(data.stats.sqlCount ?? 0);
+          setConvertedCount(data.stats.convertedCount ?? 0);
         }
       } else {
         throw new Error(data.message || 'Failed to fetch leads');
@@ -225,7 +236,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       setRefreshing(false);
       setLoading(false);
     }
-  }, [planFilter, statusFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
+  }, [planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
 
   // Debounce search input to avoid too many API calls
   useEffect(() => {
@@ -242,7 +253,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
     setBookingsPage(page);
     fetchLeads(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planFilter, statusFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
+  }, [planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
 
   useEffect(() => {
     const handleBookingUpdate = (event: CustomEvent) => {
@@ -282,6 +293,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         scheduledTime: booking.scheduledEventStartTime,
         source: booking.utmSource || 'direct',
         status: booking.bookingStatus,
+        qualification: booking.qualification ?? (booking.bookingStatus === 'paid' ? 'Converted' : booking.bookingStatus === 'completed' ? 'SQL' : 'MQL'),
         meetLink: booking.calendlyMeetLink && booking.calendlyMeetLink !== 'Not Provided' ? booking.calendlyMeetLink : undefined,
         notes: booking.anythingToKnow,
         meetingNotes: booking.meetingNotes,
@@ -762,6 +774,21 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
               <p className="text-2xl font-bold text-slate-900">{filteredData.length.toLocaleString()}</p>
               <p className="text-[11px] text-slate-500 mt-1">After active filters</p>
             </div>
+            <div className="flex-1 min-w-[180px] bg-violet-50 border border-violet-100 px-4 py-3 text-left">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600">MQL</p>
+              <p className="text-2xl font-bold text-slate-900">{mqlCount.toLocaleString()}</p>
+              <p className="text-[11px] text-slate-500 mt-1">Marketing qualified</p>
+            </div>
+            <div className="flex-1 min-w-[180px] bg-emerald-50 border border-emerald-100 px-4 py-3 text-left">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">SQL</p>
+              <p className="text-2xl font-bold text-slate-900">{sqlCount.toLocaleString()}</p>
+              <p className="text-[11px] text-slate-500 mt-1">Sales qualified</p>
+            </div>
+            <div className="flex-1 min-w-[180px] bg-teal-50 border border-teal-100 px-4 py-3 text-left">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-600">Converted</p>
+              <p className="text-2xl font-bold text-slate-900">{convertedCount.toLocaleString()}</p>
+              <p className="text-[11px] text-slate-500 mt-1">Paid</p>
+            </div>
           </div>
         </div>
       </div>
@@ -788,6 +815,18 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
             <div className="flex items-baseline gap-2">
               <span className="text-slate-600 text-[11px] font-medium">Completed</span>
               <span className="text-lg font-bold text-emerald-700">{statusStats.completed}</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-violet-600 text-[11px] font-medium">MQL</span>
+              <span className="text-lg font-bold text-violet-700">{statusStats.booked + statusStats.canceled + statusStats.noShow + statusStats.rescheduled + statusStats.ignored}</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-emerald-600 text-[11px] font-medium">SQL</span>
+              <span className="text-lg font-bold text-emerald-700">{statusStats.completed}</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-teal-600 text-[11px] font-medium">Converted</span>
+              <span className="text-lg font-bold text-teal-700">{statusStats.paid}</span>
             </div>
             <div className="flex items-baseline gap-2 ml-auto">
               <span className="text-slate-500 text-[11px] font-medium">Total:</span>
@@ -859,6 +898,16 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
             />
           </div>
           <select
+            value={qualificationFilter}
+            onChange={(e) => setQualificationFilter(e.target.value as 'all' | 'mql' | 'sql' | 'converted')}
+            className="text-[11px] border border-slate-200  px-3 py-2 bg-white"
+          >
+            <option value="all">All qualifications</option>
+            <option value="mql">MQL</option>
+            <option value="sql">SQL</option>
+            <option value="converted">Converted</option>
+          </select>
+          <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
             className="text-[11px] border border-slate-200  px-3 py-2 bg-white"
@@ -928,7 +977,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
               className="border border-slate-200 px-3 py-2 bg-white w-24"
             />
           </div>
-          {(fromDate || toDate || searchInput || planFilter !== 'all' || utmFilter !== 'all' || statusFilter !== 'all' || minAmount || maxAmount) && (
+          {(fromDate || toDate || searchInput || planFilter !== 'all' || utmFilter !== 'all' || statusFilter !== 'all' || qualificationFilter !== 'all' || minAmount || maxAmount) && (
             <button
               onClick={() => {
                 setFromDate('');
@@ -936,6 +985,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                 setPlanFilter('all');
                 setUtmFilter('all');
                 setStatusFilter('all');
+                setQualificationFilter('all');
                 setSearchInput('');
                 setSearch('');
                 setMinAmount('');
@@ -1030,6 +1080,17 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                       <div className="flex flex-col gap-0.5">
                         <span className="inline-flex w-fit items-center text-[11px] px-1 py-0.5 font-semibold bg-orange-50 text-orange-700 rounded">
                           Lead
+                        </span>
+                        <span
+                          className={`inline-flex w-fit items-center text-[9px] px-1 py-0.5 font-semibold rounded ${
+                            row.qualification === 'Converted'
+                              ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                              : row.qualification === 'SQL'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-violet-50 text-violet-700 border border-violet-200'
+                          }`}
+                        >
+                          {row.qualification}
                         </span>
                         {isClaimed && (
                           <span className="inline-flex items-center px-1 py-0.5 rounded-full text-[9px] font-semibold bg-orange-50 text-orange-700 border border-orange-200">
