@@ -55,11 +55,17 @@ export default function ClaimLeadsView() {
   const [myLeadsStatusFilter, setMyLeadsStatusFilter] = useState<'all' | 'paid' | 'scheduled' | 'completed'>('all');
   const [myLeadsPlanFilter, setMyLeadsPlanFilter] = useState<PlanName | 'all'>('all');
 
-  /** Prorated incentive: same % as (amount paid / current plan price). Uses plan config from BDA Incentive Settings (single source of truth). */
-  const getIncentiveProrated = useCallback((planName?: PlanName, amountPaid?: number): number => {
+  /** Prorated incentive: same % as (amount paid / current plan price). Uses plan config from BDA Incentive Settings (single source of truth).
+   * Note: For multi-currency support, this should use currency-specific configs. Currently uses basePriceUsd which works for USD.
+   * For CAD, the admin should configure CAD-specific base prices in the admin settings. */
+  const getIncentiveProrated = useCallback((planName?: PlanName, amountPaid?: number, currency?: string): number => {
     if (!planName || amountPaid == null || amountPaid <= 0) return 0;
     const config = incentiveConfig[planName];
     if (!config) return 0;
+    
+    // For now, use basePriceUsd (works for USD)
+    // TODO: Update PlanConfigContext to support currency-specific base prices
+    // For CAD, admin needs to configure CAD base prices separately in admin settings
     const basePrice = config.basePriceUsd > 0 ? config.basePriceUsd : 1;
     const paymentRatio = Math.min(1, amountPaid / basePrice);
     return config.incentivePerLeadInr * paymentRatio;
@@ -524,13 +530,16 @@ export default function ClaimLeadsView() {
                             } else {
                               const plan = planOptions.find(p => p.key === selectedValue);
                               if (plan) {
+                                const existingCurrency = formData.paymentPlan?.currency || 'USD';
+                                const currencySymbol = existingCurrency === 'CAD' ? 'CA$' : '$';
+                                const existingPrice = formData.paymentPlan?.price ?? plan.price;
                                 setFormData({
                                   ...formData,
                                   paymentPlan: {
                                     name: plan.key,
-                                    price: formData.paymentPlan?.price ?? plan.price,
-                                    currency: 'USD',
-                                    displayPrice: formData.paymentPlan?.displayPrice ?? plan.displayPrice,
+                                    price: existingPrice,
+                                    currency: existingCurrency,
+                                    displayPrice: `${currencySymbol}${existingPrice.toFixed(2)}`,
                                   },
                                 });
                               }
@@ -549,9 +558,38 @@ export default function ClaimLeadsView() {
                         </select>
                       </div>
 
+                      {formData.paymentPlan?.name && (
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-2">
+                            Currency <span className="text-red-600">*</span>
+                          </label>
+                          <select
+                            value={formData.paymentPlan?.currency || 'USD'}
+                            onChange={(e) => {
+                              const currency = e.target.value;
+                              const currentPlan = formData.paymentPlan || { name: 'PRIME' as PlanName, price: 0, currency: 'USD', displayPrice: '' };
+                              const currencySymbol = currency === 'CAD' ? 'CA$' : currency === 'USD' ? '$' : currency;
+                              setFormData({
+                                ...formData,
+                                paymentPlan: {
+                                  ...currentPlan,
+                                  currency,
+                                  displayPrice: currentPlan.price > 0 ? `${currencySymbol}${currentPlan.price.toFixed(2)}` : '',
+                                },
+                              });
+                            }}
+                            className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white cursor-pointer"
+                            disabled={saving}
+                          >
+                            <option value="USD">USD ($)</option>
+                            <option value="CAD">CAD (CA$)</option>
+                          </select>
+                        </div>
+                      )}
+
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">
-                          Amount paid by client ($) <span className="text-red-600">*</span>
+                          Amount paid by client {formData.paymentPlan?.currency === 'CAD' ? '(CA$)' : '($)'} <span className="text-red-600">*</span>
                         </label>
                         <input
                           type="number"
@@ -575,12 +613,14 @@ export default function ClaimLeadsView() {
                               const price = parseFloat(value);
                               if (!isNaN(price) && price >= 0) {
                                 const currentPlan = formData.paymentPlan || { name: 'PRIME' as PlanName, price: 0, currency: 'USD', displayPrice: '' };
+                                const currency = currentPlan.currency || 'USD';
+                                const currencySymbol = currency === 'CAD' ? 'CA$' : '$';
                                 setFormData({
                                   ...formData,
                                   paymentPlan: {
                                     ...currentPlan,
                                     price,
-                                    displayPrice: `$${price.toFixed(2)}`,
+                                    displayPrice: `${currencySymbol}${price.toFixed(2)}`,
                                   },
                                 });
                               }
@@ -588,7 +628,7 @@ export default function ClaimLeadsView() {
                           }}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
                           disabled={saving}
-                          placeholder="Enter amount paid (e.g., 119 or 100)"
+                          placeholder={`Enter amount paid (e.g., ${formData.paymentPlan?.currency === 'CAD' ? '799' : '599'})`}
                           title="Required. Incentive is prorated by this amount vs plan price."
                         />
                         <p className="text-xs text-slate-500 mt-1">Required. Incentive is prorated </p>
@@ -600,7 +640,7 @@ export default function ClaimLeadsView() {
                             Incentive (INR)
                           </label>
                           <div className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-emerald-700 font-semibold">
-                            ₹{getIncentiveProrated(formData.paymentPlan.name, formData.paymentPlan.price ?? 0).toFixed(0)}
+                            ₹{getIncentiveProrated(formData.paymentPlan.name, formData.paymentPlan.price ?? 0, formData.paymentPlan.currency).toFixed(0)}
                           </div>
                         </div>
                       )}
@@ -850,7 +890,7 @@ export default function ClaimLeadsView() {
                               )}
                               {item.bookingStatus === 'paid' && item.paymentPlan && item.paymentPlan.price && (
                                 <p className="text-emerald-700">
-                                  Incentive: ₹{getIncentiveProrated(item.paymentPlan.name, item.paymentPlan.price).toFixed(0)}
+                                  Incentive: ₹{getIncentiveProrated(item.paymentPlan.name, item.paymentPlan.price, item.paymentPlan.currency).toFixed(0)}
                                 </p>
                               )}
                             </div>
@@ -908,7 +948,7 @@ export default function ClaimLeadsView() {
                 <div className="bg-slate-50 rounded-lg p-4 mb-4">
                   <div className="text-sm text-slate-600 mb-1">Plan: <span className="font-semibold text-slate-900">{formData.paymentPlan.name}</span></div>
                   <div className="text-sm text-slate-600 mb-1">Amount paid by client: <span className="font-semibold text-emerald-600">{formData.paymentPlan.displayPrice || `$${formData.paymentPlan.price}`}</span></div>
-                  <div className="text-sm text-slate-600">Your incentive (prorated): <span className="font-semibold text-emerald-700">₹{getIncentiveProrated(formData.paymentPlan.name, formData.paymentPlan.price ?? 0).toFixed(0)}</span></div>
+                  <div className="text-sm text-slate-600">Your incentive (prorated): <span className="font-semibold text-emerald-700">₹{getIncentiveProrated(formData.paymentPlan.name, formData.paymentPlan.price ?? 0, formData.paymentPlan.currency).toFixed(0)}</span></div>
                 </div>
               )}
               <div className="flex items-center gap-3">
