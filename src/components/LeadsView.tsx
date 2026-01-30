@@ -29,14 +29,14 @@ import {
 } from 'date-fns';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
+import { useCrmAuth } from '../auth/CrmAuthContext';
+import { usePlanConfig, type PlanOption, type PlanName } from '../context/PlanConfigContext';
 import NotesModal from './NotesModal';
 import FollowUpModal, { type FollowUpData } from './FollowUpModal';
 import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
-type PlanName = 'PRIME' | 'IGNITE' | 'PROFESSIONAL' | 'EXECUTIVE';
-type PlanOption = { key: PlanName; label: string; price: number; displayPrice: string; currency?: string };
 type PaymentPlan = {
   name: PlanName;
   price: number;
@@ -44,13 +44,6 @@ type PaymentPlan = {
   displayPrice?: string;
   selectedAt?: string;
 };
-
-const PLAN_OPTIONS: PlanOption[] = [
-  { key: 'PRIME', label: 'PRIME', price: 119, displayPrice: '$119', currency: 'USD' },
-  { key: 'IGNITE', label: 'IGNITE', price: 199, displayPrice: '$199', currency: 'USD' },
-  { key: 'PROFESSIONAL', label: 'PROFESSIONAL', price: 349, displayPrice: '$349', currency: 'USD' },
-  { key: 'EXECUTIVE', label: 'EXECUTIVE', price: 599, displayPrice: '$599', currency: 'USD' },
-];
 
 const statusLabels: Record<BookingStatus, string> = {
   scheduled: 'Scheduled',
@@ -99,11 +92,14 @@ interface Booking {
 }
 
 interface LeadsViewProps {
+  variant?: 'all' | 'qualified';
   onOpenEmailCampaign: (payload: EmailPrefillPayload) => void;
   onOpenWhatsAppCampaign?: (payload: WhatsAppPrefillPayload) => void;
 }
 
-export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign }: LeadsViewProps) {
+export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpenWhatsAppCampaign }: LeadsViewProps) {
+  const { token } = useCrmAuth();
+  const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -191,9 +187,10 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       if (planFilter !== 'all') {
         params.append('planName', planFilter);
       }
-      if (qualificationFilter !== 'all') {
+      if (variant === 'qualified' && qualificationFilter !== 'all') {
         params.append('qualification', qualificationFilter);
-      } else if (statusFilter !== 'all') {
+      }
+      if (statusFilter !== 'all') {
         params.append('status', statusFilter);
       }
       if (search) {
@@ -212,7 +209,9 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
         params.append('maxAmount', maxAmount);
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/leads/paginated?${params}`);
+      const headers: HeadersInit = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const response = await fetch(`${API_BASE_URL}/api/leads/paginated?${params}`, { headers });
       const data = await safeJsonParse(response);
 
       if (data.success) {
@@ -236,7 +235,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       setRefreshing(false);
       setLoading(false);
     }
-  }, [planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
+  }, [token, variant, planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
 
   // Debounce search input to avoid too many API calls
   useEffect(() => {
@@ -247,13 +246,12 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Reset to page 1 and fetch when filters change
   useEffect(() => {
     const page = 1;
     setBookingsPage(page);
     fetchLeads(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
+  }, [variant, planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
 
   useEffect(() => {
     const handleBookingUpdate = (event: CustomEvent) => {
@@ -757,38 +755,46 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
       <div className="bg-gray-50 border border-slate-200  px-6 py-6 shadow-sm">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div className="text-center md:text-left space-y-2">
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">Unified Data</p>
-            <h1 className="text-3xl font-bold text-slate-900">Leads</h1>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">{variant === 'qualified' ? 'Pipeline' : 'Unified Data'}</p>
+            <h1 className="text-3xl font-bold text-slate-900">{variant === 'qualified' ? 'Qualified Leads' : 'Leads'}</h1>
             <p className="text-slate-600 max-w-2xl">
-              View and manage all clients. Each client appears once with their latest booking status. Status and amount are editable.
+              {variant === 'qualified'
+                ? 'MQL, SQL & Converted pipeline. Each client appears once with their latest qualification. Filter and manage by stage.'
+                : 'View and manage all clients. Each client appears once with their latest booking status. Status and amount are editable.'}
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            <div className="flex-1 min-w-[180px] bg-orange-50 border border-orange-100  px-4 py-3 text-left">
+          <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto flex-wrap">
+            <div className="flex-1 min-w-[160px] bg-orange-50 border border-orange-100 px-4 py-3 text-left rounded-lg">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-orange-600">Total Leads</p>
               <p className="text-2xl font-bold text-slate-900">{bookingsPagination.total.toLocaleString()}</p>
               <p className="text-[11px] text-slate-500 mt-1">Across all sources</p>
             </div>
-            <div className="flex-1 min-w-[180px] bg-slate-50 border border-slate-100  px-4 py-3 text-left">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Currently Showing</p>
-              <p className="text-2xl font-bold text-slate-900">{filteredData.length.toLocaleString()}</p>
-              <p className="text-[11px] text-slate-500 mt-1">After active filters</p>
-            </div>
-            <div className="flex-1 min-w-[180px] bg-violet-50 border border-violet-100 px-4 py-3 text-left">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600">MQL</p>
-              <p className="text-2xl font-bold text-slate-900">{mqlCount.toLocaleString()}</p>
-              <p className="text-[11px] text-slate-500 mt-1">Marketing qualified</p>
-            </div>
-            <div className="flex-1 min-w-[180px] bg-emerald-50 border border-emerald-100 px-4 py-3 text-left">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">SQL</p>
-              <p className="text-2xl font-bold text-slate-900">{sqlCount.toLocaleString()}</p>
-              <p className="text-[11px] text-slate-500 mt-1">Sales qualified</p>
-            </div>
-            <div className="flex-1 min-w-[180px] bg-teal-50 border border-teal-100 px-4 py-3 text-left">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-600">Converted</p>
-              <p className="text-2xl font-bold text-slate-900">{convertedCount.toLocaleString()}</p>
-              <p className="text-[11px] text-slate-500 mt-1">Paid</p>
-            </div>
+            {variant === 'all' && (
+              <div className="flex-1 min-w-[160px] bg-slate-50 border border-slate-100 px-4 py-3 text-left rounded-lg">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Currently Showing</p>
+                <p className="text-2xl font-bold text-slate-900">{filteredData.length.toLocaleString()}</p>
+                <p className="text-[11px] text-slate-500 mt-1">After active filters</p>
+              </div>
+            )}
+            {variant === 'qualified' && (
+              <>
+                <div className="flex-1 min-w-[140px] bg-violet-50 border border-violet-100 px-4 py-3 text-left rounded-lg">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600">MQL</p>
+                  <p className="text-2xl font-bold text-slate-900">{mqlCount.toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Marketing qualified</p>
+                </div>
+                <div className="flex-1 min-w-[140px] bg-emerald-50 border border-emerald-100 px-4 py-3 text-left rounded-lg">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">SQL</p>
+                  <p className="text-2xl font-bold text-slate-900">{sqlCount.toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Sales qualified</p>
+                </div>
+                <div className="flex-1 min-w-[140px] bg-teal-50 border border-teal-100 px-4 py-3 text-left rounded-lg">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-600">Converted</p>
+                  <p className="text-2xl font-bold text-slate-900">{convertedCount.toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-500 mt-1">Paid</p>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -816,18 +822,22 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
               <span className="text-slate-600 text-[11px] font-medium">Completed</span>
               <span className="text-lg font-bold text-emerald-700">{statusStats.completed}</span>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-violet-600 text-[11px] font-medium">MQL</span>
-              <span className="text-lg font-bold text-violet-700">{statusStats.booked + statusStats.canceled + statusStats.noShow + statusStats.rescheduled + statusStats.ignored}</span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-emerald-600 text-[11px] font-medium">SQL</span>
-              <span className="text-lg font-bold text-emerald-700">{statusStats.completed}</span>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-teal-600 text-[11px] font-medium">Converted</span>
-              <span className="text-lg font-bold text-teal-700">{statusStats.paid}</span>
-            </div>
+            {variant === 'qualified' && (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-violet-600 text-[11px] font-medium">MQL</span>
+                  <span className="text-lg font-bold text-violet-700">{statusStats.booked + statusStats.canceled + statusStats.noShow + statusStats.rescheduled + statusStats.ignored}</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-emerald-600 text-[11px] font-medium">SQL</span>
+                  <span className="text-lg font-bold text-emerald-700">{statusStats.completed}</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-teal-600 text-[11px] font-medium">Converted</span>
+                  <span className="text-lg font-bold text-teal-700">{statusStats.paid}</span>
+                </div>
+              </>
+            )}
             <div className="flex items-baseline gap-2 ml-auto">
               <span className="text-slate-500 text-[11px] font-medium">Total:</span>
               <span className="text-lg font-bold text-slate-700">{statusStats.total}</span>
@@ -897,16 +907,18 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
               className="text-[11px] bg-transparent focus:outline-none w-full"
             />
           </div>
-          <select
-            value={qualificationFilter}
-            onChange={(e) => setQualificationFilter(e.target.value as 'all' | 'mql' | 'sql' | 'converted')}
-            className="text-[11px] border border-slate-200  px-3 py-2 bg-white"
-          >
-            <option value="all">All qualifications</option>
-            <option value="mql">MQL</option>
-            <option value="sql">SQL</option>
-            <option value="converted">Converted</option>
-          </select>
+          {variant === 'qualified' && (
+            <select
+              value={qualificationFilter}
+              onChange={(e) => setQualificationFilter(e.target.value as 'all' | 'mql' | 'sql' | 'converted')}
+              className="text-[11px] border border-slate-200 px-3 py-2 bg-white rounded-lg min-w-[160px]"
+            >
+              <option value="all">All qualifications</option>
+              <option value="mql">MQL</option>
+              <option value="sql">SQL</option>
+              <option value="converted">Converted</option>
+            </select>
+          )}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
@@ -925,7 +937,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
             className="text-[11px] border border-slate-200  px-3 py-2 bg-white"
           >
             <option value="all">All plans</option>
-            {PLAN_OPTIONS.map((plan) => (
+            {planOptions.map((plan) => (
               <option key={plan.key} value={plan.key}>
                 {plan.label} ({plan.displayPrice})
               </option>
@@ -1081,17 +1093,19 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                         <span className="inline-flex w-fit items-center text-[11px] px-1 py-0.5 font-semibold bg-orange-50 text-orange-700 rounded">
                           Lead
                         </span>
-                        <span
-                          className={`inline-flex w-fit items-center text-[9px] px-1 py-0.5 font-semibold rounded ${
-                            row.qualification === 'Converted'
-                              ? 'bg-teal-50 text-teal-700 border border-teal-200'
-                              : row.qualification === 'SQL'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-violet-50 text-violet-700 border border-violet-200'
-                          }`}
-                        >
-                          {row.qualification}
-                        </span>
+                        {variant === 'qualified' && (
+                          <span
+                            className={`inline-flex w-fit items-center text-[9px] px-1 py-0.5 font-semibold rounded ${
+                              row.qualification === 'Converted'
+                                ? 'bg-teal-50 text-teal-700 border border-teal-200'
+                                : row.qualification === 'SQL'
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-violet-50 text-violet-700 border border-violet-200'
+                            }`}
+                          >
+                            {row.qualification}
+                          </span>
+                        )}
                         {isClaimed && (
                           <span className="inline-flex items-center px-1 py-0.5 rounded-full text-[9px] font-semibold bg-orange-50 text-orange-700 border border-orange-200">
                             Claimed
@@ -1214,7 +1228,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                     </button>
                                     {isPlanOpen && (
                                       <div className="px-2 pb-1.5 grid grid-cols-1 gap-0.5">
-                                        {PLAN_OPTIONS.map((plan) => (
+                                        {planOptions.map((plan) => (
                                           <button
                                             key={plan.key}
                                             onClick={() => {
@@ -1256,7 +1270,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                               <select
                                 value={row.paymentPlan.name}
                                 onChange={(e) => {
-                                  const plan = PLAN_OPTIONS.find(p => p.key === e.target.value);
+                                  const plan = planOptions.find(p => p.key === e.target.value);
                                   if (plan && row.bookingId) {
                                     handleUpdateAmount(row.bookingId, plan.price, plan.key);
                                   }
@@ -1265,7 +1279,7 @@ export default function LeadsView({ onOpenEmailCampaign, onOpenWhatsAppCampaign 
                                 className="w-full text-[9px] border border-orange-200 rounded px-1 py-0.5 bg-orange-50 text-orange-800"
                                 title={row.paymentPlan.name}
                               >
-                                {PLAN_OPTIONS.map((plan) => (
+                                {planOptions.map((plan) => (
                                   <option key={plan.key} value={plan.key}>
                                     {plan.label} ({plan.displayPrice})
                                   </option>

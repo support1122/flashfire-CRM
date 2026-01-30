@@ -49,12 +49,11 @@ import {
   setCachedBookings,
   clearAllCache,
 } from '../utils/dataCache';
+import { usePlanConfig, type PlanOption, type PlanName } from '../context/PlanConfigContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
 type BookingStatus = 'scheduled' | 'completed' | 'canceled' | 'rescheduled' | 'no-show' | 'paid' | 'ignored';
-type PlanName = 'PRIME' | 'IGNITE' | 'PROFESSIONAL' | 'EXECUTIVE';
-type PlanOption = { key: PlanName; label: string; price: number; displayPrice: string; currency?: string };
 type PaymentPlan = {
   name: PlanName;
   price: number;
@@ -62,12 +61,6 @@ type PaymentPlan = {
   displayPrice?: string;
   selectedAt?: string;
 };
-const PLAN_OPTIONS: PlanOption[] = [
-  { key: 'PRIME', label: 'PRIME', price: 119, displayPrice: '$119', currency: 'USD' },
-  { key: 'IGNITE', label: 'IGNITE', price: 199, displayPrice: '$199', currency: 'USD' },
-  { key: 'PROFESSIONAL', label: 'PROFESSIONAL', price: 349, displayPrice: '$349', currency: 'USD' },
-  { key: 'EXECUTIVE', label: 'EXECUTIVE', price: 599, displayPrice: '$599', currency: 'USD' },
-];
 
 interface Booking {
   bookingId: string;
@@ -122,6 +115,7 @@ interface AnalyticsDashboardProps {
 }
 
 export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDashboardProps) {
+  const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>(() => {
     const cached = getCachedBookings<Booking>();
     return cached || [];
@@ -497,7 +491,7 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
 
   const getPlanOptionByName = (name?: string | null) => {
     if (!name) return undefined;
-    return PLAN_OPTIONS.find((p) => p.key === name) || undefined;
+    return planOptions.find((p) => p.key === name) || undefined;
   };
 
   const handleStatusUpdate = async (bookingId: string, status: BookingStatus, plan?: PlanOption) => {
@@ -1183,7 +1177,7 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
                 className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
               >
                 <option value="all">All plans</option>
-                {PLAN_OPTIONS.map((plan) => (
+                {planOptions.map((plan) => (
                   <option key={plan.key} value={plan.key}>
                     {plan.label} ({plan.displayPrice})
                   </option>
@@ -1304,7 +1298,7 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
                                 className="text-xs border border-emerald-200 rounded-lg px-2 py-1 bg-emerald-50 text-emerald-800"
                               >
                                 <option value="">Select plan</option>
-                                {PLAN_OPTIONS.map((plan) => (
+                                {planOptions.map((plan) => (
                                   <option key={plan.key} value={plan.key}>
                                     {plan.label} ({plan.displayPrice})
                                   </option>
@@ -1375,7 +1369,7 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
                                           </button>
                                           {isPlanOpen && (
                                             <div className="px-4 pb-3 grid grid-cols-1 gap-1">
-                                              {PLAN_OPTIONS.map((plan) => (
+                                              {planOptions.map((plan) => (
                                                 <button
                                                   key={plan.key}
                                                   onClick={() => {

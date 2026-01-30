@@ -109,14 +109,25 @@ export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAp
       { label: 'Time with Timezone ({{3}})', placeholder: 'e.g., 4pm – 4:15pm ET' },
       { label: 'Reschedule Link ({{4}})', placeholder: 'https://calendly.com/...' },
     ],
+    finalkk: [
+      { label: 'Client Name ({{1}})', placeholder: 'e.g., Valued Client' },
+      { label: 'Plan Name ({{2}})', placeholder: 'e.g., PRIME' },
+      { label: 'Date ({{3}})', placeholder: 'e.g., Jan 15, 2024' },
+    ],
+    plan_followup_utility_01dd: [
+      { label: 'Client Name ({{1}})', placeholder: 'e.g., Valued Client' },
+      { label: 'Plan Amount ({{2}})', placeholder: 'e.g., $99 or $0' },
+    ],
   };
 
   const getParamConfig = (name: string) => {
-    const key = (name || '').toLowerCase();
+    const key = (name || '').toLowerCase().trim();
     if (TEMPLATE_PARAM_CONFIG[key]) return TEMPLATE_PARAM_CONFIG[key];
     return [
       { label: 'Parameter 1 ({{1}})', placeholder: 'Value for {{1}}' },
       { label: 'Parameter 2 ({{2}})', placeholder: 'Value for {{2}}' },
+      { label: 'Parameter 3 ({{3}})', placeholder: 'Value for {{3}}' },
+      { label: 'Parameter 4 ({{4}})', placeholder: 'Value for {{4}}' },
     ];
   };
 

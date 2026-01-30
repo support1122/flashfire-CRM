@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Database,
+  Filter,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -18,6 +19,7 @@ import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 import type { CrmPermission } from '../auth/crmTypes';
+import { PlanConfigProvider } from '../context/PlanConfigContext';
 import CampaignManager from '../components/CampaignManager';
 import EmailCampaign from '../components/EmailCampaign';
 import WhatsAppCampaign from '../components/WhatsAppCampaign';
@@ -25,11 +27,12 @@ import AnalyticsDashboard from '../components/AnalyticsDashboard';
 import UnifiedDataView from '../components/UnifiedDataView';
 import Workflows from '../components/Workflows';
 import LeadsView from '../components/LeadsView';
+import QualifiedLeadsView from '../components/QualifiedLeadsView';
 import ClaimLeadsView from '../components/ClaimLeadsView';
 import '../index.css';
 
 
-type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'claim_leads';
+type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads';
 
 const TAB_CONFIG: Array<{
   tab: Tab;
@@ -44,6 +47,7 @@ const TAB_CONFIG: Array<{
   { tab: 'data', permission: 'all_data', label: 'All Data', icon: Database },
   { tab: 'workflows', permission: 'workflows', label: 'Workflows', icon: Workflow },
   { tab: 'leads', permission: 'leads', label: 'Leads', icon: Users },
+  { tab: 'qualified_leads', permission: 'leads', label: 'Qualified Leads', icon: Filter },
   { tab: 'claim_leads', permission: 'claim_leads', label: 'Claim Your Leads', icon: UserCheck },
 ];
 
@@ -53,21 +57,13 @@ export default function CrmDashboardPage() {
   const [emailPrefill, setEmailPrefill] = useState<EmailPrefillPayload | null>(null);
   const [whatsappPrefill, setWhatsappPrefill] = useState<WhatsAppPrefillPayload | null>(null);
 
-  const allowedTabs = useMemo(() => {
-    return TAB_CONFIG.filter((t) => {
-      if (t.permission === 'claim_leads') {
-        return true;
-      }
-      return hasPermission(t.permission);
-    });
-  }, [hasPermission]);
+  const allowedTabs = useMemo(() => TAB_CONFIG.filter((t) => hasPermission(t.permission)), [hasPermission]);
 
   const [activeTab, setActiveTab] = useState<Tab>('campaigns');
 
   const safeSetActiveTab = (tab: Tab) => {
     const cfg = TAB_CONFIG.find((t) => t.tab === tab);
-    if (!cfg) return;
-    if (cfg.permission !== 'claim_leads' && !hasPermission(cfg.permission)) return;
+    if (!cfg || !hasPermission(cfg.permission)) return;
     setActiveTab(tab);
   };
 
@@ -97,19 +93,13 @@ export default function CrmDashboardPage() {
   useEffect(() => {
     if (!hasAnyAccess) return;
     const isAllowed = allowedTabs.some((t) => t.tab === activeTab);
-    if (!isAllowed) {
-      const claimLeadsTab = TAB_CONFIG.find((t) => t.tab === 'claim_leads');
-      if (claimLeadsTab) {
-        setActiveTab('claim_leads');
-      } else {
-        setActiveTab(allowedTabs[0].tab);
-      }
-    }
+    if (!isAllowed) setActiveTab(allowedTabs[0].tab);
   }, [activeTab, allowedTabs, hasAnyAccess]);
 
   const userInitial = user?.name?.[0]?.toUpperCase() || 'F';
 
   return (
+    <PlanConfigProvider>
     <div className="h-screen flex bg-gray-100 overflow-hidden">
       {sidebarOpen && (
         <div className="fixed inset-0 bg-gray-100 z-40 md:hidden" onClick={() => setSidebarOpen(false)} />
@@ -290,6 +280,12 @@ export default function CrmDashboardPage() {
                     onOpenWhatsAppCampaign={handleOpenWhatsAppCampaign}
                   />
                 )}
+                {activeTab === 'qualified_leads' && (
+                  <QualifiedLeadsView
+                    onOpenEmailCampaign={handleOpenEmailCampaign}
+                    onOpenWhatsAppCampaign={handleOpenWhatsAppCampaign}
+                  />
+                )}
                 {activeTab === 'claim_leads' && <ClaimLeadsView />}
               </>
             )}
@@ -297,6 +293,7 @@ export default function CrmDashboardPage() {
         </section>
       </main>
     </div>
+    </PlanConfigProvider>
   );
 }
 

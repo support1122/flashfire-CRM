@@ -68,13 +68,8 @@ export function CrmAuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hasPermission = useCallback(
-    (permission: CrmPermission) => {
-      if (permission === 'claim_leads') {
-        return status === 'authenticated';
-      }
-      return !!user?.permissions?.includes(permission);
-    },
-    [user, status]
+    (permission: CrmPermission) => !!user?.permissions?.includes(permission),
+    [user]
   );
 
   const loadMe = useCallback(async () => {

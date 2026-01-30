@@ -1,12 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Loader2, Users, CheckCircle2, Calendar, DollarSign, Filter, X, Mail, Phone, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
+import { usePlanConfig, type PlanName } from '../context/PlanConfigContext';
 import { format, parseISO } from 'date-fns';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
-const INR_PER_USD = 91.67;
-
-type PlanName = 'PRIME' | 'IGNITE' | 'PROFESSIONAL' | 'EXECUTIVE';
 type BookingStatus = 'paid' | 'scheduled' | 'completed';
 
 interface Lead {
@@ -79,44 +77,7 @@ function BdaPerformanceContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const [showFilters, setShowFilters] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  const [incentiveConfig, setIncentiveConfig] = useState<Record<PlanName, number>>({
-    PRIME: 0,
-    IGNITE: 0,
-    PROFESSIONAL: 0,
-    EXECUTIVE: 0,
-  });
-
-  useEffect(() => {
-    const loadIncentives = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/bda/incentives/config`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const body = await res.json();
-        if (body.success && Array.isArray(body.configs)) {
-          const map: Record<PlanName, number> = {
-            PRIME: 0,
-            IGNITE: 0,
-            PROFESSIONAL: 0,
-            EXECUTIVE: 0,
-          };
-          body.configs.forEach((c: any) => {
-            const name = c.planName as PlanName;
-            const percent = Number(c.incentivePercent) || 0;
-            if (map[name] !== undefined) {
-              map[name] = percent;
-            }
-          });
-          setIncentiveConfig(map);
-        }
-      } catch {
-        // ignore, default 0
-      }
-    };
-    if (token) loadIncentives();
-  }, [token]);
+  const { planOptions, incentiveConfig } = usePlanConfig();
 
   useEffect(() => {
     fetchPerformance();
@@ -192,9 +153,14 @@ function BdaPerformanceContent() {
 
   const getIncentiveForLead = (lead: Lead) => {
     const plan = lead.paymentPlan;
-    if (!plan || !plan.name || !plan.price || plan.price <= 0) return 0;
-    const percent = incentiveConfig[plan.name] || 0;
-    return (plan.price * percent * INR_PER_USD) / 100;
+    if (!plan || !plan.name || lead.bookingStatus !== 'paid') return 0;
+    const amountPaid = plan.price ?? 0;
+    if (amountPaid <= 0) return 0;
+    const config = incentiveConfig[plan.name];
+    if (!config) return 0;
+    const basePrice = config.basePriceUsd > 0 ? config.basePriceUsd : 1;
+    const paymentRatio = Math.min(1, amountPaid / basePrice);
+    return config.incentivePerLeadInr * paymentRatio;
   };
 
   const totalCommission = useMemo(() => {
@@ -326,10 +292,9 @@ function BdaPerformanceContent() {
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
                 <option value="all">All Plans</option>
-                <option value="PRIME">PRIME ($119)</option>
-                <option value="IGNITE">IGNITE ($199)</option>
-                <option value="PROFESSIONAL">PROFESSIONAL ($349)</option>
-                <option value="EXECUTIVE">EXECUTIVE ($599)</option>
+                {planOptions.map((p) => (
+                  <option key={p.key} value={p.key}>{p.label} ({p.displayPrice})</option>
+                ))}
               </select>
             </div>
           </div>

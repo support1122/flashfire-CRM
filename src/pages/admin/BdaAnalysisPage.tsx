@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 const ADMIN_TOKEN_KEY = 'flashfire_crm_admin_token';
-const INR_PER_USD = 91.67;
 
 type BookingStatus = 'paid' | 'scheduled' | 'completed';
 type PlanName = 'PRIME' | 'IGNITE' | 'PROFESSIONAL' | 'EXECUTIVE';
@@ -17,6 +16,7 @@ interface BdaPerformance {
   scheduled: number;
   completed: number;
   totalRevenue: number;
+  totalIncentiveInr?: number;
 }
 
 interface AnalysisData {
@@ -81,7 +81,7 @@ export default function BdaAnalysisPage() {
   const [planFilter, setPlanFilter] = useState<PlanName | 'all'>('all');
   const [bdaEmailFilter, setBdaEmailFilter] = useState('');
   const [commissionConfigs, setCommissionConfigs] = useState<
-    Array<{ planName: PlanName; basePrice: number; currency: string; incentivePercent: number }>
+    Array<{ planName: PlanName; basePriceUsd: number; currency: string; incentivePerLeadInr: number }>
   >([]);
   const [commissionLoading, setCommissionLoading] = useState(false);
   const [commissionSaving, setCommissionSaving] = useState(false);
@@ -145,9 +145,9 @@ export default function BdaAnalysisPage() {
       setCommissionConfigs(
         body.configs.map((c: any) => ({
           planName: c.planName as PlanName,
-          basePrice: c.basePrice,
-          currency: c.currency,
-          incentivePercent: Number(c.incentivePercent) || 0
+          basePriceUsd: Number(c.basePriceUsd) ?? 0,
+          currency: c.currency || 'USD',
+          incentivePerLeadInr: Number(c.incentivePerLeadInr) ?? 0
         }))
       );
     } catch (err) {
@@ -171,7 +171,8 @@ export default function BdaAnalysisPage() {
         body: JSON.stringify({
           configs: commissionConfigs.map((c) => ({
             planName: c.planName,
-            incentivePercent: c.incentivePercent
+            basePriceUsd: c.basePriceUsd,
+            incentivePerLeadInr: c.incentivePerLeadInr
           }))
         })
       });
@@ -285,77 +286,6 @@ export default function BdaAnalysisPage() {
         <p className="text-slate-600">Comprehensive statistics on leads and BDA performance</p>
       </div>
 
-      <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
-          <label className="block text-xs font-semibold text-slate-600">From date</label>
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="block text-xs font-semibold text-slate-600">To date</label>
-          <input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
-          />
-        </div>
-        <div className="space-y-1">
-          <label className="block text-xs font-semibold text-slate-600">Status</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-          >
-            <option value="all">All</option>
-            <option value="paid">Paid</option>
-            <option value="scheduled">Scheduled</option>
-            <option value="completed">Completed</option>
-          </select>
-        </div>
-        <div className="space-y-1">
-          <label className="block text-xs font-semibold text-slate-600">Plan</label>
-          <select
-            value={planFilter}
-            onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
-            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
-          >
-            <option value="all">All plans</option>
-            <option value="PRIME">PRIME</option>
-            <option value="IGNITE">IGNITE</option>
-            <option value="PROFESSIONAL">PROFESSIONAL</option>
-            <option value="EXECUTIVE">EXECUTIVE</option>
-          </select>
-        </div>
-        <div className="space-y-1 flex-1 min-w-[180px]">
-          <label className="block text-xs font-semibold text-slate-600">BDA email</label>
-          <input
-            type="email"
-            value={bdaEmailFilter}
-            onChange={(e) => setBdaEmailFilter(e.target.value)}
-            placeholder="Filter by BDA email"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setFromDate('');
-            setToDate('');
-            setStatusFilter('all');
-            setPlanFilter('all');
-            setBdaEmailFilter('');
-          }}
-          className="ml-auto px-4 py-2 text-xs font-semibold border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50"
-        >
-          Reset filters
-        </button>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white border border-slate-200 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
@@ -428,6 +358,10 @@ export default function BdaAnalysisPage() {
                   <div className="text-sm text-slate-600 mb-1">Total Revenue</div>
                   <div className="text-2xl font-bold text-emerald-600">${topBda.totalRevenue.toLocaleString()}</div>
                 </div>
+                <div>
+                  <div className="text-sm text-slate-600 mb-1">Incentive (₹)</div>
+                  <div className="text-2xl font-bold text-slate-900">₹{(topBda.totalIncentiveInr ?? 0).toLocaleString('en-IN')}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -451,49 +385,53 @@ export default function BdaAnalysisPage() {
                 <tr>
                   <th className="px-4 py-2 text-left font-semibold text-slate-700">Plan</th>
                   <th className="px-4 py-2 text-left font-semibold text-slate-700">Base Price (USD)</th>
-                  <th className="px-4 py-2 text-left font-semibold text-slate-700">Incentive %</th>
                   <th className="px-4 py-2 text-left font-semibold text-slate-700">Incentive / Lead (INR)</th>
                 </tr>
               </thead>
               <tbody>
-                {commissionConfigs.map((cfg) => {
-                  const incentivePerLeadInr =
-                    ((cfg.basePrice || 0) * (cfg.incentivePercent || 0) * INR_PER_USD) / 100;
-                  return (
-                    <tr key={cfg.planName} className="border-b border-slate-100">
-                      <td className="px-4 py-2 font-semibold text-slate-900">{cfg.planName}</td>
-                      <td className="px-4 py-2 text-slate-700">
-                        {cfg.currency}
-                        {cfg.basePrice}
-                      </td>
-                      <td className="px-4 py-2">
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.1}
-                          value={Number.isNaN(cfg.incentivePercent) ? '' : cfg.incentivePercent}
-                          onChange={(e) => {
-                            const value = parseFloat(e.target.value);
-                            setCommissionConfigs((prev) =>
-                              prev.map((p) =>
-                                p.planName === cfg.planName
-                                  ? {
-                                      ...p,
-                                      incentivePercent: Number.isNaN(value) ? 0 : value
-                                    }
-                                  : p
-                              )
-                            );
-                          }}
-                          className="w-28 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        />
-                      </td>
-                      <td className="px-4 py-2 text-slate-700">
-                        ₹{incentivePerLeadInr.toFixed(0)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {commissionConfigs.map((cfg) => (
+                  <tr key={cfg.planName} className="border-b border-slate-100">
+                    <td className="px-4 py-2 font-semibold text-slate-900">{cfg.planName}</td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={Number.isNaN(cfg.basePriceUsd) ? '' : cfg.basePriceUsd}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value);
+                          setCommissionConfigs((prev) =>
+                            prev.map((p) =>
+                              p.planName === cfg.planName
+                                ? { ...p, basePriceUsd: Number.isNaN(value) ? 0 : value }
+                                : p
+                            )
+                          );
+                        }}
+                        className="w-28 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={Number.isNaN(cfg.incentivePerLeadInr) ? '' : cfg.incentivePerLeadInr}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value);
+                          setCommissionConfigs((prev) =>
+                            prev.map((p) =>
+                              p.planName === cfg.planName
+                                ? { ...p, incentivePerLeadInr: Number.isNaN(value) ? 0 : value }
+                                : p
+                            )
+                          );
+                        }}
+                        className="w-28 border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                      />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
             </div>
@@ -510,6 +448,77 @@ export default function BdaAnalysisPage() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-end gap-4">
+        <div className="space-y-1">
+          <label className="block text-xs font-semibold text-slate-600">From date</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="block text-xs font-semibold text-slate-600">To date</label>
+          <input
+            type="date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="block text-xs font-semibold text-slate-600">Status</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+          >
+            <option value="all">All</option>
+            <option value="paid">Paid</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="completed">Completed</option>
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label className="block text-xs font-semibold text-slate-600">Plan</label>
+          <select
+            value={planFilter}
+            onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
+            className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+          >
+            <option value="all">All plans</option>
+            <option value="PRIME">PRIME</option>
+            <option value="IGNITE">IGNITE</option>
+            <option value="PROFESSIONAL">PROFESSIONAL</option>
+            <option value="EXECUTIVE">EXECUTIVE</option>
+          </select>
+        </div>
+        <div className="space-y-1 flex-1 min-w-[180px]">
+          <label className="block text-xs font-semibold text-slate-600">BDA email</label>
+          <input
+            type="email"
+            value={bdaEmailFilter}
+            onChange={(e) => setBdaEmailFilter(e.target.value)}
+            placeholder="Filter by BDA email"
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setFromDate('');
+            setToDate('');
+            setStatusFilter('all');
+            setPlanFilter('all');
+            setBdaEmailFilter('');
+          }}
+          className="ml-auto px-4 py-2 text-xs font-semibold border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50"
+        >
+          Reset filters
+        </button>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-6">
@@ -531,6 +540,7 @@ export default function BdaAnalysisPage() {
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Scheduled</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Completed</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Revenue</th>
+                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Incentive (₹)</th>
                 </tr>
               </thead>
               <tbody>
@@ -558,6 +568,9 @@ export default function BdaAnalysisPage() {
                     <td className="px-4 py-3 text-right text-green-600">{bda.completed}</td>
                     <td className="px-4 py-3 text-right font-semibold text-emerald-600">
                       ${bda.totalRevenue.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                      ₹{(bda.totalIncentiveInr ?? 0).toLocaleString('en-IN')}
                     </td>
                   </tr>
                 ))}
@@ -596,7 +609,7 @@ export default function BdaAnalysisPage() {
                 </div>
               ) : detailData && detailData.leads.length > 0 ? (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                     <div className="bg-slate-50 rounded-lg p-4">
                       <div className="text-sm text-slate-600 mb-1">Total Leads</div>
                       <div className="text-2xl font-bold text-slate-900">{detailData.leads.length}</div>
@@ -614,6 +627,15 @@ export default function BdaAnalysisPage() {
                           .filter(l => l.bookingStatus === 'paid')
                           .reduce((sum, l) => sum + (l.paymentPlan?.price || 0), 0)
                           .toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <div className="text-sm text-slate-600 mb-1">Incentive (₹)</div>
+                      <div className="text-2xl font-bold text-slate-900">
+                        ₹{detailData.leads
+                          .filter(l => l.bookingStatus === 'paid' && l.paymentPlan?.name)
+                          .reduce((sum, l) => sum + (commissionConfigs.find(c => c.planName === l.paymentPlan?.name)?.incentivePerLeadInr ?? 0), 0)
+                          .toLocaleString('en-IN')}
                       </div>
                     </div>
                   </div>

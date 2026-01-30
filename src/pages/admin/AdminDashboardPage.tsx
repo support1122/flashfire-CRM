@@ -22,7 +22,7 @@ const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: strin
   { key: 'analytics', label: 'Analytics', description: 'Performance dashboards + insights' },
   { key: 'all_data', label: 'All Data', description: 'Unified data view + notes/actions' },
   { key: 'workflows', label: 'Workflows', description: 'Workflow builder + logs' },
-  { key: 'leads', label: 'Leads', description: 'Paid clients management + revenue tracking' },
+  { key: 'leads', label: 'Leads', description: 'MQL / SQL / Converted management + revenue tracking' },
   { key: 'claim_leads', label: 'Claim Leads', description: 'BDA lead claiming and management' },
 ];
 

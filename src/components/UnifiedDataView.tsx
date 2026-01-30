@@ -40,12 +40,11 @@ import NotesModal from './NotesModal';
 import InsertDataModal, { type InsertDataFormData } from './InsertDataModal';
 import FollowUpModal, { type FollowUpData } from './FollowUpModal';
 import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
+import { usePlanConfig, type PlanOption, type PlanName } from '../context/PlanConfigContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
 type BookingStatus = 'scheduled' | 'completed' | 'canceled' | 'rescheduled' | 'no-show' | 'ignored' | 'paid';
-type PlanName = 'PRIME' | 'IGNITE' | 'PROFESSIONAL' | 'EXECUTIVE';
-type PlanOption = { key: PlanName; label: string; price: number; displayPrice: string; currency?: string };
 type PaymentPlan = {
   name: PlanName;
   price: number;
@@ -53,12 +52,6 @@ type PaymentPlan = {
   displayPrice?: string;
   selectedAt?: string;
 };
-const PLAN_OPTIONS: PlanOption[] = [
-  { key: 'PRIME', label: 'PRIME', price: 119, displayPrice: '$119', currency: 'USD' },
-  { key: 'IGNITE', label: 'IGNITE', price: 199, displayPrice: '$199', currency: 'USD' },
-  { key: 'PROFESSIONAL', label: 'PROFESSIONAL', price: 349, displayPrice: '$349', currency: 'USD' },
-  { key: 'EXECUTIVE', label: 'EXECUTIVE', price: 599, displayPrice: '$599', currency: 'USD' },
-];
 const NOTE_TRUNCATE_LENGTH = 80;
 type DataType = 'booking' | 'user';
 
@@ -203,6 +196,7 @@ interface CampaignDetails {
 }
 
 export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCampaign }: UnifiedDataViewProps) {
+  const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [usersWithoutBookings, setUsersWithoutBookings] = useState<UserWithoutBooking[]>([]);
   const [userCampaigns, setUserCampaigns] = useState<Map<string, UserCampaign[]>>(new Map());
@@ -763,7 +757,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
 
   const getPlanOptionByName = (name?: string | null) => {
     if (!name) return undefined;
-    return PLAN_OPTIONS.find((p) => p.key === name) || undefined;
+    return planOptions.find((p) => p.key === name) || undefined;
   };
 
   const handleStatusUpdate = async (bookingId: string, status: BookingStatus, plan?: PlanOption) => {
@@ -1517,7 +1511,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           className="text-[10px] border border-slate-200  px-3 py-2 bg-white"
         >
           <option value="all">All plans</option>
-          {PLAN_OPTIONS.map((plan) => (
+          {planOptions.map((plan) => (
             <option key={plan.key} value={plan.key}>
               {plan.label} ({plan.displayPrice})
             </option>
@@ -1796,7 +1790,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                         </button>
                                         {isPlanOpen && (
                                           <div className="px-4 pb-3 grid grid-cols-1 gap-1">
-                                            {PLAN_OPTIONS.map((plan) => (
+                                            {planOptions.map((plan) => (
                                               <button
                                                 key={plan.key}
                                                 onClick={() => {
@@ -2054,7 +2048,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                   className="flex-1 text-[10px] border border-orange-200 rounded-lg px-2 py-1 bg-orange-50 text-orange-800"
                                 >
                                   <option value="">Select plan</option>
-                                  {PLAN_OPTIONS.map((plan) => (
+                                  {planOptions.map((plan) => (
                                     <option key={plan.key} value={plan.key}>
                                       {plan.label} ({plan.displayPrice})
                                     </option>

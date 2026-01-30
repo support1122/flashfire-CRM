@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, DollarSign, Calendar as CalendarIcon, Save } from 'lucide-react';
+import { usePlanConfig } from '../context/PlanConfigContext';
 
 export interface PlanDetailsData {
   planName: string;
@@ -20,13 +21,6 @@ interface PlanDetailsModalProps {
   defaultDays?: number;
 }
 
-const PLAN_OPTIONS = [
-  { key: 'PRIME', label: 'PRIME', price: 119, displayPrice: '$119', currency: 'USD' },
-  { key: 'IGNITE', label: 'IGNITE', price: 199, displayPrice: '$199', currency: 'USD' },
-  { key: 'PROFESSIONAL', label: 'PROFESSIONAL', price: 349, displayPrice: '$349', currency: 'USD' },
-  { key: 'EXECUTIVE', label: 'EXECUTIVE', price: 599, displayPrice: '$599', currency: 'USD' },
-];
-
 export default function PlanDetailsModal({
   isOpen,
   onClose,
@@ -35,28 +29,27 @@ export default function PlanDetailsModal({
   currentPlan,
   defaultDays = 7,
 }: PlanDetailsModalProps) {
+  const { planOptions } = usePlanConfig();
   const [planDetails, setPlanDetails] = useState<PlanDetailsData>({
     planName: currentPlan?.name || 'PRIME',
-    planAmount: currentPlan?.price || PLAN_OPTIONS.find(p => p.key === (currentPlan?.name || 'PRIME'))?.price || 119,
+    planAmount: currentPlan?.price ?? planOptions.find(p => p.key === (currentPlan?.name || 'PRIME'))?.price ?? planOptions[0]?.price ?? 99,
     days: defaultDays,
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (isOpen) {
-      // Reset form when modal opens
+    if (isOpen && planOptions.length > 0) {
       const initialPlanName = currentPlan?.name || 'PRIME';
-      const initialPlan = PLAN_OPTIONS.find(p => p.key === initialPlanName) || PLAN_OPTIONS[0];
-      
+      const initialPlan = planOptions.find(p => p.key === initialPlanName) || planOptions[0];
       setPlanDetails({
         planName: initialPlanName,
-        planAmount: currentPlan?.price || initialPlan.price,
+        planAmount: currentPlan?.price ?? initialPlan.price,
         days: defaultDays,
       });
       setError('');
     }
-  }, [isOpen, currentPlan, defaultDays]);
+  }, [isOpen, currentPlan, defaultDays, planOptions]);
 
   if (!isOpen) return null;
 
@@ -124,7 +117,7 @@ export default function PlanDetailsModal({
             <select
               value={planDetails.planName}
               onChange={(e) => {
-                const selectedPlan = PLAN_OPTIONS.find(p => p.key === e.target.value);
+                const selectedPlan = planOptions.find(p => p.key === e.target.value);
                 if (selectedPlan) {
                   setPlanDetails({
                     ...planDetails,
@@ -136,7 +129,7 @@ export default function PlanDetailsModal({
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700"
               disabled={isSaving}
             >
-              {PLAN_OPTIONS.map((plan) => (
+              {planOptions.map((plan) => (
                 <option key={plan.key} value={plan.key}>
                   {plan.label} - {plan.displayPrice}
                 </option>
@@ -166,7 +159,7 @@ export default function PlanDetailsModal({
               disabled={isSaving}
             />
             <p className="text-xs text-slate-500 mt-1">
-              Default amount from plan: {PLAN_OPTIONS.find(p => p.key === planDetails.planName)?.displayPrice || '$0'}
+              Default amount from plan: {planOptions.find(p => p.key === planDetails.planName)?.displayPrice || '$0'}
             </p>
           </div>
 

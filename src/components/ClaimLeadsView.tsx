@@ -1,21 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Loader2, Search, Save, CheckCircle2, AlertCircle, X, Calendar, Phone, Mail, User, DollarSign, UserCheck, List, BarChart3 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Loader2, Search, Save, CheckCircle2, AlertCircle, X, Calendar, Phone, Mail, User, DollarSign, UserCheck, List, BarChart3, Filter } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
-import { format, parseISO } from 'date-fns';
+import { usePlanConfig, type PlanName } from '../context/PlanConfigContext';
+import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import BdaPerformanceView from './BdaPerformanceView';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
-const INR_PER_USD = 91.67;
 
-type PlanName = 'PRIME' | 'IGNITE' | 'PROFESSIONAL' | 'EXECUTIVE';
 type ActiveTab = 'claim' | 'my_leads' | 'bda_performance';
-
-const PLAN_OPTIONS: Array<{ key: PlanName; label: string; price: number; displayPrice: string }> = [
-  { key: 'PRIME', label: 'PRIME', price: 119, displayPrice: '$119' },
-  { key: 'IGNITE', label: 'IGNITE', price: 199, displayPrice: '$199' },
-  { key: 'PROFESSIONAL', label: 'PROFESSIONAL', price: 349, displayPrice: '$349' },
-  { key: 'EXECUTIVE', label: 'EXECUTIVE', price: 599, displayPrice: '$599' },
-];
 
 interface Lead {
   bookingId: string;
@@ -41,6 +33,7 @@ interface Lead {
 
 export default function ClaimLeadsView() {
   const { user, token } = useCrmAuth();
+  const { planOptions, incentiveConfig } = usePlanConfig();
   const [activeTab, setActiveTab] = useState<ActiveTab>('claim');
   const [clientEmail, setClientEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -56,69 +49,34 @@ export default function ClaimLeadsView() {
   const [myLeadsLoading, setMyLeadsLoading] = useState(false);
   const [myLeadsPage, setMyLeadsPage] = useState(1);
   const [myLeadsPagination, setMyLeadsPagination] = useState({ page: 1, limit: 50, total: 0, pages: 1 });
-  const [incentiveConfig, setIncentiveConfig] = useState<Record<PlanName, number>>({
-    PRIME: 0,
-    IGNITE: 0,
-    PROFESSIONAL: 0,
-    EXECUTIVE: 0,
-  });
+  const [myLeadsTotalIncentives, setMyLeadsTotalIncentives] = useState<number>(0);
+  const [myLeadsFromDate, setMyLeadsFromDate] = useState<string>('');
+  const [myLeadsToDate, setMyLeadsToDate] = useState<string>('');
+  const [myLeadsStatusFilter, setMyLeadsStatusFilter] = useState<'all' | 'paid' | 'scheduled' | 'completed'>('all');
+  const [myLeadsPlanFilter, setMyLeadsPlanFilter] = useState<PlanName | 'all'>('all');
 
-  useEffect(() => {
-    if (activeTab === 'my_leads') {
-      fetchMyLeads();
-    }
-  }, [activeTab, myLeadsPage]);
+  /** Prorated incentive: same % as (amount paid / current plan price). Uses plan config from BDA Incentive Settings (single source of truth). */
+  const getIncentiveProrated = useCallback((planName?: PlanName, amountPaid?: number): number => {
+    if (!planName || amountPaid == null || amountPaid <= 0) return 0;
+    const config = incentiveConfig[planName];
+    if (!config) return 0;
+    const basePrice = config.basePriceUsd > 0 ? config.basePriceUsd : 1;
+    const paymentRatio = Math.min(1, amountPaid / basePrice);
+    return config.incentivePerLeadInr * paymentRatio;
+  }, [incentiveConfig]);
 
-  useEffect(() => {
-    const loadIncentives = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/bda/incentives/config`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const body = await res.json();
-        if (body.success && Array.isArray(body.configs)) {
-          const map: Record<PlanName, number> = {
-            PRIME: 0,
-            IGNITE: 0,
-            PROFESSIONAL: 0,
-            EXECUTIVE: 0,
-          };
-          body.configs.forEach((c: any) => {
-            const name = c.planName as PlanName;
-            const percent = Number(c.incentivePercent) || 0;
-            if (map[name] !== undefined) {
-              map[name] = percent;
-            }
-          });
-          setIncentiveConfig(map);
-        }
-      } catch {
-        // ignore, incentives default to 0
-      }
-    };
-    if (token) {
-      loadIncentives();
-    }
-  }, [token]);
-
-  const getIncentiveForPlan = (planName?: PlanName, amount?: number) => {
-    if (!planName || !amount || amount <= 0) return 0;
-    const percent = incentiveConfig[planName] || 0;
-    return (amount * percent * INR_PER_USD) / 100;
-  };
-
-  const totalCommissionMyLeads = useMemo(() => {
-    return myLeads
-      .filter((l) => l.bookingStatus === 'paid' && l.paymentPlan && l.paymentPlan.price)
-      .reduce((sum, l) => sum + getIncentiveForPlan(l.paymentPlan!.name, l.paymentPlan!.price), 0);
-  }, [myLeads, incentiveConfig]);
-
-  const fetchMyLeads = async () => {
+  const fetchMyLeads = useCallback(async () => {
+    if (!token) return;
     setMyLeadsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/bda/my-leads?page=${myLeadsPage}&limit=50`, {
+      const params = new URLSearchParams();
+      params.set('page', String(myLeadsPage));
+      params.set('limit', '50');
+      if (myLeadsFromDate) params.set('fromDate', myLeadsFromDate);
+      if (myLeadsToDate) params.set('toDate', myLeadsToDate);
+      if (myLeadsStatusFilter !== 'all') params.set('status', myLeadsStatusFilter);
+      if (myLeadsPlanFilter !== 'all') params.set('planName', myLeadsPlanFilter);
+      const response = await fetch(`${API_BASE_URL}/api/bda/my-leads?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -129,13 +87,20 @@ export default function ClaimLeadsView() {
       if (data.success) {
         setMyLeads(data.data || []);
         setMyLeadsPagination(data.pagination || { page: 1, limit: 50, total: 0, pages: 1 });
+        setMyLeadsTotalIncentives(typeof data.totalIncentivesForFilter === 'number' ? data.totalIncentivesForFilter : 0);
       }
     } catch (err) {
       console.error('Error fetching my leads:', err);
     } finally {
       setMyLeadsLoading(false);
     }
-  };
+  }, [token, myLeadsPage, myLeadsFromDate, myLeadsToDate, myLeadsStatusFilter, myLeadsPlanFilter]);
+
+  useEffect(() => {
+    if (activeTab === 'my_leads' && token) {
+      fetchMyLeads();
+    }
+  }, [activeTab, myLeadsPage, myLeadsFromDate, myLeadsToDate, myLeadsStatusFilter, myLeadsPlanFilter, token, fetchMyLeads]);
 
   useEffect(() => {
     if (lead) {
@@ -205,12 +170,28 @@ export default function ClaimLeadsView() {
     setSuccess(null);
 
     try {
+      const body: { paymentPlan?: typeof formData.paymentPlan } = {};
+      if (formData.paymentPlan?.name && formData.paymentPlan.price !== undefined) {
+        const amt = formData.paymentPlan.price;
+        if (amt <= 0) {
+          setError('Amount paid by client must be greater than 0');
+          setLoading(false);
+          return;
+        }
+        body.paymentPlan = {
+          name: formData.paymentPlan.name,
+          price: amt,
+          currency: formData.paymentPlan.currency || 'USD',
+          displayPrice: formData.paymentPlan.displayPrice || `$${amt}`,
+        };
+      }
       const response = await fetch(`${API_BASE_URL}/api/bda/claim-lead/${lead.bookingId}`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -224,6 +205,7 @@ export default function ClaimLeadsView() {
       if (activeTab === 'my_leads') {
         fetchMyLeads();
       }
+      window.dispatchEvent(new CustomEvent('bookingUpdated', { detail: { bookingId: lead.bookingId } }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to claim lead');
     } finally {
@@ -232,8 +214,8 @@ export default function ClaimLeadsView() {
   };
 
   const handleStatusUpdate = async (newStatus: 'paid' | 'scheduled' | 'completed') => {
-    if (!lead || !isClaimed) return;
-    
+    if (!lead) return;
+
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -283,6 +265,10 @@ export default function ClaimLeadsView() {
 
   const handleSave = async () => {
     if (!lead) return;
+    if (formData.paymentPlan?.name && (formData.paymentPlan.price == null || formData.paymentPlan.price <= 0)) {
+      setError('Amount paid by client must be greater than 0');
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -309,6 +295,7 @@ export default function ClaimLeadsView() {
       if (activeTab === 'my_leads') {
         fetchMyLeads();
       }
+      window.dispatchEvent(new CustomEvent('bookingUpdated', { detail: { bookingId: lead.bookingId } }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update lead');
     } finally {
@@ -535,25 +522,26 @@ export default function ClaimLeadsView() {
                                 paymentPlan: undefined,
                               });
                             } else {
-                              const plan = PLAN_OPTIONS.find(p => p.key === selectedValue);
+                              const plan = planOptions.find(p => p.key === selectedValue);
                               if (plan) {
                                 setFormData({
                                   ...formData,
                                   paymentPlan: {
                                     name: plan.key,
-                                    price: formData.paymentPlan?.price || plan.price,
+                                    price: formData.paymentPlan?.price ?? plan.price,
                                     currency: 'USD',
-                                    displayPrice: formData.paymentPlan?.displayPrice || plan.displayPrice,
+                                    displayPrice: formData.paymentPlan?.displayPrice ?? plan.displayPrice,
                                   },
                                 });
                               }
                             }
                           }}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white cursor-pointer"
-                          disabled={!isClaimed || saving}
+                          disabled={saving}
+                          title={!isClaimed ? 'Select plan and amount, then Claim to save. After claiming, use Save to update.' : undefined}
                         >
                           <option value="">Select Plan</option>
-                          {PLAN_OPTIONS.map((plan) => (
+                          {planOptions.map((plan) => (
                             <option key={plan.key} value={plan.key}>
                               {plan.label} ({plan.displayPrice})
                             </option>
@@ -563,12 +551,12 @@ export default function ClaimLeadsView() {
 
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">
-                          Plan Amount ($)
+                          Amount paid by client ($) <span className="text-red-600">*</span>
                         </label>
                         <input
                           type="number"
                           step="0.01"
-                          min="0"
+                          min="0.01"
                           value={formData.paymentPlan?.price ?? ''}
                           onChange={(e) => {
                             const value = e.target.value;
@@ -579,14 +567,14 @@ export default function ClaimLeadsView() {
                                   paymentPlan: {
                                     ...formData.paymentPlan,
                                     price: 0,
-                                    displayPrice: '$0',
+                                    displayPrice: '',
                                   },
                                 });
                               }
                             } else {
                               const price = parseFloat(value);
                               if (!isNaN(price) && price >= 0) {
-                                const currentPlan = formData.paymentPlan || { name: 'PRIME' as PlanName, price: 0, currency: 'USD', displayPrice: '$0' };
+                                const currentPlan = formData.paymentPlan || { name: 'PRIME' as PlanName, price: 0, currency: 'USD', displayPrice: '' };
                                 setFormData({
                                   ...formData,
                                   paymentPlan: {
@@ -599,18 +587,20 @@ export default function ClaimLeadsView() {
                             }
                           }}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-                          disabled={!isClaimed || saving}
-                          placeholder="Enter amount (e.g., 199.99)"
+                          disabled={saving}
+                          placeholder="Enter amount paid (e.g., 119 or 100)"
+                          title="Required. Incentive is prorated by this amount vs plan price."
                         />
+                        <p className="text-xs text-slate-500 mt-1">Required. Incentive is prorated </p>
                       </div>
 
-                      {formData.paymentPlan && formData.paymentPlan.price !== undefined && (
+                      {formData.paymentPlan && formData.paymentPlan.name && (
                         <div>
                           <label className="block text-sm font-semibold text-slate-700 mb-2">
                             Incentive (INR)
                           </label>
                           <div className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-emerald-700 font-semibold">
-                            ₹{getIncentiveForPlan(formData.paymentPlan.name, formData.paymentPlan.price).toFixed(0)}
+                            ₹{getIncentiveProrated(formData.paymentPlan.name, formData.paymentPlan.price ?? 0).toFixed(0)}
                           </div>
                         </div>
                       )}
@@ -623,11 +613,14 @@ export default function ClaimLeadsView() {
                           value={lead.bookingStatus}
                           onChange={(e) => {
                             const newStatus = e.target.value as 'paid' | 'scheduled' | 'completed';
-                            if (!lead || !isClaimed) return;
-                            
                             if (newStatus === 'paid' && lead.bookingStatus !== 'paid') {
                               if (!formData.paymentPlan || !formData.paymentPlan.name) {
                                 setError('Please select a plan before marking as paid');
+                                return;
+                              }
+                              const amt = formData.paymentPlan.price ?? 0;
+                              if (amt <= 0) {
+                                setError('Amount paid by client must be greater than 0');
                                 return;
                               }
                               setPendingStatusChange({ status: newStatus });
@@ -637,7 +630,8 @@ export default function ClaimLeadsView() {
                             }
                           }}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white cursor-pointer"
-                          disabled={!isClaimed || saving}
+                          disabled={saving}
+                          title={!isClaimed ? 'You can change status before or after claiming.' : undefined}
                         >
                           <option value="scheduled">SCHEDULED</option>
                           <option value="paid">PAID</option>
@@ -708,12 +702,105 @@ export default function ClaimLeadsView() {
 
           {activeTab === 'my_leads' && (
             <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                <Filter size={16} className="text-slate-500" />
+                {(() => {
+                  const now = new Date();
+                  const thisMonthStart = format(startOfMonth(now), 'yyyy-MM-dd');
+                  const thisMonthEnd = format(endOfMonth(now), 'yyyy-MM-dd');
+                  const isThisMonthActive = myLeadsFromDate === thisMonthStart && myLeadsToDate === thisMonthEnd;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMyLeadsFromDate(thisMonthStart);
+                        setMyLeadsToDate(thisMonthEnd);
+                        setMyLeadsPage(1);
+                      }}
+                      className={`text-[11px] font-semibold px-3 py-2 rounded-lg border transition ${
+                        isThisMonthActive
+                          ? 'border-orange-200 bg-orange-50 text-orange-700'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      This Month
+                    </button>
+                  );
+                })()}
+                <input
+                  type="date"
+                  value={myLeadsFromDate}
+                  onChange={(e) => {
+                    setMyLeadsFromDate(e.target.value);
+                    setMyLeadsPage(1);
+                  }}
+                  className="text-[11px] border border-slate-200 px-3 py-2 rounded-lg bg-white"
+                />
+                <span className="text-slate-400">—</span>
+                <input
+                  type="date"
+                  value={myLeadsToDate}
+                  onChange={(e) => {
+                    setMyLeadsToDate(e.target.value);
+                    setMyLeadsPage(1);
+                  }}
+                  className="text-[11px] border border-slate-200 px-3 py-2 rounded-lg bg-white"
+                />
+                <select
+                  value={myLeadsStatusFilter}
+                  onChange={(e) => {
+                    setMyLeadsStatusFilter(e.target.value as 'all' | 'paid' | 'scheduled' | 'completed');
+                    setMyLeadsPage(1);
+                  }}
+                  className="text-[11px] border border-slate-200 px-3 py-2 rounded-lg bg-white min-w-[120px]"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="paid">Paid</option>
+                  <option value="completed">Completed</option>
+                </select>
+                <select
+                  value={myLeadsPlanFilter}
+                  onChange={(e) => {
+                    setMyLeadsPlanFilter(e.target.value as PlanName | 'all');
+                    setMyLeadsPage(1);
+                  }}
+                  className="text-[11px] border border-slate-200 px-3 py-2 rounded-lg bg-white min-w-[140px]"
+                >
+                  <option value="all">All plans</option>
+                  {planOptions.map((p) => (
+                    <option key={p.key} value={p.key}>
+                      {p.label} ({p.displayPrice})
+                    </option>
+                  ))}
+                </select>
+                {(myLeadsFromDate || myLeadsToDate || myLeadsStatusFilter !== 'all' || myLeadsPlanFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMyLeadsFromDate('');
+                      setMyLeadsToDate('');
+                      setMyLeadsStatusFilter('all');
+                      setMyLeadsPlanFilter('all');
+                      setMyLeadsPage(1);
+                    }}
+                    className="text-[11px] text-orange-600 font-semibold px-3 py-2 hover:bg-orange-50 rounded-lg transition"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
               <div className="flex items-center justify-between text-sm text-slate-600">
                 <span>
-                  Paid leads: {myLeads.filter((l) => l.bookingStatus === 'paid').length}
+                  Leads: {myLeadsPagination.total}
+                  {myLeadsPagination.total > 0 && (
+                    <span className="text-slate-500 ml-1">
+                      (page {myLeadsPagination.page} of {myLeadsPagination.pages})
+                    </span>
+                  )}
                 </span>
                 <span className="font-semibold text-emerald-700">
-                  Total incentives: ₹{totalCommissionMyLeads.toFixed(0)}
+                  Total incentives: ₹{myLeadsTotalIncentives.toFixed(0)}
                 </span>
               </div>
               {myLeadsLoading ? (
@@ -758,12 +845,12 @@ export default function ClaimLeadsView() {
                               )}
                               {item.paymentPlan && (
                                 <p><DollarSign size={14} className="inline mr-1" />
-                                  {item.paymentPlan.name} - {item.paymentPlan.displayPrice}
+                                  {item.paymentPlan.name} - {item.paymentPlan.displayPrice} paid
                                 </p>
                               )}
                               {item.bookingStatus === 'paid' && item.paymentPlan && item.paymentPlan.price && (
                                 <p className="text-emerald-700">
-                                  Incentive: ₹{getIncentiveForPlan(item.paymentPlan.name, item.paymentPlan.price).toFixed(0)}
+                                  Incentive: ₹{getIncentiveProrated(item.paymentPlan.name, item.paymentPlan.price).toFixed(0)}
                                 </p>
                               )}
                             </div>
@@ -820,7 +907,8 @@ export default function ClaimLeadsView() {
               {formData.paymentPlan && (
                 <div className="bg-slate-50 rounded-lg p-4 mb-4">
                   <div className="text-sm text-slate-600 mb-1">Plan: <span className="font-semibold text-slate-900">{formData.paymentPlan.name}</span></div>
-                  <div className="text-sm text-slate-600">Amount: <span className="font-semibold text-emerald-600">{formData.paymentPlan.displayPrice || `$${formData.paymentPlan.price}`}</span></div>
+                  <div className="text-sm text-slate-600 mb-1">Amount paid by client: <span className="font-semibold text-emerald-600">{formData.paymentPlan.displayPrice || `$${formData.paymentPlan.price}`}</span></div>
+                  <div className="text-sm text-slate-600">Your incentive (prorated): <span className="font-semibold text-emerald-700">₹{getIncentiveProrated(formData.paymentPlan.name, formData.paymentPlan.price ?? 0).toFixed(0)}</span></div>
                 </div>
               )}
               <div className="flex items-center gap-3">

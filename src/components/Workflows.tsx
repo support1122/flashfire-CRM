@@ -31,16 +31,9 @@ import {
   Calendar as CalendarIcon,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { usePlanConfig } from '../context/PlanConfigContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
-
-// Plan options for finalkk template configuration
-const PLAN_OPTIONS = [
-  { key: 'PRIME', label: 'PRIME', price: 119, displayPrice: '$119', currency: 'USD' },
-  { key: 'IGNITE', label: 'IGNITE', price: 199, displayPrice: '$199', currency: 'USD' },
-  { key: 'PROFESSIONAL', label: 'PROFESSIONAL', price: 349, displayPrice: '$349', currency: 'USD' },
-  { key: 'EXECUTIVE', label: 'EXECUTIVE', price: 599, displayPrice: '$599', currency: 'USD' },
-];
 
 interface WatiTemplate {
   name: string;
@@ -284,7 +277,8 @@ const TemplatePreview = ({ templateName, variables }: { templateName?: string; v
   );
 };
 
-export default function Workflows() {
+function Workflows() {
+  const { planOptions } = usePlanConfig();
   const [activeTab, setActiveTab] = useState<ActiveTab>('workflows');
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -340,7 +334,7 @@ export default function Workflows() {
   const [planConfigWorkflowId, setPlanConfigWorkflowId] = useState<string | null>(null);
   const [planConfig, setPlanConfig] = useState<{ planName: string; planAmount: number; days: number }>({
     planName: 'PRIME',
-    planAmount: 119,
+    planAmount: planOptions[0]?.price ?? 99,
     days: 7,
   });
 
@@ -1240,13 +1234,13 @@ export default function Workflows() {
                                           if (existingConfig) {
                                             setPlanConfig({
                                               planName: existingConfig.planName || 'PRIME',
-                                              planAmount: existingConfig.planAmount || PLAN_OPTIONS.find(p => p.key === existingConfig.planName)?.price || 119,
+                                              planAmount: existingConfig.planAmount ?? planOptions.find(p => p.key === existingConfig.planName)?.price ?? planOptions[0]?.price ?? 99,
                                               days: existingConfig.days || 7,
                                             });
                                           } else {
                                             setPlanConfig({
                                               planName: 'PRIME',
-                                              planAmount: 119,
+                                              planAmount: planOptions[0]?.price ?? 99,
                                               days: 7,
                                             });
                                           }
@@ -1663,13 +1657,13 @@ export default function Workflows() {
                                                 if (existingConfig) {
                                                   setPlanConfig({
                                                     planName: existingConfig.planName || 'PRIME',
-                                                    planAmount: existingConfig.planAmount || PLAN_OPTIONS.find(p => p.key === existingConfig.planName)?.price || 119,
+                                                    planAmount: existingConfig.planAmount ?? planOptions.find(p => p.key === existingConfig.planName)?.price ?? planOptions[0]?.price ?? 99,
                                                     days: existingConfig.days || 7,
                                                   });
                                                 } else {
                                                   setPlanConfig({
                                                     planName: 'PRIME',
-                                                    planAmount: 119,
+                                                    planAmount: planOptions[0]?.price ?? 99,
                                                     days: 7,
                                                   });
                                                 }
@@ -2683,7 +2677,7 @@ export default function Workflows() {
                 <select
                   value={planConfig.planName}
                   onChange={(e) => {
-                    const selectedPlan = PLAN_OPTIONS.find(p => p.key === e.target.value);
+                    const selectedPlan = planOptions.find(p => p.key === e.target.value);
                     if (selectedPlan) {
                       setPlanConfig({
                         ...planConfig,
@@ -2694,7 +2688,7 @@ export default function Workflows() {
                   }}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700"
                 >
-                  {PLAN_OPTIONS.map((plan) => (
+                  {planOptions.map((plan) => (
                     <option key={plan.key} value={plan.key}>
                       {plan.label} - {plan.displayPrice}
                     </option>
@@ -2723,7 +2717,7 @@ export default function Workflows() {
                   placeholder="Enter amount"
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  Default amount from plan: {PLAN_OPTIONS.find(p => p.key === planConfig.planName)?.displayPrice || '$0'}
+                  Default amount from plan: {planOptions.find(p => p.key === planConfig.planName)?.displayPrice || '$0'}
                 </p>
               </div>
 
@@ -2809,3 +2803,4 @@ export default function Workflows() {
   );
 }
 
+export default Workflows;
