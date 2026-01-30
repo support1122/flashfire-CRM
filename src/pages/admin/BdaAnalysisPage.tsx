@@ -247,6 +247,19 @@ export default function BdaAnalysisPage() {
     }
   };
 
+  const getIncentiveForLead = (lead: Lead): number => {
+    if (!lead.paymentPlan || !lead.paymentPlan.name || lead.bookingStatus !== 'paid') {
+      return 0;
+    }
+    const amountPaid = lead.paymentPlan.price ?? 0;
+    if (amountPaid <= 0) return 0;
+    const config = commissionConfigs.find(c => c.planName === lead.paymentPlan?.name);
+    if (!config) return 0;
+    const basePrice = config.basePriceUsd > 0 ? config.basePriceUsd : 1;
+    const paymentRatio = Math.min(1, amountPaid / basePrice);
+    return config.incentivePerLeadInr * paymentRatio;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -633,8 +646,8 @@ export default function BdaAnalysisPage() {
                       <div className="text-sm text-slate-600 mb-1">Incentive (₹)</div>
                       <div className="text-2xl font-bold text-slate-900">
                         ₹{detailData.leads
-                          .filter(l => l.bookingStatus === 'paid' && l.paymentPlan?.name)
-                          .reduce((sum, l) => sum + (commissionConfigs.find(c => c.planName === l.paymentPlan?.name)?.incentivePerLeadInr ?? 0), 0)
+                          .filter(l => l.bookingStatus === 'paid')
+                          .reduce((sum, l) => sum + getIncentiveForLead(l), 0)
                           .toLocaleString('en-IN')}
                       </div>
                     </div>
@@ -673,6 +686,12 @@ export default function BdaAnalysisPage() {
                                   <span>
                                     {lead.paymentPlan.displayPrice || `$${lead.paymentPlan.price}`} - {lead.paymentPlan.name}
                                   </span>
+                                </div>
+                              )}
+                              {lead.bookingStatus === 'paid' && lead.paymentPlan && (
+                                <div className="flex items-center gap-2 text-emerald-700 font-semibold">
+                                  <DollarSign size={16} />
+                                  <span>Incentive (INR): ₹{getIncentiveForLead(lead).toFixed(0)}</span>
                                 </div>
                               )}
                             </div>
