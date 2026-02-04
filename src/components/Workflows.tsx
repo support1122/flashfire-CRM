@@ -92,7 +92,7 @@ interface WorkflowLog {
   logId: string;
   workflowId: string;
   workflowName?: string;
-  triggerAction: 'no-show' | 'complete' | 'cancel' | 're-schedule';
+  triggerAction: 'no-show' | 'complete' | 'cancel' | 're-schedule' | 'custom' | 'paid';
   bookingId: string;
   clientEmail: string;
   clientName?: string;
@@ -116,7 +116,7 @@ interface WorkflowLog {
 }
 
 type ActiveTab = 'workflows' | 'logs' | 'bulk';
-type LogStatus = 'scheduled' | 'executed' | 'all';
+type LogStatus = 'scheduled' | 'executed' | 'failed' | 'all';
 
 // Template variable mapping - maps template names to their available variables
 const TEMPLATE_VARIABLES: Record<string, { variables: string[]; exampleContent?: string }> = {
@@ -550,6 +550,10 @@ function Workflows() {
         showToast('Please fill in all required fields', 'error');
         return;
       }
+      if (workflow.triggerAction === 'custom' && (!workflow.name || String(workflow.name).trim() === '')) {
+        showToast('Workflow name is required for custom workflows', 'error');
+        return;
+      }
 
       // Validate steps
       for (const step of workflow.steps) {
@@ -677,8 +681,10 @@ function Workflows() {
       'complete': 'Complete',
       'cancel': 'Cancel',
       're-schedule': 'Re-schedule',
+      'custom': 'Custom',
+      'paid': 'Paid',
     };
-    return labels[action] || action;
+    return labels[action] || action || '—';
   };
 
   // Logs functions
@@ -722,6 +728,8 @@ function Workflows() {
       'complete': 'bg-green-100 text-green-700',
       'cancel': 'bg-red-100 text-red-700',
       're-schedule': 'bg-amber-100 text-amber-700',
+      'custom': 'bg-violet-100 text-violet-700',
+      'paid': 'bg-teal-100 text-teal-700',
     };
     return colors[action] || 'bg-slate-100 text-slate-700';
   };
@@ -1093,7 +1101,7 @@ function Workflows() {
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
                     Trigger Action <span className="text-red-500">*</span>
                   </label>
-                  <select
+                    <select
                     value={newWorkflow.triggerAction || 'no-show'}
                     onChange={(e) =>
                       setNewWorkflow({
@@ -1108,8 +1116,23 @@ function Workflows() {
                     <option value="cancel">Cancel</option>
                     <option value="re-schedule">Re-schedule</option>
                     <option value="paid">Paid</option>
+                    <option value="custom">Custom (attach to leads manually)</option>
                   </select>
                 </div>
+                {(newWorkflow.triggerAction || 'no-show') === 'custom' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">
+                      Workflow Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={newWorkflow.name || ''}
+                      onChange={(e) => setNewWorkflow({ ...newWorkflow, name: e.target.value })}
+                      placeholder="e.g. follow-up1"
+                      className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 bg-white"
+                    />
+                  </div>
+                )}
 
                 {/* Workflow Steps */}
                 <div className="space-y-3">
@@ -1467,7 +1490,12 @@ function Workflows() {
                 <div className="flex justify-end pt-4">
                   <button
                     onClick={() => saveWorkflow(newWorkflow)}
-                    disabled={saving === 'new' || !newWorkflow.steps || newWorkflow.steps.length === 0}
+                    disabled={
+                      saving === 'new' ||
+                      !newWorkflow.steps ||
+                      newWorkflow.steps.length === 0 ||
+                      ((newWorkflow.triggerAction || 'no-show') === 'custom' && (!newWorkflow.name || String(newWorkflow.name).trim() === ''))
+                    }
                     className="inline-flex items-center gap-2 px-6 py-2.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
                   >
                     {saving === 'new' ? (
@@ -2005,6 +2033,18 @@ function Workflows() {
                   >
                     Completed ({logStats.executed})
                   </button>
+                  <button
+                    onClick={() => {
+                      setLogStatusTab('failed');
+                      setLogPage(1);
+                    }}
+                    className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${logStatusTab === 'failed'
+                        ? 'border-red-500 text-red-600'
+                        : 'border-transparent text-slate-600 hover:text-slate-900'
+                      }`}
+                  >
+                    Failed ({logStats.failed})
+                  </button>
                 </div>
               </div>
 
@@ -2033,6 +2073,7 @@ function Workflows() {
                             <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Scheduled For</th>
                             <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Executed At</th>
                             <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Workflow</th>
+                            <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Error</th>
                             <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700">Actions</th>
                           </tr>
                         </thead>
@@ -2114,6 +2155,15 @@ function Workflows() {
                                     {log.workflowId.slice(0, 8)}...
                                   </p>
                                 </div>
+                              </td>
+                              <td className="py-4 px-4 max-w-[200px]">
+                                {(log.error || log.errorDetails) ? (
+                                  <div className="text-xs text-red-700 bg-red-50 px-2 py-1.5 rounded border border-red-200" title={typeof log.errorDetails === 'string' ? log.errorDetails : log.error}>
+                                    {log.error || (typeof log.errorDetails === 'string' ? log.errorDetails : 'Error')}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
                               </td>
                               <td className="py-4 px-4">
                                 <div className="flex items-center gap-2">

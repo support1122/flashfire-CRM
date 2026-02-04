@@ -281,12 +281,14 @@ export default function CrmDashboardPage() {
                   <LeadsView
                     onOpenEmailCampaign={handleOpenEmailCampaign}
                     onOpenWhatsAppCampaign={handleOpenWhatsAppCampaign}
+                    onNavigateToWorkflows={() => safeSetActiveTab('workflows')}
                   />
                 )}
                 {activeTab === 'qualified_leads' && (
                   <QualifiedLeadsView
                     onOpenEmailCampaign={handleOpenEmailCampaign}
                     onOpenWhatsAppCampaign={handleOpenWhatsAppCampaign}
+                    onNavigateToWorkflows={() => safeSetActiveTab('workflows')}
                   />
                 )}
                 {activeTab === 'claim_leads' && <ClaimLeadsView />}

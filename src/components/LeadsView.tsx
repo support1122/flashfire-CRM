@@ -24,6 +24,7 @@ import {
   Trash2,
   FileText,
   Workflow,
+  Plus,
 } from 'lucide-react';
 import {
   format,
@@ -100,9 +101,10 @@ interface LeadsViewProps {
   variant?: 'all' | 'qualified';
   onOpenEmailCampaign: (payload: EmailPrefillPayload) => void;
   onOpenWhatsAppCampaign?: (payload: WhatsAppPrefillPayload) => void;
+  onNavigateToWorkflows?: () => void;
 }
 
-export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpenWhatsAppCampaign }: LeadsViewProps) {
+export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpenWhatsAppCampaign, onNavigateToWorkflows }: LeadsViewProps) {
   const { token } = useCrmAuth();
   const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -148,6 +150,8 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
   const [bulkSelectedWorkflowIds, setBulkSelectedWorkflowIds] = useState<Set<string>>(new Set());
   const [bulkWorkflowsLoading, setBulkWorkflowsLoading] = useState(false);
   const [bulkAttaching, setBulkAttaching] = useState(false);
+  const [allSelectedBookingIds, setAllSelectedBookingIds] = useState<string[] | null>(null);
+  const [selectAllLoading, setSelectAllLoading] = useState(false);
   const statusDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -261,6 +265,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
     const page = 1;
     setBookingsPage(page);
     fetchLeads(page);
+    setAllSelectedBookingIds(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variant, planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
 
@@ -395,7 +400,43 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
     } else {
       setSelectedRows(new Set(filteredData.map((row) => row.id)));
     }
+    setAllSelectedBookingIds(null);
   }, [filteredData, selectedRows.size]);
+
+  const handleSelectAllFiltered = useCallback(async () => {
+    if (allSelectedBookingIds !== null) {
+      setAllSelectedBookingIds(null);
+      setSelectedRows(new Set());
+      return;
+    }
+    setSelectAllLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (utmFilter !== 'all') params.append('utmSource', utmFilter);
+      if (planFilter !== 'all') params.append('planName', planFilter);
+      if (variant === 'qualified' && qualificationFilter !== 'all') params.append('qualification', qualificationFilter);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
+      if (search) params.append('search', search);
+      if (fromDate) params.append('fromDate', fromDate);
+      if (toDate) params.append('toDate', toDate);
+      if (minAmount) params.append('minAmount', minAmount);
+      if (maxAmount) params.append('maxAmount', maxAmount);
+      const headers: HeadersInit = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/api/leads/ids?${params}`, { headers });
+      const data = await safeJsonParse(res);
+      if (data.success && Array.isArray(data.data?.bookingIds)) {
+        setAllSelectedBookingIds(data.data.bookingIds);
+        setSelectedRows(new Set());
+      } else {
+        showToast('Failed to fetch leads for selection', 'error');
+      }
+    } catch {
+      showToast('Failed to select all filtered leads', 'error');
+    } finally {
+      setSelectAllLoading(false);
+    }
+  }, [token, utmFilter, planFilter, qualificationFilter, statusFilter, search, fromDate, toDate, minAmount, maxAmount, variant, allSelectedBookingIds]);
 
   const handleSelectRow = useCallback((id: string) => {
     setSelectedRows((prev) => {
@@ -427,10 +468,13 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
   }, [selectedRows, filteredData, onOpenEmailCampaign]);
 
   const selectedBookingIdsForBulk = useMemo(() => {
+    if (allSelectedBookingIds && allSelectedBookingIds.length > 0) {
+      return allSelectedBookingIds;
+    }
     return filteredData
       .filter((row) => selectedRows.has(row.id) && row.bookingId)
       .map((row) => row.bookingId!);
-  }, [filteredData, selectedRows]);
+  }, [filteredData, selectedRows, allSelectedBookingIds]);
 
   useEffect(() => {
     if (!isAttachWorkflowsModalOpen) return;
@@ -457,22 +501,35 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
     if (token) (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
     let attached = 0;
+    let triggered = 0;
     for (const bookingId of selectedBookingIdsForBulk) {
       for (const workflowId of bulkSelectedWorkflowIds) {
         try {
-          const res = await fetch(
+          const attachRes = await fetch(
             `${API_BASE_URL}/api/campaign-bookings/${bookingId}/custom-workflows/${workflowId}/attach`,
             { method: 'POST', headers }
           );
-          const data = await res.json();
-          if (data.success) attached += 1;
+          const attachData = await attachRes.json();
+          if (attachData.success) {
+            attached += 1;
+            try {
+              const triggerRes = await fetch(
+                `${API_BASE_URL}/api/campaign-bookings/${bookingId}/custom-workflows/${workflowId}/trigger`,
+                { method: 'POST', headers }
+              );
+              const triggerData = await triggerRes.json();
+              if (triggerData.success) triggered += 1;
+            } catch {
+              //
+            }
+          }
         } catch {
           //
         }
       }
     }
     setBulkAttaching(false);
-    showToast(`Attached workflows to ${selectedBookingIdsForBulk.length} lead(s). ${attached} attachment(s) made.`, 'success');
+    showToast(`Attached and triggered workflows: ${attached} attached, ${triggered} triggered. Check Logs tab for execution status.`, 'success');
     setIsAttachWorkflowsModalOpen(false);
   };
 
@@ -913,10 +970,12 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
         </div>
       )}
 
-      {selectedRows.size > 0 && (
+      {(selectedRows.size > 0 || (allSelectedBookingIds && allSelectedBookingIds.length > 0)) && (
         <div className="bg-orange-50 border border-orange-200  px-4 py-3 flex items-center justify-between">
           <span className="text-xs font-semibold text-orange-900">
-            {selectedRows.size} row{selectedRows.size > 1 ? 's' : ''} selected
+            {allSelectedBookingIds
+              ? `${allSelectedBookingIds.length} row${allSelectedBookingIds.length !== 1 ? 's' : ''} selected (all filtered)`
+              : `${selectedRows.size} row${selectedRows.size !== 1 ? 's' : ''} selected`}
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -924,14 +983,14 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
               className="inline-flex items-center gap-2 px-4 py-2 border border-violet-200 text-violet-700 rounded-lg bg-white hover:bg-violet-50 transition text-[11px] font-semibold"
             >
               <Workflow size={16} />
-              Attach Workflows ({selectedRows.size})
+              Attach Workflows ({selectedBookingIdsForBulk.length})
             </button>
             <button
               onClick={handleBulkEmail}
               className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-[11px] font-semibold"
             >
               <Send size={16} />
-              Send Email ({selectedRows.size})
+              Send Email ({selectedBookingIdsForBulk.length})
             </button>
           </div>
         </div>
@@ -997,6 +1056,24 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={handleSelectAllFiltered}
+            disabled={selectAllLoading || bookingsPagination.total === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold rounded-lg border border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            title={allSelectedBookingIds ? 'Deselect all filtered' : `Select all ${bookingsPagination.total} filtered lead(s)`}
+          >
+            {selectAllLoading ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : allSelectedBookingIds ? (
+              'Deselect All'
+            ) : (
+              'Select All'
+            )}
+            {!selectAllLoading && !allSelectedBookingIds && (
+              <span className="text-orange-600">({bookingsPagination.total})</span>
+            )}
+          </button>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
           <div className="flex items-center gap-2">
@@ -1609,6 +1686,19 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
               <p className="text-sm text-slate-600 mb-4">
                 Attach custom workflows to <span className="font-semibold">{selectedBookingIdsForBulk.length}</span> selected lead(s). Select one or more workflows below.
               </p>
+              {onNavigateToWorkflows && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAttachWorkflowsModalOpen(false);
+                    onNavigateToWorkflows();
+                  }}
+                  className="w-full mb-4 inline-flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-violet-300 bg-violet-50/50 text-violet-700 rounded-xl font-semibold hover:bg-violet-100 hover:border-violet-400 transition"
+                >
+                  <Plus size={18} />
+                  Create new workflow
+                </button>
+              )}
               {bulkWorkflowsLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="animate-spin text-orange-500" size={28} />
