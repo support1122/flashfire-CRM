@@ -29,6 +29,7 @@ interface Lead {
     name: string;
     claimedAt: string;
   };
+  bdaApprovalStatus?: 'pending' | 'approved' | 'denied' | null;
 }
 
 export default function ClaimLeadsView() {
@@ -262,8 +263,13 @@ export default function ClaimLeadsView() {
         throw new Error(data.message || 'Failed to claim lead');
       }
 
-      setSuccess('Lead claimed successfully!');
-      setLead(data.data);
+      const claimedLead = data.data as Lead;
+      setLead(claimedLead);
+      if (claimedLead.bdaApprovalStatus === 'pending') {
+        setSuccess('Lead claimed successfully. Waiting for admin approval.');
+      } else {
+        setSuccess('Lead claimed successfully!');
+      }
       if (activeTab === 'my_leads') {
         fetchMyLeads();
       }
@@ -491,6 +497,25 @@ export default function ClaimLeadsView() {
                       <h2 className="text-xl font-bold text-slate-900">Lead Details</h2>
                       <p className="text-sm text-slate-600 mt-1">Booking ID: {lead.bookingId}</p>
                     </div>
+                      {lead.bdaApprovalStatus && (
+                        <div className="text-xs font-semibold">
+                          <span
+                            className={
+                              lead.bdaApprovalStatus === 'pending'
+                                ? 'inline-flex items-center px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200'
+                                : lead.bdaApprovalStatus === 'approved'
+                                ? 'inline-flex items-center px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'inline-flex items-center px-2 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200'
+                            }
+                          >
+                            {lead.bdaApprovalStatus === 'pending'
+                              ? 'Awaiting admin approval'
+                              : lead.bdaApprovalStatus === 'approved'
+                              ? 'Approved by admin'
+                              : 'Denied by admin'}
+                          </span>
+                        </div>
+                      )}
                     {!isClaimed && (
                       <button
                         onClick={handleClaim}
@@ -942,6 +967,19 @@ export default function ClaimLeadsView() {
                               {item.paymentPlan && (
                                 <p><DollarSign size={14} className="inline mr-1" />
                                   {item.paymentPlan.name} - {item.paymentPlan.displayPrice} paid
+                                </p>
+                              )}
+                              {item.bdaApprovalStatus && (
+                                <p
+                                  className={
+                                    item.bdaApprovalStatus === 'pending'
+                                      ? 'text-amber-600'
+                                      : item.bdaApprovalStatus === 'approved'
+                                      ? 'text-emerald-700'
+                                      : 'text-rose-600'
+                                  }
+                                >
+                                  Approval: {item.bdaApprovalStatus}
                                 </p>
                               )}
                               {item.bookingStatus === 'paid' && item.paymentPlan && item.paymentPlan.price && (

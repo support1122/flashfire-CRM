@@ -7,7 +7,8 @@ export type CrmPermission =
   | 'workflows'
   | 'leads'
   | 'claim_leads'
-  | 'meeting_links';
+  | 'meeting_links'
+  | 'bda_admin';
 
 export interface CrmUser {
   email: string;

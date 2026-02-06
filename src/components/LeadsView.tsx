@@ -1382,7 +1382,26 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
                           <div className="flex items-center w-fit gap-0.5 rounded border border-orange-100 bg-orange-50 px-1 py-0.5 text-[9px] font-semibold text-orange-800">
                             <DollarSign size={8} className="text-orange-600 flex-shrink-0" />
                             <span className="truncate text-[8px]">{row.paymentPlan.name}</span>
-                            <span className="text-orange-700 truncate text-[8px]">{row.paymentPlan.displayPrice || `$${row.paymentPlan.price}`}</span>
+                            {(() => {
+                              const rawDisplay = row.paymentPlan.displayPrice?.toString().trim() ?? '';
+                              const lower = rawDisplay.toLowerCase();
+                              const hasValidDisplay =
+                                !!rawDisplay &&
+                                lower !== 'null' &&
+                                lower !== 'undefined' &&
+                                lower !== '$null' &&
+                                lower !== '$undefined';
+                              const safeDisplay = hasValidDisplay
+                                ? rawDisplay
+                                : (row.paymentPlan.price && row.paymentPlan.price > 0
+                                  ? `$${row.paymentPlan.price}`
+                                  : '$349');
+                              return (
+                                <span className="text-orange-700 truncate text-[8px]">
+                                  {safeDisplay}
+                                </span>
+                              );
+                            })()}
                           </div>
                           {row.status === 'paid' && (
                             <>

@@ -24,12 +24,22 @@ function RequireUser({ children }: { children: React.ReactNode }) {
 }
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
-  const adminToken = sessionStorage.getItem('flashfire_crm_admin_token');
-  
+  let adminToken: string | null = null;
+  try {
+    adminToken = localStorage.getItem('flashfire_crm_admin_token');
+  } catch {
+    adminToken = null;
+  }
+  if (!adminToken) {
+    try {
+      adminToken = sessionStorage.getItem('flashfire_crm_admin_token');
+    } catch {
+      adminToken = null;
+    }
+  }
   if (!adminToken) {
     return <Navigate to="/admin/dashboard" replace />;
   }
-  
   return <>{children}</>;
 }
 

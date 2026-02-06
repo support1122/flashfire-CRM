@@ -15,6 +15,7 @@ import {
   Workflow,
   Users,
   UserCheck,
+  Bell,
 } from 'lucide-react';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
@@ -55,10 +56,23 @@ const TAB_CONFIG: Array<{
 ];
 
 export default function CrmDashboardPage() {
-  const { user, hasPermission, logout } = useCrmAuth();
+  const { user, hasPermission, logout, token } = useCrmAuth();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [emailPrefill, setEmailPrefill] = useState<EmailPrefillPayload | null>(null);
   const [whatsappPrefill, setWhatsappPrefill] = useState<WhatsAppPrefillPayload | null>(null);
+  const [bdaApprovals, setBdaApprovals] = useState<
+    Array<{
+      approvalId: string;
+      bookingId: string;
+      bdaEmail: string;
+      bdaName: string;
+      clientName: string;
+      clientEmail: string;
+      clientPhone: string;
+      createdAt: string;
+    }>
+  >([]);
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
 
   const allowedTabs = useMemo(() => TAB_CONFIG.filter((t) => hasPermission(t.permission)), [hasPermission]);
 
@@ -100,6 +114,44 @@ export default function CrmDashboardPage() {
   }, [activeTab, allowedTabs, hasAnyAccess]);
 
   const userInitial = user?.name?.[0]?.toUpperCase() || 'F';
+
+  useEffect(() => {
+    if (!token) return;
+    if (!hasPermission('bda_admin')) return;
+    let cancelled = false;
+    const apiBase = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
+    const load = async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/crm/bda-approvals/pending`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!body?.success || !Array.isArray(body.data)) return;
+        if (!cancelled) {
+          setBdaApprovals(
+            body.data.map((item: any) => ({
+              approvalId: String(item.approvalId),
+              bookingId: String(item.bookingId),
+              bdaEmail: String(item.bdaEmail || ''),
+              bdaName: String(item.bdaName || ''),
+              clientName: String(item.clientName || ''),
+              clientEmail: String(item.clientEmail || ''),
+              clientPhone: String(item.clientPhone || ''),
+              createdAt: item.createdAt
+            }))
+          );
+        }
+      } catch {
+      }
+    };
+    load();
+    const id = setInterval(load, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [token, hasPermission]);
 
   return (
     <PlanConfigProvider>
@@ -220,7 +272,78 @@ export default function CrmDashboardPage() {
                   <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-3 items-center">
+                {hasPermission('bda_admin') && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setApprovalsOpen((open) => !open)}
+                      className="relative inline-flex items-center justify-center w-10 h-10 rounded-full bg-white border border-gray-200 text-gray-600 hover:bg-gray-100"
+                    >
+                      <Bell size={18} />
+                      {bdaApprovals.length > 0 && (
+                        <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold">
+                          {bdaApprovals.length > 9 ? '9+' : bdaApprovals.length}
+                        </span>
+                      )}
+                    </button>
+                    {approvalsOpen && (
+                      <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-lg z-20">
+                        <div className="px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+                          <span className="text-xs font-semibold text-gray-700">BDA Approvals</span>
+                          <button
+                            type="button"
+                            onClick={() => setApprovalsOpen(false)}
+                            className="text-gray-400 hover:text-gray-600"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <div className="max-h-80 overflow-y-auto">
+                          {bdaApprovals.length === 0 ? (
+                            <div className="px-4 py-3 text-xs text-gray-500">No pending approvals</div>
+                          ) : (
+                            bdaApprovals.map((item) => (
+                              <button
+                                key={item.approvalId}
+                                type="button"
+                                onClick={() => {
+                                  setApprovalsOpen(false);
+                                  window.open('/admin/analysis', '_blank', 'noopener');
+                                }}
+                                className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                              >
+                                <div className="text-xs font-semibold text-gray-900 truncate">
+                                  {item.clientName || item.clientEmail || 'Client'}
+                                </div>
+                                <div className="text-[11px] text-gray-600 truncate">
+                                  {item.bdaName || item.bdaEmail}
+                                </div>
+                                <div className="text-[10px] text-gray-400 mt-1">
+                                  {item.bookingId}
+                                </div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                        {bdaApprovals.length > 0 && (
+                          <div className="px-4 py-2 border-t border-gray-200">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setApprovalsOpen(false);
+                                window.open('/admin/analysis', '_blank', 'noopener');
+                              }}
+                              className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-white bg-blue-500 rounded-lg hover:bg-blue-600"
+                            >
+                              Review all in Admin
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {topActions.map(({ tab, label, icon: Icon }) => (
                   <button
                     key={tab}

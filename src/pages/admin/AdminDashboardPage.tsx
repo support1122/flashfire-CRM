@@ -14,7 +14,8 @@ type CrmPermission =
   | 'workflows'
   | 'leads'
   | 'claim_leads'
-  | 'meeting_links';
+  | 'meeting_links'
+  | 'bda_admin';
 
 const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: string }> = [
   { key: 'campaign_manager', label: 'Campaign Manager', description: 'UTM campaigns + bookings overview' },
@@ -26,6 +27,7 @@ const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: strin
   { key: 'leads', label: 'Leads', description: 'MQL / SQL / Converted management + revenue tracking' },
   { key: 'claim_leads', label: 'Claim Leads', description: 'BDA lead claiming and management' },
   { key: 'meeting_links', label: 'Meeting Info', description: 'Meeting recordings and Google Drive video URLs' },
+  { key: 'bda_admin', label: 'BDA Admin', description: 'Approve BDA claims and review notifications' },
 ];
 
 type CrmUserRow = {
@@ -50,7 +52,13 @@ async function safeJson(res: Response) {
 }
 
 export default function AdminDashboardPage() {
-  const [adminToken, setAdminToken] = useState<string | null>(() => sessionStorage.getItem(ADMIN_TOKEN_KEY));
+  const [adminToken, setAdminToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(ADMIN_TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
@@ -91,7 +99,9 @@ export default function AdminDashboardPage() {
   }, [adminToken]);
 
   const logoutAdmin = () => {
-    sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+    try {
+      localStorage.removeItem(ADMIN_TOKEN_KEY);
+    } catch {}
     setAdminToken(null);
     setPassword('');
     setUsers([]);
@@ -109,7 +119,9 @@ export default function AdminDashboardPage() {
       });
       const body = await safeJson(res);
       if (!res.ok || !body?.token) throw new Error(body?.error || 'Invalid password');
-      sessionStorage.setItem(ADMIN_TOKEN_KEY, body.token);
+      try {
+        localStorage.setItem(ADMIN_TOKEN_KEY, body.token);
+      } catch {}
       setAdminToken(body.token);
       setPassword('');
     } catch (e) {

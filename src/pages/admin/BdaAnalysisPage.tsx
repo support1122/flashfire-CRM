@@ -53,6 +53,8 @@ interface Lead {
     name: string;
     claimedAt: string;
   };
+  bdaApprovalStatus?: 'pending' | 'approved' | 'denied' | null;
+  bdaApprovalId?: string | null;
 }
 
 interface BdaDetailData {
@@ -66,7 +68,13 @@ interface BdaDetailData {
 
 export default function BdaAnalysisPage() {
   const navigate = useNavigate();
-  const [adminToken] = useState<string | null>(() => sessionStorage.getItem(ADMIN_TOKEN_KEY));
+  const [adminToken] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(ADMIN_TOKEN_KEY) || sessionStorage.getItem(ADMIN_TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AnalysisData | null>(null);
@@ -98,6 +106,18 @@ export default function BdaAnalysisPage() {
   const [editAmount, setEditAmount] = useState<string>('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<
+    Array<{
+      approvalId: string;
+      bookingId: string;
+      bdaEmail: string;
+      bdaName: string;
+      clientName: string;
+      clientEmail: string;
+    }>
+  >([]);
+  const [approvalsModalOpen, setApprovalsModalOpen] = useState(false);
+  const [approvalSavingId, setApprovalSavingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!adminToken) {
@@ -106,6 +126,7 @@ export default function BdaAnalysisPage() {
     }
     fetchAnalysis();
     fetchCommissionConfig();
+    fetchPendingApprovals();
   }, [adminToken, navigate, fromDate, toDate, statusFilter, planFilter, bdaEmailFilter]);
 
   const fetchAnalysis = async () => {
@@ -210,6 +231,32 @@ export default function BdaAnalysisPage() {
       setCommissionError(err instanceof Error ? err.message : 'Failed to save commission config');
     } finally {
       setCommissionSaving(false);
+    }
+  };
+
+  const fetchPendingApprovals = async () => {
+    if (!adminToken) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/crm/admin/bda-approvals/pending`, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      const body = await res.json();
+      if (!body.success || !Array.isArray(body.data)) {
+        setPendingApprovals([]);
+        return;
+      }
+      setPendingApprovals(
+        body.data.map((item: any) => ({
+          approvalId: String(item.approvalId),
+          bookingId: String(item.bookingId),
+          bdaEmail: String(item.bdaEmail || ''),
+          bdaName: String(item.bdaName || ''),
+          clientName: String(item.clientName || ''),
+          clientEmail: String(item.clientEmail || '')
+        }))
+      );
+    } catch {
+      setPendingApprovals([]);
     }
   };
 
@@ -365,6 +412,9 @@ export default function BdaAnalysisPage() {
   };
 
   const getIncentiveForLead = (lead: Lead): number => {
+    if (lead.bdaApprovalStatus && lead.bdaApprovalStatus !== 'approved') {
+      return 0;
+    }
     if (!lead.paymentPlan || !lead.paymentPlan.name || lead.bookingStatus !== 'paid') {
       return 0;
     }
@@ -391,6 +441,34 @@ export default function BdaAnalysisPage() {
     
     // Return incentive in INR (same regardless of payment currency)
     return fallbackConfig.incentivePerLeadInr * paymentRatio;
+  };
+
+  const handleApprovalDecision = async (approvalId: string | null | undefined, action: 'approved' | 'denied') => {
+    if (!adminToken || !approvalId) return;
+    setApprovalSavingId(approvalId);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/crm/admin/bda-approvals/${encodeURIComponent(approvalId)}/decision`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${adminToken}`
+        },
+        body: JSON.stringify({ action })
+      });
+      const body = await res.json();
+      if (!body.success) {
+        throw new Error(body.message || 'Failed to update approval');
+      }
+      if (selectedBdaEmail) {
+        await fetchBdaDetails(selectedBdaEmail);
+      }
+      await fetchAnalysis();
+      await fetchPendingApprovals();
+    } catch (err) {
+      console.error('Error updating BDA approval:', err);
+    } finally {
+      setApprovalSavingId(null);
+    }
   };
 
   if (loading) {
@@ -431,6 +509,77 @@ export default function BdaAnalysisPage() {
         <h1 className="text-3xl font-bold text-slate-900 mb-2">Lead Analysis</h1>
         <p className="text-slate-600">Comprehensive statistics on leads and BDA performance</p>
       </div>
+
+      <div className="bg-white border border-slate-200 rounded-xl p-4">
+        <div className="flex items-center justify-between gap-3">
+          {pendingApprovals.length === 0 ? (
+            <p className="text-sm text-slate-600">No pending approvals.</p>
+          ) : (
+            <p className="text-sm font-semibold text-slate-800">
+              Pending approvals: <span className="text-orange-600">{pendingApprovals.length}</span>
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => setApprovalsModalOpen(true)}
+            disabled={pendingApprovals.length === 0}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            View requests
+          </button>
+        </div>
+      </div>
+
+      {approvalsModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200">
+              <div className="text-sm font-semibold text-slate-900">Pending BDA claim requests</div>
+              <button
+                type="button"
+                onClick={() => setApprovalsModalOpen(false)}
+                className="px-2 py-1 text-slate-500 hover:text-slate-700"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+              {pendingApprovals.length === 0 ? (
+                <div className="text-sm text-slate-500">No pending approvals.</div>
+              ) : (
+                pendingApprovals.map((item) => (
+                  <div
+                    key={item.approvalId}
+                    className="border border-slate-200 rounded-lg px-4 py-3 flex items-center justify-between gap-3"
+                  >
+                    <div className="text-sm">
+                      <div className="font-semibold text-slate-900">
+                        {item.clientName || item.clientEmail || 'Client'}
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        BDA: {item.bdaName} ({item.bdaEmail})
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-1">Booking: {item.bookingId}</div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setApprovalsModalOpen(false);
+                        if (item.bdaEmail) {
+                          fetchBdaDetails(item.bdaEmail);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800"
+                    >
+                      View BDA
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white border border-slate-200 rounded-xl p-6">
@@ -861,6 +1010,23 @@ export default function BdaAnalysisPage() {
                               <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(lead.bookingStatus)}`}>
                                 {lead.bookingStatus}
                               </span>
+                              {lead.bdaApprovalStatus && (
+                                <span
+                                  className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
+                                    lead.bdaApprovalStatus === 'pending'
+                                      ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                      : lead.bdaApprovalStatus === 'approved'
+                                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                      : 'bg-rose-50 text-rose-700 border border-rose-200'
+                                  }`}
+                                >
+                                  {lead.bdaApprovalStatus === 'pending'
+                                    ? 'Awaiting admin approval'
+                                    : lead.bdaApprovalStatus === 'approved'
+                                    ? 'Approved'
+                                    : 'Denied'}
+                                </span>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 ml-3 shrink-0">
@@ -934,6 +1100,26 @@ export default function BdaAnalysisPage() {
                                 </div>
                               </div>
                             )}
+                          </div>
+                        )}
+                        {lead.bdaApprovalStatus === 'pending' && lead.bdaApprovalId && (
+                          <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleApprovalDecision(lead.bdaApprovalId, 'denied')}
+                              disabled={approvalSavingId === lead.bdaApprovalId}
+                              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                            >
+                              {approvalSavingId === lead.bdaApprovalId ? 'Rejecting…' : 'Reject'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApprovalDecision(lead.bdaApprovalId, 'approved')}
+                              disabled={approvalSavingId === lead.bdaApprovalId}
+                              className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                            >
+                              {approvalSavingId === lead.bdaApprovalId ? 'Approving…' : 'Approve'}
+                            </button>
                           </div>
                         )}
                       </div>
