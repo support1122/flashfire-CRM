@@ -1201,6 +1201,15 @@ export default function BdaAnalysisPage() {
                                 <Calendar size={16} />
                                 <span>{formatDate(lead.scheduledEventStartTime)}</span>
                               </div>
+                              {lead.claimedBy?.claimedAt && (
+                                <div className="flex items-center gap-2 text-slate-600">
+                                  <span className="font-semibold text-slate-700">Claimed:</span>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(lead.bookingStatus)}`}>
+                                    {lead.bookingStatus}
+                                  </span>
+                                  <span>{formatDate(lead.claimedBy.claimedAt)}</span>
+                                </div>
+                              )}
                               {(lead.paymentPlan || (lead.paymentBreakdown && lead.paymentBreakdown.length > 0)) && (
                                 <div className="flex items-center gap-2 text-slate-600">
                                   <DollarSign size={16} />
