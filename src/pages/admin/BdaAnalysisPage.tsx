@@ -483,11 +483,9 @@ export default function BdaAnalysisPage() {
       const key = claimedAt ? new Date(claimedAt).toISOString().slice(0, 7) : 'unknown';
       if (!byMonth.has(key)) byMonth.set(key, { claimed: 0, revenue: 0, incentive: 0 });
       const row = byMonth.get(key)!;
-      row.claimed += 1;
-      if (lead.bookingStatus === 'paid') {
-        row.revenue += getTotalAmountForLead(lead);
-        row.incentive += getIncentiveForLead(lead);
-      }
+      row.claimed += 1; // All leads are already paid + approved
+      row.revenue += getTotalAmountForLead(lead);
+      row.incentive += getIncentiveForLead(lead);
     }
     return Array.from(byMonth.entries())
       .map(([month, data]) => ({
@@ -1157,14 +1155,13 @@ export default function BdaAnalysisPage() {
                     <div className="bg-slate-50 rounded-lg p-4">
                       <div className="text-sm text-slate-600 mb-1">Paid Leads</div>
                       <div className="text-2xl font-bold text-emerald-600">
-                        {detailData.leads.filter(l => l.bookingStatus === 'paid').length}
+                        {detailData.leads.length}
                       </div>
                     </div>
                     <div className="bg-slate-50 rounded-lg p-4">
                       <div className="text-sm text-slate-600 mb-1">Total Revenue</div>
                       <div className="text-2xl font-bold text-emerald-600">
                         ${detailData.leads
-                          .filter(l => l.bookingStatus === 'paid')
                           .reduce((sum, l) => sum + getTotalAmountForLead(l), 0)
                           .toLocaleString()}
                       </div>
@@ -1173,7 +1170,6 @@ export default function BdaAnalysisPage() {
                       <div className="text-sm text-slate-600 mb-1">Incentive (₹)</div>
                       <div className="text-2xl font-bold text-slate-900">
                         ₹{detailData.leads
-                          .filter(l => l.bookingStatus === 'paid')
                           .reduce((sum, l) => sum + getIncentiveForLead(l), 0)
                           .toLocaleString('en-IN')}
                       </div>
