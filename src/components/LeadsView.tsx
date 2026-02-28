@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Loader2,
   Mail,
@@ -153,6 +154,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
   const [allSelectedBookingIds, setAllSelectedBookingIds] = useState<string[] | null>(null);
   const [selectAllLoading, setSelectAllLoading] = useState(false);
   const statusDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [statusDropdownPosition, setStatusDropdownPosition] = useState<{ top: number; left: number } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now().toString();
@@ -252,11 +254,10 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
     }
   }, [token, variant, planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
 
-  // Debounce search input to avoid too many API calls
   useEffect(() => {
     const timer = setTimeout(() => {
-      setSearch(searchInput);
-    }, 300); // Wait 300ms after user stops typing
+      setSearch(searchInput.trim());
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [searchInput]);
@@ -751,7 +752,8 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (openStatusDropdown && !(event.target as Element).closest('.status-dropdown-container')) {
+      const target = event.target as Element;
+      if (openStatusDropdown && !target.closest('.status-dropdown-container') && !target.closest('.status-dropdown-panel')) {
         setOpenStatusDropdown(null);
       }
     };
@@ -784,6 +786,29 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
       scrollDropdownIntoView(openStatusDropdown);
     }
   }, [openStatusDropdown, scrollDropdownIntoView]);
+
+  useEffect(() => {
+    if (!openStatusDropdown) {
+      setStatusDropdownPosition(null);
+      return;
+    }
+    const measure = () => {
+      const container = statusDropdownRefs.current[openStatusDropdown];
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const panelW = 224;
+      const panelMaxH = 380;
+      let left = rect.right + 4;
+      let top = rect.top;
+      if (left + panelW > window.innerWidth - 8) left = rect.left - panelW - 4;
+      if (left < 8) left = 8;
+      if (top + panelMaxH > window.innerHeight - 8) top = window.innerHeight - panelMaxH - 8;
+      if (top < 8) top = 8;
+      setStatusDropdownPosition({ top, left });
+    };
+    const t = requestAnimationFrame(measure);
+    return () => cancelAnimationFrame(t);
+  }, [openStatusDropdown]);
 
   const handleSaveNotes = async (notes: string) => {
     if (!selectedBookingForNotes) return;
@@ -1005,6 +1030,14 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
               placeholder="Search by name, email, phone, or source…"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const trimmed = searchInput.trim();
+                  setSearch(trimmed);
+                  setBookingsPage(1);
+                  fetchLeads(1);
+                }
+              }}
               className="text-[11px] bg-transparent focus:outline-none w-full"
             />
           </div>
@@ -1308,71 +1341,10 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
                         </button>
 
                         {openStatusDropdown === row.bookingId && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-10"
-                              onClick={() => setOpenStatusDropdown(null)}
-                            />
-                            <div className="status-dropdown-panel absolute left-full ml-1 top-0 z-20 w-44 bg-white rounded-lg shadow-xl border border-slate-200 py-1 overflow-hidden max-h-[350px] overflow-y-auto">
-                              <div className="px-2 py-1 text-[9px] font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100 sticky top-0 bg-white">
-                                Change Status
-                              </div>
-                              {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
-                                if (status === row.status) return null;
-                                const statusIcon = status === 'completed' ? CheckCircle2 : status === 'no-show' ? AlertTriangle : status === 'paid' ? DollarSign : status === 'rescheduled' ? Clock : status === 'canceled' ? X : status === 'ignored' ? X : Calendar;
-                                const StatusIcon = statusIcon;
-                                const isPaidOption = status === 'paid';
-                                const isPlanOpen = isPaidOption && planPickerFor === row.bookingId;
-                                return (
-                                  <div key={status} className="border-b last:border-b-0 border-slate-100">
-                                    <button
-                                      onClick={() => {
-                                        const booking = bookingsById.get(row.bookingId!);
-                                        if (!booking) return;
-                                        if (isPaidOption) {
-                                          setPlanPickerFor(row.bookingId!);
-                                          return;
-                                        }
-                                        setPlanPickerFor(null);
-                                        handleStatusUpdate(booking.bookingId, status);
-                                        setOpenStatusDropdown(null);
-                                      }}
-                                      className="w-full text-left px-2 py-1 text-[9px] hover:bg-slate-50 transition flex items-center gap-1.5 group"
-                                    >
-                                      <StatusIcon size={11} className={`${status === 'completed' ? 'text-emerald-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-teal-600' : status === 'canceled' ? 'text-rose-700' : status === 'ignored' ? 'text-slate-500' : 'text-orange-600'}`} />
-                                      <div className="flex flex-col gap-0.5">
-                                        <span className="font-medium">{statusLabels[status]}</span>
-                                        {isPaidOption && <span className="text-[8px] text-slate-500">Select a plan</span>}
-                                      </div>
-                                    </button>
-                                    {isPlanOpen && (
-                                      <div className="px-2 pb-1.5 grid grid-cols-1 gap-0.5">
-                                        {planOptions.map((plan) => (
-                                          <button
-                                            key={plan.key}
-                                            onClick={() => {
-                                              const booking = bookingsById.get(row.bookingId!);
-                                              if (booking) {
-                                                handleStatusUpdate(booking.bookingId, 'paid', plan);
-                                                setOpenStatusDropdown(null);
-                                              }
-                                            }}
-                                            className="flex items-center justify-between w-full rounded border border-orange-100 bg-orange-50 px-1.5 py-0.5 text-[9px] font-semibold text-orange-800 hover:border-orange-200 hover:bg-orange-100 transition"
-                                          >
-                                            <div className="flex flex-col text-left">
-                                              <span>{plan.label}</span>
-                                              <span className="text-[8px] inline-flex w-fit items-center px-1.5 py-0.5 font-medium text-orange-700">{plan.displayPrice}</span>
-                                            </div>
-                                            <DollarSign size={11} className="text-orange-600" />
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setOpenStatusDropdown(null)}
+                          />
                         )}
                       </div>
                     </td>
@@ -1831,6 +1803,88 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
           </div>
         </div>
       )}
+
+      {openStatusDropdown && statusDropdownPosition && (() => {
+        const openRow = filteredData.find((r) => r.bookingId === openStatusDropdown);
+        if (!openRow) return null;
+        return createPortal(
+          <div
+            className="status-dropdown-panel fixed z-50 w-56 min-w-[224px] bg-white rounded-lg shadow-xl border border-slate-200 py-0 overflow-hidden max-h-[350px] overflow-y-auto"
+            style={{ top: statusDropdownPosition.top, left: statusDropdownPosition.left }}
+          >
+            <div className="px-2.5 py-2 border-b border-slate-100 bg-slate-50/80">
+              <div className="text-[9px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Client</div>
+              <div className="text-[10px] font-semibold text-slate-900 truncate" title={openRow.name}>{openRow.name}</div>
+              <div className="text-[9px] text-slate-600 truncate mt-0.5" title={openRow.email}>{openRow.email}</div>
+              {openRow.phone && openRow.phone !== 'Not Specified' && (
+                <div className="text-[9px] text-slate-600 truncate mt-0.5" title={openRow.phone}>{openRow.phone}</div>
+              )}
+            </div>
+            <div className="px-2 py-1 text-[9px] font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100 sticky top-0 bg-white">
+              Change Status
+            </div>
+            <div className="py-1">
+              {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
+                if (status === openRow.status) return null;
+                const statusIcon = status === 'completed' ? CheckCircle2 : status === 'no-show' ? AlertTriangle : status === 'paid' ? DollarSign : status === 'rescheduled' ? Clock : status === 'canceled' ? X : status === 'ignored' ? X : Calendar;
+                const StatusIcon = statusIcon;
+                const isPaidOption = status === 'paid';
+                const isPlanOpen = isPaidOption && planPickerFor === openRow.bookingId;
+                return (
+                  <div key={status} className="border-b last:border-b-0 border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const booking = bookingsById.get(openRow.bookingId!);
+                        if (!booking) return;
+                        if (isPaidOption) {
+                          setPlanPickerFor(openRow.bookingId!);
+                          return;
+                        }
+                        setPlanPickerFor(null);
+                        handleStatusUpdate(booking.bookingId, status);
+                        setOpenStatusDropdown(null);
+                      }}
+                      className="w-full text-left px-2 py-1.5 text-[9px] hover:bg-slate-50 transition flex items-center gap-1.5 group"
+                    >
+                      <StatusIcon size={11} className={`flex-shrink-0 ${status === 'completed' ? 'text-emerald-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-teal-600' : status === 'canceled' ? 'text-rose-700' : status === 'ignored' ? 'text-slate-500' : 'text-orange-600'}`} />
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="font-medium">{statusLabels[status]}</span>
+                        {isPaidOption && <span className="text-[8px] text-slate-500">Select a plan</span>}
+                      </div>
+                    </button>
+                    {isPlanOpen && (
+                      <div className="px-2 pb-1.5 grid grid-cols-1 gap-0.5">
+                        {planOptions.map((plan) => (
+                          <button
+                            type="button"
+                            key={plan.key}
+                            onClick={() => {
+                              const booking = bookingsById.get(openRow.bookingId!);
+                              if (booking) {
+                                handleStatusUpdate(booking.bookingId, 'paid', plan);
+                                setOpenStatusDropdown(null);
+                              }
+                            }}
+                            className="flex items-center justify-between w-full rounded border border-orange-100 bg-orange-50 px-1.5 py-0.5 text-[9px] font-semibold text-orange-800 hover:border-orange-200 hover:bg-orange-100 transition"
+                          >
+                            <div className="flex flex-col text-left">
+                              <span>{plan.label}</span>
+                              <span className="text-[8px] inline-flex w-fit items-center px-1.5 py-0.5 font-medium text-orange-700">{plan.displayPrice}</span>
+                            </div>
+                            <DollarSign size={11} className="text-orange-600 flex-shrink-0" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
 
       {/* Toast Notifications */}
       <div className="fixed top-4 right-4 z-50 space-y-2">
