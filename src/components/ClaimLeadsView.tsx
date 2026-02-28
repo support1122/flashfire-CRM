@@ -1143,7 +1143,11 @@ export default function ClaimLeadsView() {
                                       : 'text-rose-600'
                                   }
                                 >
-                                  Approval: {item.bdaApprovalStatus}
+                                  Approval: {item.bdaApprovalStatus === 'pending'
+                                    ? 'Awaiting admin approval'
+                                    : item.bdaApprovalStatus === 'approved'
+                                    ? 'Approved'
+                                    : 'Rejected'}
                                 </p>
                               )}
                               {item.bookingStatus === 'paid' && (item.paymentPlan || (item.paymentBreakdown && item.paymentBreakdown.length > 0)) && (
