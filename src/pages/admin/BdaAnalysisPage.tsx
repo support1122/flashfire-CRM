@@ -269,10 +269,13 @@ export default function BdaAnalysisPage() {
 
     setDetailLoading(true);
     setDetailError(null);
-    setSelectedBdaEmail(email);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/bda/leads/${encodeURIComponent(email)}`, {
+      const params = new URLSearchParams();
+      if (fromDate) params.append('fromDate', fromDate);
+      if (toDate) params.append('toDate', toDate);
+
+      const response = await fetch(`${API_BASE_URL}/api/bda/leads/${encodeURIComponent(email)}?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${adminToken}`,
         },
@@ -291,6 +294,14 @@ export default function BdaAnalysisPage() {
       setDetailLoading(false);
     }
   };
+
+  // Refetch BDA details when date filters change
+  useEffect(() => {
+    if (selectedBdaEmail) {
+      fetchBdaDetails(selectedBdaEmail);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDate, toDate, selectedBdaEmail]);
 
   const closeDetailModal = () => {
     setSelectedBdaEmail(null);
@@ -610,6 +621,7 @@ export default function BdaAnalysisPage() {
                       onClick={() => {
                         setApprovalsModalOpen(false);
                         if (item.bdaEmail) {
+                          setSelectedBdaEmail(item.bdaEmail);
                           fetchBdaDetails(item.bdaEmail);
                         }
                       }}
@@ -994,7 +1006,10 @@ export default function BdaAnalysisPage() {
                 {data.bdaPerformance.map((bda, index) => (
                   <tr
                     key={bda._id}
-                    onClick={() => fetchBdaDetails(bda._id)}
+                    onClick={() => {
+                      setSelectedBdaEmail(bda._id);
+                      fetchBdaDetails(bda._id);
+                    }}
                     className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3">
@@ -1042,6 +1057,84 @@ export default function BdaAnalysisPage() {
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
                 <X size={24} className="text-slate-600" />
+              </button>
+            </div>
+
+            {/* Date Filters - Same as main page */}
+            <div className="bg-white border-b border-slate-200 p-4 flex flex-wrap items-end gap-4">
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-600">Month</label>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedMonth(val);
+                    if (!val) {
+                      setFromDate('');
+                      setToDate('');
+                    } else {
+                      const [y, m] = val.split('-').map(Number);
+                      setFromDate(`${y}-${String(m).padStart(2, '0')}-01`);
+                      const lastDay = new Date(y, m, 0).getDate();
+                      setToDate(`${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`);
+                    }
+                  }}
+                  className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[140px]"
+                >
+                  <option value="">All time</option>
+                  {(() => {
+                    const options: { value: string; label: string }[] = [];
+                    const now = new Date();
+                    for (let i = 0; i < 24; i++) {
+                      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                      options.push({
+                        value,
+                        label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                      });
+                    }
+                    return options.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ));
+                  })()}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-600">From date</label>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => {
+                    setFromDate(e.target.value);
+                    setSelectedMonth('');
+                  }}
+                  className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-600">To date</label>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => {
+                    setToDate(e.target.value);
+                    setSelectedMonth('');
+                  }}
+                  className="border border-slate-200 rounded-lg px-3 py-2 text-sm"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setFromDate('');
+                  setToDate('');
+                  setSelectedMonth('');
+                }}
+                className="ml-auto px-4 py-2 text-xs font-semibold border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-100"
+              >
+                Reset filters
               </button>
             </div>
 
