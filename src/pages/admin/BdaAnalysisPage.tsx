@@ -264,7 +264,7 @@ export default function BdaAnalysisPage() {
     }
   };
 
-  const fetchBdaDetails = async (email: string, includePending: boolean = false) => {
+  const fetchBdaDetails = async (email: string) => {
     if (!adminToken) return;
 
     setDetailLoading(true);
@@ -274,7 +274,6 @@ export default function BdaAnalysisPage() {
       const params = new URLSearchParams();
       if (fromDate) params.append('fromDate', fromDate);
       if (toDate) params.append('toDate', toDate);
-      if (includePending) params.append('includePending', 'true');
 
       const response = await fetch(`${API_BASE_URL}/api/bda/leads/${encodeURIComponent(email)}?${params.toString()}`, {
         headers: {
@@ -624,7 +623,7 @@ export default function BdaAnalysisPage() {
                         setApprovalsModalOpen(false);
                         if (item.bdaEmail) {
                           setSelectedBdaEmail(item.bdaEmail);
-                          fetchBdaDetails(item.bdaEmail, true); // Include pending leads when viewing from approvals
+                          fetchBdaDetails(item.bdaEmail);
                         }
                       }}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white hover:bg-slate-800"
