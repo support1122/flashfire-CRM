@@ -703,7 +703,7 @@ export default function BdaAnalysisPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-sm text-slate-600 mb-1">Total Claimed</div>
+                  <div className="text-sm text-slate-600 mb-1">Approved</div>
                   <div className="text-2xl font-bold text-slate-900">{topBda.totalClaimed}</div>
                 </div>
                 <div>
@@ -995,7 +995,7 @@ export default function BdaAnalysisPage() {
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Rank</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">BDA Name</th>
                   <th className="px-4 py-3 text-left font-semibold text-slate-700">Email</th>
-                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Total Claimed</th>
+                  <th className="px-4 py-3 text-right font-semibold text-slate-700">Approved</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Paid</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Scheduled</th>
                   <th className="px-4 py-3 text-right font-semibold text-slate-700">Completed</th>
