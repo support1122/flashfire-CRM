@@ -105,9 +105,11 @@ interface LeadsViewProps {
   onOpenEmailCampaign: (payload: EmailPrefillPayload) => void;
   onOpenWhatsAppCampaign?: (payload: WhatsAppPrefillPayload) => void;
   onNavigateToWorkflows?: () => void;
+  defaultUtmSource?: string; // Optional: Set default UTM source filter (e.g., 'meta_lead_ad')
+  hideSourceFilter?: boolean; // Optional: Hide the source filter dropdown
 }
 
-export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpenWhatsAppCampaign, onNavigateToWorkflows }: LeadsViewProps) {
+export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpenWhatsAppCampaign, onNavigateToWorkflows, defaultUtmSource, hideSourceFilter = false }: LeadsViewProps) {
   const { token } = useCrmAuth();
   const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -122,7 +124,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
-  const [utmFilter, setUtmFilter] = useState<string>('all');
+  const [utmFilter, setUtmFilter] = useState<string>(defaultUtmSource || 'all');
   const [minAmount, setMinAmount] = useState<string>('');
   const [maxAmount, setMaxAmount] = useState<string>('');
   const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null);
@@ -1085,6 +1087,8 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
             value={utmFilter}
             onChange={(e) => setUtmFilter(e.target.value)}
             className="text-[11px] border border-slate-200 px-3 py-2 bg-white min-w-[160px]"
+            disabled={hideSourceFilter}
+            style={{ display: hideSourceFilter ? 'none' : 'block' }}
           >
             <option value="all">All sources</option>
             {uniqueSources.map((source) => (
@@ -1145,13 +1149,13 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
               className="border border-slate-200 px-3 py-2 bg-white w-24"
             />
           </div>
-          {(fromDate || toDate || searchInput || planFilter !== 'all' || utmFilter !== 'all' || statusFilter !== 'all' || qualificationFilter !== 'all' || minAmount || maxAmount) && (
+          {(fromDate || toDate || searchInput || planFilter !== 'all' || (utmFilter !== 'all' && !hideSourceFilter) || statusFilter !== 'all' || qualificationFilter !== 'all' || minAmount || maxAmount) && (
             <button
               onClick={() => {
                 setFromDate('');
                 setToDate('');
                 setPlanFilter('all');
-                setUtmFilter('all');
+                setUtmFilter(defaultUtmSource || 'all');
                 setStatusFilter('all');
                 setQualificationFilter('all');
                 setSearchInput('');
