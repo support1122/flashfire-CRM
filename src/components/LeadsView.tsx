@@ -296,11 +296,9 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
 
   const filteredData = useMemo(() => {
     return bookings.map((booking) => {
-      // Use phone number for ID if available, otherwise use email
-      // This ensures proper grouping when phone numbers are normalized
-      const idKey = booking.clientPhone && booking.clientPhone !== 'Not Specified'
-        ? booking.clientPhone.replace(/\D/g, '').slice(-10) // Last 10 digits for matching
-        : booking.clientEmail;
+      // Use bookingId for unique ID to show all leads (including duplicates)
+      // For Meta Leads tab, we want to show all individual leads, not group by email/phone
+      const idKey = booking.bookingId || `${booking.clientEmail}-${Date.now()}`;
 
       return {
         id: `lead-${idKey}`,
@@ -1582,7 +1580,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
             {bookingsPagination.pages > 1 ? (
               <>Page {bookingsPagination.page} of {bookingsPagination.pages} • </>
             ) : null}
-            Total unique leads: <span className="font-semibold text-slate-900">{bookingsPagination.total}</span>
+            Total {hideSourceFilter ? 'leads' : 'unique leads'}: <span className="font-semibold text-slate-900">{bookingsPagination.total}</span>
           </div>
           {bookingsPagination.pages > 1 && (
             <div className="flex items-center gap-1.5">
