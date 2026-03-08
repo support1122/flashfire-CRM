@@ -91,6 +91,8 @@ interface Booking {
   anythingToKnow?: string;
   totalBookings?: number;
   firefliesTranscriptId?: string;
+  leadSource?: 'calendly' | 'meta_lead_ad' | 'manual' | 'frontend_direct' | 'bulk_import';
+  metaFormName?: string;
   claimedBy?: {
     email: string;
     name: string;
@@ -318,6 +320,8 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
         totalBookings: booking.totalBookings || 1,
         firefliesTranscriptId: booking.firefliesTranscriptId,
         claimedBy: booking.claimedBy,
+        leadSource: booking.leadSource,
+        metaFormName: booking.metaFormName,
       };
     }).filter((row) => {
       if (row.name === 'Unknown Client' && row.email.includes('calendly.placeholder')) {
@@ -1300,13 +1304,19 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
                       </div>
                     </td>
                     <td className="px-1 py-1.5">
-                      {row.source ? (
-                        <span className="inline-flex items-center px-1 py-0.5 rounded-full bg-slate-100 text-[9px] font-semibold text-slate-600 truncate max-w-full" title={row.source}>
-                          {row.source}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 text-[9px]">—</span>
-                      )}
+                      <div className="flex flex-col gap-0.5">
+                        {row.leadSource === 'meta_lead_ad' ? (
+                          <span className="inline-flex items-center px-1 py-0.5 rounded-full bg-blue-100 text-[9px] font-semibold text-blue-700 truncate max-w-full" title={`Meta Lead Ad${row.metaFormName ? ` - ${row.metaFormName}` : ''}`}>
+                            Meta Ad
+                          </span>
+                        ) : row.source ? (
+                          <span className="inline-flex items-center px-1 py-0.5 rounded-full bg-slate-100 text-[9px] font-semibold text-slate-600 truncate max-w-full" title={row.source}>
+                            {row.source}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-[9px]">—</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-1 py-1.5">
                       <div
