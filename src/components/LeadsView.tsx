@@ -92,6 +92,7 @@ interface Booking {
   totalBookings?: number;
   firefliesTranscriptId?: string;
   leadSource?: 'calendly' | 'meta_lead_ad' | 'manual' | 'frontend_direct' | 'bulk_import';
+  metaLeadId?: string | null;
   metaFormName?: string;
   claimedBy?: {
     email: string;
@@ -321,6 +322,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
         firefliesTranscriptId: booking.firefliesTranscriptId,
         claimedBy: booking.claimedBy,
         leadSource: booking.leadSource,
+        metaLeadId: booking.metaLeadId ?? undefined,
         metaFormName: booking.metaFormName,
       };
     }).filter((row) => {
@@ -1307,7 +1309,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
                     </td>
                     <td className="px-1 py-1.5">
                       <div className="flex flex-col gap-0.5">
-                        {row.leadSource === 'meta_lead_ad' ? (
+                        {(row.leadSource === 'meta_lead_ad' || row.metaLeadId) ? (
                           <span className="inline-flex items-center px-1 py-0.5 rounded-full bg-blue-100 text-[9px] font-semibold text-blue-700 truncate max-w-full" title={`Meta Lead Ad${row.metaFormName ? ` - ${row.metaFormName}` : ''}`}>
                             Meta Ad
                           </span>
