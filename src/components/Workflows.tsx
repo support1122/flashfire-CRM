@@ -2365,11 +2365,26 @@ function Workflows() {
                     className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 bg-white"
                   >
                     <option value="">Select a status...</option>
+                    <option value="not-scheduled">Not Scheduled</option>
                     <option value="no-show">No Show</option>
                     <option value="completed">Completed</option>
                     <option value="canceled">Canceled</option>
                     <option value="rescheduled">Rescheduled</option>
                   </select>
+
+                  {selectedStatus === 'not-scheduled' && (
+                    <div className="mt-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Info className="text-blue-600 mt-0.5 flex-shrink-0" size={18} />
+                        <div>
+                          <div className="text-sm font-semibold text-blue-900 mb-1">Meta Leads (Not Scheduled)</div>
+                          <p className="text-xs text-blue-700">
+                            This will find all Meta leads that have <strong>not-scheduled</strong> status (leads from Meta ads that haven't booked a meeting yet) and trigger the configured "Not Scheduled" workflows for them. Once the automation team creates the workflow, just select this status and click "Schedule Workflows" to run it for all pending Meta leads.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {selectedStatus && (
@@ -2473,7 +2488,7 @@ function Workflows() {
                             ) : (
                               <>
                                 <Play size={18} />
-                                Trigger Workflows for {bookingsData.summary.withoutScheduledWorkflows} Bookings
+                                {selectedStatus === 'not-scheduled' ? 'Schedule' : 'Trigger'} Workflows for {bookingsData.summary.withoutScheduledWorkflows} {selectedStatus === 'not-scheduled' ? 'Meta Leads' : 'Bookings'}
                               </>
                             )}
                           </button>
@@ -2557,6 +2572,7 @@ function Workflows() {
                     className="w-full max-w-xs px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 bg-white"
                   >
                     <option value="">Select a status...</option>
+                    <option value="not-scheduled">Not Scheduled</option>
                     <option value="no-show">No Show</option>
                     <option value="completed">Completed</option>
                     <option value="canceled">Canceled</option>
