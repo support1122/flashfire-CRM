@@ -72,7 +72,7 @@ interface WorkflowStep {
 interface Workflow {
   _id?: string;
   workflowId: string;
-  triggerAction: 'no-show' | 'complete' | 'cancel' | 're-schedule' | 'paid' | 'custom';
+  triggerAction: 'not-scheduled' | 'no-show' | 'complete' | 'cancel' | 're-schedule' | 'paid' | 'custom';
   steps: WorkflowStep[];
   isActive: boolean;
   name?: string;
@@ -92,7 +92,7 @@ interface WorkflowLog {
   logId: string;
   workflowId: string;
   workflowName?: string;
-  triggerAction: 'no-show' | 'complete' | 'cancel' | 're-schedule' | 'custom' | 'paid';
+  triggerAction: 'not-scheduled' | 'no-show' | 'complete' | 'cancel' | 're-schedule' | 'custom' | 'paid';
   bookingId: string;
   clientEmail: string;
   clientName?: string;
@@ -677,6 +677,7 @@ function Workflows() {
 
   const getActionLabel = (action: string) => {
     const labels: Record<string, string> = {
+      'not-scheduled': 'Not Scheduled',
       'no-show': 'No Show',
       'complete': 'Complete',
       'cancel': 'Cancel',
@@ -724,6 +725,7 @@ function Workflows() {
 
   const getActionColor = (action: string) => {
     const colors: Record<string, string> = {
+      'not-scheduled': 'bg-blue-100 text-blue-700',
       'no-show': 'bg-rose-100 text-rose-700',
       'complete': 'bg-green-100 text-green-700',
       'cancel': 'bg-red-100 text-red-700',
@@ -1046,7 +1048,7 @@ function Workflows() {
             <h1 className="text-3xl font-bold text-slate-900">Workflows</h1>
           </div>
           <p className="text-slate-600">
-            Automate actions when bookings are marked as no-show, complete, cancel, or re-schedule
+            Automate actions when leads arrive (not-scheduled) or bookings are marked as no-show, complete, cancel, re-schedule, or paid
           </p>
         </div>
 
@@ -1111,6 +1113,7 @@ function Workflows() {
                     }
                     className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 bg-white"
                   >
+                    <option value="not-scheduled">Not Scheduled (Meta Leads)</option>
                     <option value="no-show">No Show</option>
                     <option value="complete">Complete</option>
                     <option value="cancel">Cancel</option>

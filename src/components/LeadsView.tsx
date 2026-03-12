@@ -51,6 +51,7 @@ type PaymentPlan = {
 };
 
 const statusLabels: Record<BookingStatus, string> = {
+  'not-scheduled': 'Not Scheduled',
   scheduled: 'Scheduled',
   completed: 'Completed',
   canceled: 'Canceled',
@@ -61,6 +62,7 @@ const statusLabels: Record<BookingStatus, string> = {
 };
 
 const statusColors: Record<BookingStatus, string> = {
+  'not-scheduled': 'text-blue-600 w-fit bg-blue-50',
   scheduled: 'text-orange-600 w-fit bg-orange-50',
   completed: 'text-emerald-700 bg-emerald-50',
   canceled: 'text-rose-700 w-fit bg-rose-50',
@@ -70,7 +72,7 @@ const statusColors: Record<BookingStatus, string> = {
   paid: 'text-teal-700 bg-teal-50',
 };
 
-type BookingStatus = 'scheduled' | 'completed' | 'canceled' | 'rescheduled' | 'no-show' | 'ignored' | 'paid';
+type BookingStatus = 'not-scheduled' | 'scheduled' | 'completed' | 'canceled' | 'rescheduled' | 'no-show' | 'ignored' | 'paid';
 type Qualification = 'MQL' | 'SQL' | 'Converted';
 
 interface Booking {
@@ -346,6 +348,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
   // Calculate status statistics from filtered data (unique leads only)
   const statusStats = useMemo(() => {
     const stats = {
+      'not-scheduled': 0,
       scheduled: 0,
       completed: 0,
       canceled: 0,
@@ -365,6 +368,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
     const booked = stats.scheduled + stats.rescheduled; // Booked includes scheduled and rescheduled
 
     return {
+      notScheduled: stats['not-scheduled'],
       booked,
       completed: stats.completed,
       canceled: stats.canceled,
@@ -938,6 +942,12 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
             Meetings from {dateRangeDisplay}
           </h2>
           <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
+            {statusStats.notScheduled > 0 && (
+              <div className="flex items-baseline gap-2">
+                <span className="text-slate-600 text-[11px] font-medium">Not Scheduled</span>
+                <span className="text-lg font-bold text-blue-600">{statusStats.notScheduled}</span>
+              </div>
+            )}
             <div className="flex items-baseline gap-2">
               <span className="text-slate-600 text-[11px] font-medium">Booked</span>
               <span className="text-lg font-bold text-orange-600">{statusStats.booked}</span>
@@ -958,7 +968,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
               <>
                 <div className="flex items-baseline gap-2">
                   <span className="text-violet-600 text-[11px] font-medium">MQL</span>
-                  <span className="text-lg font-bold text-violet-700">{statusStats.booked + statusStats.canceled + statusStats.noShow + statusStats.rescheduled + statusStats.ignored}</span>
+                  <span className="text-lg font-bold text-violet-700">{statusStats.notScheduled + statusStats.booked + statusStats.canceled + statusStats.noShow + statusStats.rescheduled + statusStats.ignored}</span>
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-emerald-600 text-[11px] font-medium">SQL</span>
@@ -1065,7 +1075,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
             className="text-[11px] border border-slate-200  px-3 py-2 bg-white"
           >
             <option value="all">All statuses</option>
-            {(['scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
+            {(['not-scheduled', 'scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
               <option key={status} value={status}>
                 {statusLabels[status]}
               </option>
@@ -1839,9 +1849,9 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
               Change Status
             </div>
             <div className="py-1">
-              {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
+              {(['not-scheduled', 'scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
                 if (status === openRow.status) return null;
-                const statusIcon = status === 'completed' ? CheckCircle2 : status === 'no-show' ? AlertTriangle : status === 'paid' ? DollarSign : status === 'rescheduled' ? Clock : status === 'canceled' ? X : status === 'ignored' ? X : Calendar;
+                const statusIcon = status === 'not-scheduled' ? Clock : status === 'completed' ? CheckCircle2 : status === 'no-show' ? AlertTriangle : status === 'paid' ? DollarSign : status === 'rescheduled' ? Clock : status === 'canceled' ? X : status === 'ignored' ? X : Calendar;
                 const StatusIcon = statusIcon;
                 const isPaidOption = status === 'paid';
                 const isPlanOpen = isPaidOption && planPickerFor === openRow.bookingId;
@@ -1862,7 +1872,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
                       }}
                       className="w-full text-left px-2 py-1.5 text-[9px] hover:bg-slate-50 transition flex items-center gap-1.5 group"
                     >
-                      <StatusIcon size={11} className={`flex-shrink-0 ${status === 'completed' ? 'text-emerald-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-teal-600' : status === 'canceled' ? 'text-rose-700' : status === 'ignored' ? 'text-slate-500' : 'text-orange-600'}`} />
+                      <StatusIcon size={11} className={`flex-shrink-0 ${status === 'not-scheduled' ? 'text-blue-600' : status === 'completed' ? 'text-emerald-600' : status === 'no-show' ? 'text-rose-600' : status === 'rescheduled' ? 'text-amber-600' : status === 'paid' ? 'text-teal-600' : status === 'canceled' ? 'text-rose-700' : status === 'ignored' ? 'text-slate-500' : 'text-orange-600'}`} />
                       <div className="flex flex-col gap-0.5 min-w-0">
                         <span className="font-medium">{statusLabels[status]}</span>
                         {isPaidOption && <span className="text-[8px] text-slate-500">Select a plan</span>}
