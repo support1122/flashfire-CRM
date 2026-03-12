@@ -1497,9 +1497,10 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
                           </button>
                         )}
                         <button
-                          onClick={() => setCustomWorkflowsForLead({ bookingId: row.bookingId!, name: row.name })}
-                          title="Custom Workflows"
-                          className="inline-flex items-center justify-center p-0.5 rounded border border-violet-200 text-violet-700 bg-white hover:bg-violet-50 transition flex-shrink-0"
+                          onClick={() => row.bookingId && setCustomWorkflowsForLead({ bookingId: row.bookingId, name: row.name })}
+                          title={row.bookingId ? 'Custom Workflows' : 'Custom workflows require a lead record'}
+                          disabled={!row.bookingId}
+                          className="inline-flex items-center justify-center p-0.5 rounded border border-violet-200 text-violet-700 bg-white hover:bg-violet-50 transition flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Workflow size={9} />
                         </button>

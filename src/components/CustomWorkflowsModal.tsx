@@ -8,6 +8,7 @@ import {
   Workflow,
   ChevronRight,
   Info,
+  Link2,
 } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 
@@ -203,6 +204,8 @@ export default function CustomWorkflowsModal({
   const [saving, setSaving] = useState(false);
   const [triggeringId, setTriggeringId] = useState<string | null>(null);
   const [detachingId, setDetachingId] = useState<string | null>(null);
+  const [attachingId, setAttachingId] = useState<string | null>(null);
+  const [allCustomWorkflows, setAllCustomWorkflows] = useState<Array<{ workflowId: string; name?: string }>>([]);
   const [watiTemplates, setWatiTemplates] = useState<WatiTemplate[]>([]);
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
@@ -217,10 +220,19 @@ export default function CustomWorkflowsModal({
     if (!bookingId || !isOpen) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/campaign-bookings/${bookingId}/custom-workflows`, { headers: headers() });
-      const data = await res.json();
-      if (data.success && data.data?.workflows) {
-        setWorkflows(data.data.workflows);
+      const [attachedRes, allRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/campaign-bookings/${bookingId}/custom-workflows`, { headers: headers() }),
+        fetch(`${API_BASE_URL}/api/workflows?isCustom=true`, { headers: headers() }),
+      ]);
+      const attachedData = await attachedRes.json();
+      const allData = await allRes.json();
+      if (attachedData.success && attachedData.data?.workflows) {
+        setWorkflows(attachedData.data.workflows);
+      }
+      if (allData.success && Array.isArray(allData.data)) {
+        setAllCustomWorkflows(allData.data.map((w: { workflowId: string; name?: string }) => ({ workflowId: w.workflowId, name: w.name })));
+      } else {
+        setAllCustomWorkflows([]);
       }
     } catch (e) {
       console.error(e);
@@ -296,6 +308,25 @@ export default function CustomWorkflowsModal({
       console.error(e);
     } finally {
       setDetachingId(null);
+    }
+  };
+
+  const handleAttach = async (workflowId: string) => {
+    setAttachingId(workflowId);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/api/campaign-bookings/${bookingId}/custom-workflows/${workflowId}/attach`,
+        { method: 'POST', headers: headers() }
+      );
+      const data = await res.json();
+      if (data.success) {
+        await fetchWorkflows();
+        onSuccess?.();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setAttachingId(null);
     }
   };
 
@@ -419,48 +450,72 @@ export default function CustomWorkflowsModal({
                 </div>
               ) : (
                 <>
-                  {workflows.length === 0 ? (
+                  {allCustomWorkflows.length === 0 ? (
                     <div className="text-center py-8 text-slate-500 text-sm">
-                      No custom workflows attached to this lead.
+                      No custom workflows found. Create one below to use on this lead and others.
                     </div>
                   ) : (
                     <ul className="space-y-2">
-                      {workflows.map((w) => (
-                        <li
-                          key={w.workflowId}
-                          className="flex items-center justify-between gap-2 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 transition"
-                        >
-                          <span className="font-semibold text-slate-800 truncate flex-1">
-                            {w.name || w.workflowId}
-                          </span>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <button
-                              onClick={() => handleTrigger(w.workflowId)}
-                              disabled={triggeringId !== null}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 transition disabled:opacity-50"
-                            >
-                              {triggeringId === w.workflowId ? (
-                                <Loader2 size={12} className="animate-spin" />
-                              ) : (
-                                <Play size={12} />
+                      {allCustomWorkflows.map((w) => {
+                        const isAttached = workflows.some((aw) => aw.workflowId === w.workflowId);
+                        return (
+                          <li
+                            key={w.workflowId}
+                            className={`flex items-center justify-between gap-2 p-3 rounded-xl border transition ${isAttached ? 'border-violet-200 bg-violet-50/50 hover:bg-violet-50' : 'border-slate-200 bg-slate-50 hover:bg-slate-100'}`}
+                          >
+                            <span className="font-semibold text-slate-800 truncate flex-1">
+                              {w.name || w.workflowId}
+                              {isAttached && (
+                                <span className="ml-2 text-[10px] font-normal text-violet-600">(attached)</span>
                               )}
-                              Run
-                            </button>
-                            <button
-                              onClick={() => handleDetach(w.workflowId)}
-                              disabled={detachingId !== null}
-                              className="inline-flex items-center p-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition disabled:opacity-50"
-                              title="Detach"
-                            >
-                              {detachingId === w.workflowId ? (
-                                <Loader2 size={14} className="animate-spin" />
+                            </span>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              {isAttached ? (
+                                <>
+                                  <button
+                                    onClick={() => handleTrigger(w.workflowId)}
+                                    disabled={triggeringId !== null}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 transition disabled:opacity-50"
+                                  >
+                                    {triggeringId === w.workflowId ? (
+                                      <Loader2 size={12} className="animate-spin" />
+                                    ) : (
+                                      <Play size={12} />
+                                    )}
+                                    Run
+                                  </button>
+                                  <button
+                                    onClick={() => handleDetach(w.workflowId)}
+                                    disabled={detachingId !== null}
+                                    className="inline-flex items-center p-1.5 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-100 transition disabled:opacity-50"
+                                    title="Detach"
+                                  >
+                                    {detachingId === w.workflowId ? (
+                                      <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                      <Trash2 size={14} />
+                                    )}
+                                  </button>
+                                </>
                               ) : (
-                                <Trash2 size={14} />
+                                <button
+                                  onClick={() => handleAttach(w.workflowId)}
+                                  disabled={attachingId !== null}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-violet-500 text-white text-xs font-semibold hover:bg-violet-600 transition disabled:opacity-50"
+                                  title="Attach to this lead"
+                                >
+                                  {attachingId === w.workflowId ? (
+                                    <Loader2 size={12} className="animate-spin" />
+                                  ) : (
+                                    <Link2 size={12} />
+                                  )}
+                                  Attach
+                                </button>
                               )}
-                            </button>
-                          </div>
-                        </li>
-                      ))}
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                   <button

@@ -26,7 +26,8 @@ export default function MetaLeadsView({
       <div className="mb-4 px-4 pt-4">
         <h1 className="text-2xl font-bold text-gray-900">Meta Leads</h1>
         <p className="text-sm text-gray-600 mt-1">
-          View and manage all leads from Meta (Facebook & Instagram) Lead Ads campaigns
+          View and manage all leads from Meta (Facebook & Instagram) Lead Ads campaigns.
+          You can attach custom workflows to leads here (per lead or in bulk) just like on the main Leads tab — use the workflow icon on each row or select leads and click &quot;Attach Workflows&quot;.
         </p>
       </div>
       <MetaLeadsViewContent 
