@@ -166,6 +166,7 @@ interface EmailTemplate {
 interface WorkflowStep {
   channel: 'email' | 'whatsapp';
   daysAfter: number;
+  hoursAfter: number;
   templateId: string;
   templateName?: string;
   domainName?: string;
@@ -336,6 +337,7 @@ export default function CustomWorkflowsModal({
       {
         channel: 'email',
         daysAfter: 0,
+        hoursAfter: 0,
         templateId: '',
         domainName: 'flashfiremails.com',
         order: prev.length,
@@ -613,8 +615,20 @@ export default function CustomWorkflowsModal({
                             <input
                               type="number"
                               min={0}
-                              value={step.daysAfter}
+                              value={step.daysAfter === 0 ? '' : step.daysAfter}
                               onChange={(e) => updateStep(index, { daysAfter: parseInt(e.target.value, 10) || 0 })}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-700 text-sm"
+                              placeholder="0"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Hours After</label>
+                            <input
+                              type="number"
+                              min={0}
+                              max={23}
+                              value={step.hoursAfter || 0}
+                              onChange={(e) => updateStep(index, { hoursAfter: Math.min(23, Math.max(0, parseInt(e.target.value, 10) || 0)) })}
                               className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-700 text-sm"
                             />
                           </div>

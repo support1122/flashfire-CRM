@@ -56,6 +56,7 @@ interface EmailTemplate {
 interface WorkflowStep {
   channel: 'email' | 'whatsapp';
   daysAfter: number;
+  hoursAfter: number;
   templateId: string;
   templateName?: string;
   domainName?: string;
@@ -100,6 +101,7 @@ interface WorkflowLog {
   step: {
     channel: 'email' | 'whatsapp';
     daysAfter: number;
+    hoursAfter?: number;
     templateId: string;
     templateName?: string;
     domainName?: string;
@@ -477,6 +479,7 @@ function Workflows() {
     const newStep: WorkflowStep = {
       channel: 'email',
       daysAfter: 0,
+      hoursAfter: 0,
       templateId: '',
       domainName: 'flashfiremails.com',
       order: workflowId ? workflows.find((w) => w.workflowId === workflowId)?.steps.length || 0 : newWorkflow.steps?.length || 0,
@@ -1167,7 +1170,7 @@ function Workflows() {
                             </button>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 min-w-0">
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 min-w-0">
                             <div className="min-w-0">
                               <label className="block text-xs font-medium text-slate-600 mb-1">
                                 Channel <span className="text-red-500">*</span>
@@ -1191,9 +1194,26 @@ function Workflows() {
                               <input
                                 type="number"
                                 min="0"
-                                value={step.daysAfter}
+                                value={step.daysAfter === 0 ? '' : step.daysAfter}
                                 onChange={(e) =>
-                                  updateStep(null, index, 'daysAfter', parseInt(e.target.value) || 0)
+                                  updateStep(null, index, 'daysAfter', parseInt(e.target.value, 10) || 0)
+                                }
+                                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
+                                placeholder="0"
+                              />
+                            </div>
+
+                            <div className="min-w-0">
+                              <label className="block text-xs font-medium text-slate-600 mb-1">
+                                Hours After
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                max="23"
+                                value={step.hoursAfter || 0}
+                                onChange={(e) =>
+                                  updateStep(null, index, 'hoursAfter', Math.min(23, Math.max(0, parseInt(e.target.value) || 0)))
                                 }
                                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-slate-700 text-sm"
                                 placeholder="0"
@@ -1638,7 +1658,7 @@ function Workflows() {
                                   </button>
                                 </div>
                                 <div className="space-y-2">
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                  <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                                     <select
                                       value={step.channel}
                                       onChange={(e) =>
@@ -1652,12 +1672,23 @@ function Workflows() {
                                     <input
                                       type="number"
                                       min="0"
-                                      value={step.daysAfter}
+                                      value={step.daysAfter === 0 ? '' : step.daysAfter}
                                       onChange={(e) =>
-                                        updateStep(workflow.workflowId, index, 'daysAfter', parseInt(e.target.value) || 0)
+                                        updateStep(workflow.workflowId, index, 'daysAfter', parseInt(e.target.value, 10) || 0)
                                       }
                                       className="px-2 py-1.5 border border-slate-300 rounded text-sm min-w-0"
-                                      placeholder="Days after"
+                                      placeholder="0"
+                                    />
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      max="23"
+                                      value={step.hoursAfter || 0}
+                                      onChange={(e) =>
+                                        updateStep(workflow.workflowId, index, 'hoursAfter', Math.min(23, Math.max(0, parseInt(e.target.value) || 0)))
+                                      }
+                                      className="px-2 py-1.5 border border-slate-300 rounded text-sm min-w-0"
+                                      placeholder="Hours after"
                                     />
                                     <div className="min-w-0">
                                     {step.channel === 'whatsapp' ? (
@@ -1936,7 +1967,9 @@ function Workflows() {
                                 </span>
                               </div>
                               <span className="text-sm text-slate-600">
-                                {step.daysAfter === 0 ? 'Immediately' : `After ${step.daysAfter} day${step.daysAfter !== 1 ? 's' : ''}`}
+                                {step.daysAfter === 0 && !(step.hoursAfter > 0)
+                                  ? 'Immediately'
+                                  : `After ${step.daysAfter > 0 ? `${step.daysAfter} day${step.daysAfter !== 1 ? 's' : ''}` : ''}${step.daysAfter > 0 && (step.hoursAfter > 0) ? ' ' : ''}${(step.hoursAfter > 0) ? `${step.hoursAfter} hr${step.hoursAfter !== 1 ? 's' : ''}` : ''}`}
                               </span>
                               <span className="text-sm text-slate-500 flex-1 truncate">
                                 Template: {step.templateName || step.templateId}
@@ -2126,9 +2159,9 @@ function Workflows() {
                                   <p className="text-sm text-slate-900 font-mono">
                                     {log.step.templateId}
                                   </p>
-                                  {log.step.daysAfter > 0 && (
+                                  {(log.step.daysAfter > 0 || (log.step.hoursAfter || 0) > 0) && (
                                     <p className="text-xs text-slate-500">
-                                      After {log.step.daysAfter} day{log.step.daysAfter !== 1 ? 's' : ''}
+                                      After {log.step.daysAfter > 0 ? `${log.step.daysAfter} day${log.step.daysAfter !== 1 ? 's' : ''}` : ''}{log.step.daysAfter > 0 && (log.step.hoursAfter || 0) > 0 ? ' ' : ''}{(log.step.hoursAfter || 0) > 0 ? `${log.step.hoursAfter} hr${log.step.hoursAfter !== 1 ? 's' : ''}` : ''}
                                     </p>
                                   )}
                                 </div>
