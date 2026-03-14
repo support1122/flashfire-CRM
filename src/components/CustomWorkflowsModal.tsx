@@ -31,6 +31,10 @@ const TEMPLATE_VARIABLES: Record<string, { variables: string[]; exampleContent?:
     variables: ['{{1}}', '{{2}}', '{{3}}', '{{4}}', '{{5}}'],
     exampleContent: 'Hi {{1}}, your Flashfire consultation is confirmed for {{2}} at {{3}}.\n\n👉 Join the call here: {{4}}\n\nNeed to reschedule? You can select another time here: {{5}}\n\nLooking forward to speaking with you!'
   },
+  'meta_1': {
+    variables: ['{{1}}', '{{2}}'],
+    exampleContent: 'Hi {{1}},\n\nThank you for submitting your request to Flashfire. To continue with the next step, you can schedule your consultation here: {{2}}'
+  },
 };
 
 const VARIABLE_DESCRIPTIONS: Record<string, string> = {
@@ -60,6 +64,13 @@ function getVariableDescriptionCustom(templateName: string | undefined, variable
       case '{{3}}': return 'Time with Timezone';
       case '{{4}}': return 'Meeting Link';
       case '{{5}}': return 'Reschedule Link';
+      default: return VARIABLE_DESCRIPTIONS[variable] || 'Variable';
+    }
+  }
+  if (templateName === 'meta_1') {
+    switch (variable) {
+      case '{{1}}': return 'Client Name';
+      case '{{2}}': return 'Scheduling Link';
       default: return VARIABLE_DESCRIPTIONS[variable] || 'Variable';
     }
   }
