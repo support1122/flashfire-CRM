@@ -6,12 +6,23 @@ import { useCrmAuth } from '../auth/CrmAuthContext';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 const DEFAULT_PAGE_SIZE = 15;
 
+interface BdaAttendanceInfo {
+  status: 'present' | 'absent' | 'manual';
+  source: 'auto' | 'manual' | 'scheduler';
+  bdaName: string;
+  bdaEmail: string;
+  joinedAt?: string;
+  leftAt?: string;
+  markedAt?: string;
+}
+
 interface MeetingInfoRow {
   bookingId: string;
   clientName: string;
   dateOfMeet: string | null;
   meetingVideoUrl: string | null;
   bdaAbsent: boolean;
+  bdaAttendance?: BdaAttendanceInfo | null;
 }
 
 interface PaginationInfo {
@@ -45,9 +56,29 @@ export default function MeetingInfoView() {
     if (toDate) params.set('toDate', toDate);
     fetch(`${API_BASE_URL}/api/meeting-links?${params}`, { headers })
       .then((res) => res.json())
-      .then((data) => {
+      .then(async (data) => {
         if (data.success && Array.isArray(data.data)) {
-          setRows(data.data);
+          // Fetch real BDA attendance data
+          const bookingIds = data.data.map((r: MeetingInfoRow) => r.bookingId).filter(Boolean);
+          let attendanceMap: Record<string, BdaAttendanceInfo | null> = {};
+          if (bookingIds.length > 0) {
+            try {
+              const attRes = await fetch(
+                `${API_BASE_URL}/api/bda-attendance/bulk?bookingIds=${bookingIds.join(',')}`,
+                { headers }
+              );
+              const attData = await attRes.json();
+              if (attData.success) attendanceMap = attData.attendanceMap || {};
+            } catch {
+              // Silently fall back to old heuristic
+            }
+          }
+          // Merge attendance into rows
+          const enrichedRows = data.data.map((row: MeetingInfoRow) => ({
+            ...row,
+            bdaAttendance: attendanceMap[row.bookingId] || null,
+          }));
+          setRows(enrichedRows);
           setPagination(data.pagination || null);
           setBdaAbsentCount(typeof data.bdaAbsentCount === 'number' ? data.bdaAbsentCount : 0);
         } else {
@@ -174,64 +205,94 @@ export default function MeetingInfoView() {
               <tr className="text-left">
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Client Name</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Date of Meet</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">BDA Status</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Google Drive Video URL</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-12 text-center">
+                  <td colSpan={4} className="px-4 py-12 text-center">
                     <Loader2 className="animate-spin text-orange-500 mx-auto" size={28} />
                   </td>
                 </tr>
               ) : (
-                rows.map((row) => (
-                  <tr
-                    key={row.bookingId}
-                    className={`transition-colors ${
-                      row.bdaAbsent
-                        ? 'bg-red-50 hover:bg-red-100/80'
-                        : 'bg-white hover:bg-slate-50/50'
-                    }`}
-                  >
-                    <td className="px-4 py-3 font-medium text-slate-900">{row.clientName}</td>
-                    <td className="px-4 py-3 text-slate-700">
-                      {row.dateOfMeet
-                        ? format(parseISO(row.dateOfMeet), 'MMM d, yyyy • h:mm a')
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.meetingVideoUrl ? (
-                        <a
-                          href={row.meetingVideoUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-orange-600 hover:text-orange-700 font-semibold truncate max-w-[320px]"
-                          title={row.meetingVideoUrl}
-                        >
-                          <ExternalLink size={12} />
-                          {(() => {
-                            const d = row.meetingVideoUrl.replace(/^https?:\/\//, '');
-                            return d.length > 45 ? `${d.slice(0, 45)}…` : d;
-                          })()}
-                        </a>
-                      ) : (
-                        <span
-                          className={`inline-flex items-center gap-1.5 font-medium ${
-                            row.bdaAbsent ? 'text-red-700' : 'text-slate-500'
-                          }`}
-                        >
-                          {row.bdaAbsent && <AlertTriangle size={14} />}
-                          {row.bdaAbsent ? 'BDA absent for meet' : '—'}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                rows.map((row) => {
+                  const att = row.bdaAttendance;
+                  const isAbsent = att ? att.status === 'absent' : row.bdaAbsent;
+                  return (
+                    <tr
+                      key={row.bookingId}
+                      className={`transition-colors ${
+                        isAbsent
+                          ? 'bg-red-50 hover:bg-red-100/80'
+                          : 'bg-white hover:bg-slate-50/50'
+                      }`}
+                    >
+                      <td className="px-4 py-3 font-medium text-slate-900">{row.clientName}</td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {row.dateOfMeet
+                          ? format(parseISO(row.dateOfMeet), 'MMM d, yyyy • h:mm a')
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {att ? (
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
+                              att.status === 'present'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : att.status === 'manual'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {att.status === 'present'
+                              ? att.source === 'auto'
+                                ? 'Present (Auto)'
+                                : 'Present'
+                              : att.status === 'manual'
+                              ? 'Present (Manual)'
+                              : 'Absent'}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-500">
+                            {row.bdaAbsent ? (
+                              <>
+                                <AlertTriangle size={10} />
+                                Likely Absent
+                              </>
+                            ) : (
+                              'No Data'
+                            )}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.meetingVideoUrl ? (
+                          <a
+                            href={row.meetingVideoUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-orange-600 hover:text-orange-700 font-semibold truncate max-w-[320px]"
+                            title={row.meetingVideoUrl}
+                          >
+                            <ExternalLink size={12} />
+                            {(() => {
+                              const d = row.meetingVideoUrl.replace(/^https?:\/\//, '');
+                              return d.length > 45 ? `${d.slice(0, 45)}…` : d;
+                            })()}
+                          </a>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
               {!loading && rows.length === 0 && !error && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-12 text-center text-slate-500 text-sm">
+                  <td colSpan={4} className="px-4 py-12 text-center text-slate-500 text-sm">
                     No completed meetings yet. Meetings will appear here once they have ended.
                   </td>
                 </tr>

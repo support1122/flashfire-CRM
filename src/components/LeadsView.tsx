@@ -26,11 +26,10 @@ import {
   FileText,
   Workflow,
   Plus,
+  SlidersHorizontal,
 } from 'lucide-react';
-import {
-  format,
-  parseISO,
-} from 'date-fns';
+import { format, parseISO } from 'date-fns';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, PieChart, Pie, Cell, Legend } from 'recharts';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
 import { useCrmAuth } from '../auth/CrmAuthContext';
@@ -74,6 +73,8 @@ const statusColors: Record<BookingStatus, string> = {
 
 type BookingStatus = 'not-scheduled' | 'scheduled' | 'completed' | 'canceled' | 'rescheduled' | 'no-show' | 'ignored' | 'paid';
 type Qualification = 'MQL' | 'SQL' | 'Converted';
+type QuickRange = 'all' | 'thisMonth' | 'last30' | 'last90';
+type LeadsTab = 'table' | 'graphs';
 
 interface Booking {
   bookingId: string;
@@ -127,6 +128,8 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
+  const [quickRange, setQuickRange] = useState<QuickRange>('all');
+  const [activeLeadsTab, setActiveLeadsTab] = useState<LeadsTab>('table');
   const [utmFilter, setUtmFilter] = useState<string>(defaultUtmSource || 'all');
   const [minAmount, setMinAmount] = useState<string>('');
   const [maxAmount, setMaxAmount] = useState<string>('');
@@ -269,6 +272,36 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
     return () => clearTimeout(timer);
   }, [searchInput]);
 
+  const handleQuickRangeChange = useCallback((range: QuickRange) => {
+    setQuickRange(range);
+
+    if (range === 'all') {
+      setFromDate('');
+      setToDate('');
+      return;
+    }
+
+    const today = new Date();
+    let start: Date;
+
+    if (range === 'thisMonth') {
+      start = new Date(today.getFullYear(), today.getMonth(), 1);
+    } else if (range === 'last30') {
+      const d = new Date(today);
+      d.setDate(d.getDate() - 30);
+      start = d;
+    } else {
+      const d = new Date(today);
+      d.setDate(d.getDate() - 90);
+      start = d;
+    }
+
+    const formatInputDate = (date: Date) => format(date, 'yyyy-MM-dd');
+
+    setFromDate(formatInputDate(start));
+    setToDate(formatInputDate(today));
+  }, []);
+
   useEffect(() => {
     const page = 1;
     setBookingsPage(page);
@@ -379,6 +412,55 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
       total,
     };
   }, [filteredData]);
+
+  const qualificationChartData = useMemo(
+    () => {
+      const totals: Record<Qualification, number> = {
+        MQL: 0,
+        SQL: 0,
+        Converted: 0,
+      };
+
+      filteredData.forEach((lead) => {
+        const qualification = lead.qualification as Qualification | undefined;
+        if (qualification && totals[qualification] !== undefined) {
+          totals[qualification] += 1;
+        }
+      });
+
+      return [
+        { name: 'MQL', value: totals.MQL },
+        { name: 'SQL', value: totals.SQL },
+        { name: 'Converted', value: totals.Converted },
+      ];
+    },
+    [filteredData],
+  );
+
+  const pipelineStatusChartData = useMemo(
+    () => [
+      { name: 'Not Scheduled', value: statusStats.notScheduled },
+      { name: 'Booked', value: statusStats.booked },
+      { name: 'Completed', value: statusStats.completed },
+      { name: 'Cancelled', value: statusStats.canceled },
+      { name: 'No-Show', value: statusStats.noShow },
+      { name: 'Rescheduled', value: statusStats.rescheduled },
+      { name: 'Ignored', value: statusStats.ignored },
+      { name: 'Converted', value: statusStats.paid },
+    ],
+    [statusStats],
+  );
+
+  const qualificationColors: Record<string, string> = {
+    MQL: '#6366F1', // indigo
+    SQL: '#0EA5E9', // sky blue
+    Converted: '#22C55E', // modern green
+  };
+
+  const totalQualificationCount = useMemo(
+    () => qualificationChartData.reduce((sum, item) => sum + item.value, 0),
+    [qualificationChartData],
+  );
 
   // Format date range for display
   const dateRangeDisplay = useMemo(() => {
@@ -935,6 +1017,35 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
         </div>
       </div>
 
+      {variant === 'qualified' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
+          <div className="border-b border-slate-200">
+            <div className="flex items-center gap-1 px-4">
+              <button
+                onClick={() => setActiveLeadsTab('table')}
+                className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${
+                  activeLeadsTab === 'table'
+                    ? 'border-orange-500 text-orange-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Table
+              </button>
+              <button
+                onClick={() => setActiveLeadsTab('graphs')}
+                className={`px-4 py-3 text-sm font-semibold border-b-2 transition ${
+                  activeLeadsTab === 'graphs'
+                    ? 'border-orange-500 text-orange-600'
+                    : 'border-transparent text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Graphs
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Status Statistics - Show when date filters are selected */}
       {dateRangeDisplay && (
         <div className="bg-white border border-slate-200  p-5">
@@ -1005,13 +1116,134 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
         </div>
       )}
 
+      {variant === 'qualified' && activeLeadsTab === 'graphs' && qualificationChartData.some((item) => item.value > 0) && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-200 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">MQL share</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {totalQualificationCount > 0
+                  ? `${Math.round((qualificationChartData[0]?.value ?? 0) / totalQualificationCount * 100)}%`
+                  : '—'}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Of all qualified leads</p>
+            </div>
+            <div className="bg-white border border-slate-200 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">SQL share</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {totalQualificationCount > 0
+                  ? `${Math.round((qualificationChartData[1]?.value ?? 0) / totalQualificationCount * 100)}%`
+                  : '—'}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Sales‑ready leads</p>
+            </div>
+            <div className="bg-white border border-slate-200 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Converted share</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {totalQualificationCount > 0
+                  ? `${Math.round((qualificationChartData[2]?.value ?? 0) / totalQualificationCount * 100)}%`
+                  : '—'}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Paying customers</p>
+            </div>
+            <div className="bg-white border border-slate-200 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Overall conversion</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {statusStats.total > 0
+                  ? `${Math.round((statusStats.paid / statusStats.total) * 100)}%`
+                  : '—'}
+              </p>
+              <p className="text-[11px] text-slate-500 mt-1">Converted / all filtered leads</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white border border-slate-200  p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Qualification breakdown</h2>
+                <p className="text-xs text-slate-500">MQL, SQL & Converted for the current filters</p>
+              </div>
+            </div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={qualificationChartData}>
+                  <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
+                  <RechartsTooltip
+                    cursor={{ fill: 'rgba(15,23,42,0.03)' }}
+                    contentStyle={{ borderRadius: 8, borderColor: '#E2E8F0', fontSize: 12 }}
+                  />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                    {qualificationChartData.map((entry) => (
+                      <Cell key={entry.name} fill={qualificationColors[entry.name] || '#0F172A'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+            <div className="bg-white border border-slate-200  p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Pipeline by status</h2>
+                <p className="text-xs text-slate-500">How leads move across meeting statuses</p>
+              </div>
+            </div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pipelineStatusChartData.filter((item) => item.value > 0)}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={48}
+                    outerRadius={80}
+                    paddingAngle={2}
+                  >
+                    {pipelineStatusChartData
+                      .filter((item) => item.value > 0)
+                      .map((entry) => {
+                        const colorMap: Record<string, string> = {
+                          'Not Scheduled': '#9CA3AF', // neutral
+                          Booked: '#F59E0B',         // amber
+                          Completed: '#22C55E',      // green
+                          Cancelled: '#EF4444',      // red
+                          'No-Show': '#FB7185',      // rose
+                          Rescheduled: '#3B82F6',    // blue
+                          Ignored: '#6B7280',        // slate
+                          Converted: '#6366F1',      // indigo
+                        };
+                        return <Cell key={entry.name} fill={colorMap[entry.name] || '#E5E7EB'} />;
+                      })}
+                  </Pie>
+                  <Legend
+                    layout="vertical"
+                    align="right"
+                    verticalAlign="middle"
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: 11 }}
+                  />
+                  <RechartsTooltip
+                    cursor={{ fill: 'rgba(15,23,42,0.03)' }}
+                    contentStyle={{ borderRadius: 8, borderColor: '#E2E8F0', fontSize: 12 }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="bg-orange-50 border border-orange-200  p-4 text-orange-700">
           {error}
         </div>
       )}
 
-      {(selectedRows.size > 0 || (allSelectedBookingIds && allSelectedBookingIds.length > 0)) && (
+      {activeLeadsTab === 'table' && (selectedRows.size > 0 || (allSelectedBookingIds && allSelectedBookingIds.length > 0)) && (
         <div className="bg-orange-50 border border-orange-200  px-4 py-3 flex items-center justify-between">
           <span className="text-xs font-semibold text-orange-900">
             {allSelectedBookingIds
@@ -1037,159 +1269,199 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
         </div>
       )}
 
-      <div className="bg-gray-50 border border-slate-200  px-5 py-4 shadow-sm space-y-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 border border-slate-200  px-3 py-2 flex-1 min-w-[220px]">
-            <Search size={16} className="text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by name, email, phone, or source…"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const trimmed = searchInput.trim();
-                  setSearch(trimmed);
-                  setBookingsPage(1);
-                  fetchLeads(1);
-                }
-              }}
-              className="text-[11px] bg-transparent focus:outline-none w-full"
-            />
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal size={16} className="text-slate-500" />
+            <span className="text-sm font-semibold text-slate-700">
+              {variant === 'qualified' && activeLeadsTab === 'graphs' ? 'Graph filters' : 'Filters'}
+            </span>
           </div>
-          {variant === 'qualified' && (
-            <select
-              value={qualificationFilter}
-              onChange={(e) => setQualificationFilter(e.target.value as 'all' | 'mql' | 'sql' | 'converted')}
-              className="text-[11px] border border-slate-200 px-3 py-2 bg-white rounded-lg min-w-[160px]"
-            >
-              <option value="all">All qualifications</option>
-              <option value="mql">MQL</option>
-              <option value="sql">SQL</option>
-              <option value="converted">Converted</option>
-            </select>
-          )}
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
-            className="text-[11px] border border-slate-200  px-3 py-2 bg-white"
-          >
-            <option value="all">All statuses</option>
-            {(['not-scheduled', 'scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
-              <option key={status} value={status}>
-                {statusLabels[status]}
-              </option>
-            ))}
-          </select>
-          <select
-            value={planFilter}
-            onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
-            className="text-[11px] border border-slate-200  px-3 py-2 bg-white"
-          >
-            <option value="all">All plans</option>
-            {planOptions.map((plan) => (
-              <option key={plan.key} value={plan.key}>
-                {plan.label} ({plan.displayPrice})
-              </option>
-            ))}
-          </select>
-          <select
-            value={utmFilter}
-            onChange={(e) => setUtmFilter(e.target.value)}
-            className="text-[11px] border border-slate-200 px-3 py-2 bg-white min-w-[160px]"
-            disabled={hideSourceFilter}
-            style={{ display: hideSourceFilter ? 'none' : 'block' }}
-          >
-            <option value="all">All sources</option>
-            {uniqueSources.map((source) => (
-              <option key={source} value={source}>
-                {source}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={handleSelectAllFiltered}
-            disabled={selectAllLoading || bookingsPagination.total === 0}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold rounded-lg border border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            title={allSelectedBookingIds ? 'Deselect all filtered' : `Select all ${bookingsPagination.total} filtered lead(s)`}
-          >
-            {selectAllLoading ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : allSelectedBookingIds ? (
-              'Deselect All'
-            ) : (
-              'Select All'
-            )}
-            {!selectAllLoading && !allSelectedBookingIds && (
-              <span className="text-orange-600">({bookingsPagination.total})</span>
-            )}
-          </button>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="border border-slate-200 px-3 py-2 bg-white"
-            />
-            <span>—</span>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="border border-slate-200  px-3 py-2 bg-white"
-            />
+        <div className="p-4 space-y-4">
+          {/* Row 1: Lead filters */}
+          <div className="flex flex-wrap items-end gap-3">
+            {activeLeadsTab === 'table' && (
+              <div className="flex flex-col gap-1.5 min-w-[200px] flex-1 max-w-xs">
+                <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Search</label>
+                <div className="flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-200 bg-white focus-within:ring-2 focus-within:ring-orange-500/20 focus-within:border-orange-400">
+                  <Search size={14} className="text-slate-400 flex-shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Name, email, phone, source…"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        setSearch(searchInput.trim());
+                        setBookingsPage(1);
+                        fetchLeads(1);
+                      }
+                    }}
+                    className="text-sm bg-transparent focus:outline-none w-full placeholder:text-slate-400"
+                  />
+                </div>
+              </div>
+            )}
+            {variant === 'qualified' && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Qualification</label>
+                <select
+                  value={qualificationFilter}
+                  onChange={(e) => setQualificationFilter(e.target.value as 'all' | 'mql' | 'sql' | 'converted')}
+                  className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 min-w-[140px] focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+                >
+                  <option value="all">All qualifications</option>
+                  <option value="mql">MQL</option>
+                  <option value="sql">SQL</option>
+                  <option value="converted">Converted</option>
+                </select>
+              </div>
+            )}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'all')}
+                className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 min-w-[130px] focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+              >
+                <option value="all">All statuses</option>
+                {(['not-scheduled', 'scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
+                  <option key={status} value={status}>{statusLabels[status]}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Plan</label>
+              <select
+                value={planFilter}
+                onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
+                className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 min-w-[130px] focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+              >
+                <option value="all">All plans</option>
+                {planOptions.map((plan) => (
+                  <option key={plan.key} value={plan.key}>{plan.label} ({plan.displayPrice})</option>
+                ))}
+              </select>
+            </div>
+            {!hideSourceFilter && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Source</label>
+                <select
+                  value={utmFilter}
+                  onChange={(e) => setUtmFilter(e.target.value)}
+                  className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 min-w-[140px] focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+                >
+                  <option value="all">All sources</option>
+                  {uniqueSources.map((source) => (
+                    <option key={source} value={source}>{source}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {activeLeadsTab === 'table' && (
+              <button
+                type="button"
+                onClick={handleSelectAllFiltered}
+                disabled={selectAllLoading || bookingsPagination.total === 0}
+                className="h-9 px-4 rounded-lg border border-orange-200 bg-orange-50 text-orange-700 text-sm font-semibold hover:bg-orange-100 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                title={allSelectedBookingIds ? 'Deselect all filtered' : `Select all ${bookingsPagination.total} filtered lead(s)`}
+              >
+                {selectAllLoading ? <Loader2 size={14} className="animate-spin" /> : allSelectedBookingIds ? 'Deselect All' : 'Select All'}
+                {!selectAllLoading && !allSelectedBookingIds && <span className="text-orange-600 ml-1">({bookingsPagination.total})</span>}
+              </button>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              placeholder="Min $"
-              value={minAmount}    
-              onChange={(e) => setMinAmount(e.target.value)}
-              className="border border-slate-200 px-3 py-2 bg-white w-24"
-            />
-            <span>—</span>
-            <input
-              type="number"
-              placeholder="Max $"
-              value={maxAmount}
-              onChange={(e) => setMaxAmount(e.target.value)}
-              className="border border-slate-200 px-3 py-2 bg-white w-24"
-            />
+
+          {/* Row 2: Date, amount, actions */}
+          <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-slate-100">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Date range</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => setFromDate(e.target.value)}
+                  className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+                />
+                <span className="text-slate-400">–</span>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => setToDate(e.target.value)}
+                  className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Quick range</label>
+              <select
+                value={quickRange}
+                onChange={(e) => handleQuickRangeChange(e.target.value as QuickRange)}
+                className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 min-w-[130px] focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+              >
+                <option value="all">All time</option>
+                <option value="thisMonth">This month</option>
+                <option value="last30">Last 30 days</option>
+                <option value="last90">Last 90 days</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Amount</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  placeholder="Min $"
+                  value={minAmount}
+                  onChange={(e) => setMinAmount(e.target.value)}
+                  className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 w-24 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+                />
+                <span className="text-slate-400">–</span>
+                <input
+                  type="number"
+                  placeholder="Max $"
+                  value={maxAmount}
+                  onChange={(e) => setMaxAmount(e.target.value)}
+                  className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 w-24 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2 ml-auto">
+              {(fromDate || toDate || searchInput || planFilter !== 'all' || (utmFilter !== 'all' && !hideSourceFilter) || statusFilter !== 'all' || qualificationFilter !== 'all' || minAmount || maxAmount) && (
+                <button
+                  onClick={() => {
+                    setFromDate('');
+                    setToDate('');
+                    setPlanFilter('all');
+                    setUtmFilter(defaultUtmSource || 'all');
+                    setStatusFilter('all');
+                    setQualificationFilter('all');
+                    setSearchInput('');
+                    setSearch('');
+                    setMinAmount('');
+                    setMaxAmount('');
+                    setQuickRange('all');
+                    setBookingsPage(1);
+                  }}
+                  className="h-9 px-4 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition"
+                >
+                  Clear filters
+                </button>
+              )}
+              <button
+                onClick={() => fetchLeads(bookingsPage)}
+                disabled={refreshing}
+                className="h-9 px-4 rounded-lg bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 transition disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
+              >
+                <RefreshCcw size={14} className={refreshing ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+            </div>
           </div>
-          {(fromDate || toDate || searchInput || planFilter !== 'all' || (utmFilter !== 'all' && !hideSourceFilter) || statusFilter !== 'all' || qualificationFilter !== 'all' || minAmount || maxAmount) && (
-            <button
-              onClick={() => {
-                setFromDate('');
-                setToDate('');
-                setPlanFilter('all');
-                setUtmFilter(defaultUtmSource || 'all');
-                setStatusFilter('all');
-                setQualificationFilter('all');
-                setSearchInput('');
-                setSearch('');
-                setMinAmount('');
-                setMaxAmount('');
-                setBookingsPage(1);
-              }}
-              className="text-[11px] text-orange-600 font-semibold px-3 py-2  hover:bg-orange-50 transition"
-            >
-              Clear filters
-            </button>
-          )}
-          <button
-            onClick={() => fetchLeads(bookingsPage)}
-            disabled={refreshing}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700  hover:bg-slate-200 transition text-[11px] font-semibold disabled:opacity-60"
-          >
-            <RefreshCcw size={16} className={refreshing ? 'animate-spin' : ''} />
-            Refresh
-          </button>
         </div>
       </div>
  
+      {activeLeadsTab === 'table' && (
       <div className="overflow-hidden bg-white border border-slate-200">
         
           <table className="w-full text-[10px] table-auto border-separate border-spacing-y-1 border-spacing-x-0.5">
@@ -1627,6 +1899,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
           )}
         </div>
       </div>
+      )}
 
       {isNotesModalOpen && selectedBookingForNotes && (
         <NotesModal
