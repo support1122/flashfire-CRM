@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Check,
   Copy,
@@ -28,6 +28,18 @@ interface Campaign {
   buttonClicks?: any[];
 }
 
+interface CampaignDetails {
+  campaign: Campaign & { pageVisits?: any[]; buttonClicks?: any[] };
+  bookings: any[];
+  stats: {
+    totalClicks: number;
+    totalButtonClicks?: number;
+    uniqueVisitors: number;
+    totalBookings: number;
+    conversionRate: string;
+  };
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
 export default function CampaignManager() {
@@ -45,23 +57,43 @@ export default function CampaignManager() {
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [allBookings, setAllBookings] = useState<any[]>([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
+  const [campaignsError, setCampaignsError] = useState<string | null>(null);
+  const [selectedCampaignDetails, setSelectedCampaignDetails] = useState<CampaignDetails | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
 
-  const fetchCampaigns = async () => {
+  const campaignDetailsCache = useRef(new Map<string, CampaignDetails>()).current;
+
+  const fetchCampaigns = useCallback(async () => {
+    setCampaignsLoading(true);
+    setCampaignsError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/campaigns`);
+      const params = new URLSearchParams();
+      if (fromDate) params.append('fromDate', fromDate);
+      if (toDate) params.append('toDate', toDate);
+      const url = `${API_BASE_URL}/api/campaigns${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await fetch(url);
       const data = await response.json();
       if (data.success) {
         setCampaigns(data.data);
+      } else {
+        setCampaignsError(data.message || 'Failed to load campaigns');
       }
     } catch (error) {
       console.error('Error fetching campaigns:', error);
+      setCampaignsError('Failed to load campaigns. Please try again.');
+    } finally {
+      setCampaignsLoading(false);
     }
-  };
+  }, [fromDate, toDate]);
+
+  useEffect(() => {
+    fetchAllBookings();
+  }, []);
 
   useEffect(() => {
     fetchCampaigns();
-    fetchAllBookings();
-  }, []);
+  }, [fetchCampaigns]);
 
   const fetchAllBookings = async () => {
     try {
@@ -109,52 +141,15 @@ export default function CampaignManager() {
     });
   };
 
-  const getFilteredPageVisits = (campaign: Campaign) => {
-    if (!fromDate || !toDate) {
-      return campaign.pageVisits || [];
-    }
-
-    const startDate = new Date(fromDate);
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(toDate);
-    endDate.setHours(23, 59, 59, 999);
-
-    return (campaign.pageVisits || []).filter((visit: any) => {
-      const visitDate = new Date(visit.timestamp);
-      return visitDate >= startDate && visitDate <= endDate;
-    });
-  };
-
-  const getFilteredButtonClicks = (campaign: Campaign) => {
-    if (!fromDate || !toDate) {
-      return campaign.buttonClicks || [];
-    }
-
-    const startDate = new Date(fromDate);
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(toDate);
-    endDate.setHours(23, 59, 59, 999);
-
-    return (campaign.buttonClicks || []).filter((click: any) => {
-      const clickDate = new Date(click.timestamp);
-      return clickDate >= startDate && clickDate <= endDate;
-    });
-  };
-
   const getFilteredMetrics = (campaign: Campaign) => {
     const filteredBookings = getFilteredBookings(campaign.utmSource);
-    const filteredVisits = getFilteredPageVisits(campaign);
-    const filteredButtonClicks = getFilteredButtonClicks(campaign);
-
-    const uniqueVisitorIds = new Set(filteredVisits.map((visit: any) => visit.visitorId));
-
     return {
-      totalClicks: filteredVisits.length,
-      totalButtonClicks: filteredButtonClicks.length,
-      uniqueVisitors: uniqueVisitorIds.size,
-      totalBookings: filteredBookings.length,
+      totalClicks: campaign.totalClicks ?? 0,
+      totalButtonClicks: campaign.totalButtonClicks ?? 0,
+      uniqueVisitors: campaign.uniqueVisitorsCount ?? 0,
+      totalBookings: campaign.totalBookings ?? filteredBookings.length,
       bookings: filteredBookings,
-      buttonClicks: filteredButtonClicks,
+      buttonClicks: [],
     };
   };
 
@@ -222,16 +217,41 @@ export default function CampaignManager() {
   };
 
   const handleViewStats = (campaign: Campaign) => {
-    const filteredMetrics = getFilteredMetrics(campaign);
-    setSelectedCampaign({
-      ...campaign,
-      totalClicks: filteredMetrics.totalClicks,
-      totalButtonClicks: filteredMetrics.totalButtonClicks || 0,
-      uniqueVisitorsCount: filteredMetrics.uniqueVisitors,
-      totalBookings: filteredMetrics.totalBookings,
-      buttonClicks: filteredMetrics.buttonClicks || [],
-    });
+    setSelectedCampaign(campaign);
+
+    const cached = campaignDetailsCache.get(campaign.campaignId);
+    if (cached) {
+      setSelectedCampaignDetails(cached);
+      setDetailsLoading(false);
+      setShowStatsModal(true);
+      return;
+    }
+
+    if (selectedCampaignDetails?.campaign?.campaignId === campaign.campaignId) {
+      setDetailsLoading(false);
+      setShowStatsModal(true);
+      return;
+    }
+
     setShowStatsModal(true);
+    setDetailsLoading(true);
+    setSelectedCampaignDetails(null);
+
+    fetch(`${API_BASE_URL}/api/campaigns/${campaign.campaignId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.data) {
+          const details: CampaignDetails = data.data;
+          campaignDetailsCache.set(campaign.campaignId, details);
+          setSelectedCampaignDetails(details);
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching campaign details:', err);
+      })
+      .finally(() => {
+        setDetailsLoading(false);
+      });
   };
 
   const handleDeleteCampaign = async (campaignId: string) => {
@@ -419,7 +439,18 @@ export default function CampaignManager() {
             )}
           </h2>
 
-          {campaigns.length === 0 ? (
+          {campaignsError && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+              {campaignsError}
+            </div>
+          )}
+
+          {campaignsLoading ? (
+            <div className="bg-white rounded-2xl shadow-md p-12 text-center border border-gray-200">
+              <Loader className="animate-spin mx-auto mb-4 text-orange-500" size={48} />
+              <p className="text-gray-600">Loading campaigns...</p>
+            </div>
+          ) : campaigns.length === 0 ? (
             <div className="bg-white rounded-2xl shadow-md p-12 text-center border border-gray-200">
               <div className="text-gray-400 mb-4">
                 <TrendingUp size={64} className="mx-auto" />
@@ -582,8 +613,8 @@ export default function CampaignManager() {
       {showStatsModal && selectedCampaign && (
         <CampaignStatsModal
           campaign={selectedCampaign}
-          filteredBookings={getFilteredBookings(selectedCampaign.utmSource)}
-          filteredMetrics={getFilteredMetrics(selectedCampaign)}
+          campaignDetails={selectedCampaignDetails}
+          detailsLoading={detailsLoading}
           dateRange={{ fromDate, toDate }}
           onClose={() => {
             setShowStatsModal(false);
@@ -591,6 +622,9 @@ export default function CampaignManager() {
             fetchCampaigns();
           }}
           onDelete={() => {
+            if (selectedCampaign) {
+              campaignDetailsCache.delete(selectedCampaign.campaignId);
+            }
             fetchCampaigns();
           }}
         />

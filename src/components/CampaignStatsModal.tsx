@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
   X,
   TrendingUp,
@@ -38,7 +38,7 @@ interface Booking {
 }
 
 interface CampaignDetails {
-  campaign: Campaign;
+  campaign: Campaign & { pageVisits?: any[]; buttonClicks?: any[] };
   bookings: Booking[];
   stats: {
     totalClicks: number;
@@ -51,15 +51,8 @@ interface CampaignDetails {
 
 interface Props {
   campaign: Campaign;
-  filteredBookings?: any[];
-  filteredMetrics?: {
-    totalClicks: number;
-    totalButtonClicks?: number;
-    uniqueVisitors: number;
-    totalBookings: number;
-    bookings: any[];
-    buttonClicks?: any[];
-  };
+  campaignDetails: CampaignDetails | null;
+  detailsLoading: boolean;
   dateRange?: { fromDate: string; toDate: string };
   onClose: () => void;
   onDelete?: () => void;
@@ -69,54 +62,65 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfire
 
 export default function CampaignStatsModal({
   campaign,
-  filteredBookings,
-  filteredMetrics,
+  campaignDetails,
+  detailsLoading,
   dateRange,
   onClose,
   onDelete,
 }: Props) {
-  const [details, setDetails] = useState<CampaignDetails | null>(null);
-  const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  useEffect(() => {
-    if (filteredBookings && filteredMetrics && dateRange) {
-      setDetails({
-        campaign,
-        bookings: filteredBookings,
-        stats: {
-          totalClicks: filteredMetrics.totalClicks,
-          totalButtonClicks: filteredMetrics.totalButtonClicks || 0,
-          uniqueVisitors: filteredMetrics.uniqueVisitors,
-          totalBookings: filteredMetrics.totalBookings,
-          conversionRate:
-            filteredMetrics.uniqueVisitors > 0
-              ? ((filteredMetrics.totalBookings / filteredMetrics.uniqueVisitors) * 100).toFixed(2)
-              : '0.00',
-        },
-      });
-      setLoading(false);
-    } else {
-      fetchCampaignDetails();
+  const details = useMemo(() => {
+    if (!campaignDetails) return null;
+
+    const { fromDate, toDate } = dateRange || {};
+    const hasDateFilter = fromDate && toDate;
+
+    if (!hasDateFilter) {
+      return campaignDetails;
     }
-  }, [campaign.campaignId, filteredBookings, filteredMetrics, dateRange]);
 
-  const fetchCampaignDetails = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/campaigns/${campaign.campaignId}`);
-      const data = await response.json();
+    const startDate = new Date(fromDate);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(toDate);
+    endDate.setHours(23, 59, 59, 999);
 
-      if (data.success) {
-        setDetails(data.data);
+    const filteredBookings = campaignDetails.bookings.filter((b: Booking) => {
+      if (b.clientName === 'Unknown Client' && b.clientEmail?.includes('calendly.placeholder')) return false;
+      if (b.scheduledEventStartTime) {
+        const d = new Date(b.scheduledEventStartTime);
+        if (d.getFullYear() === 1970) return false;
       }
-    } catch (error) {
-      console.error('Error fetching campaign details:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      const bookingDate = new Date(b.bookingCreatedAt);
+      return bookingDate >= startDate && bookingDate <= endDate;
+    });
+
+    const pageVisits = campaignDetails.campaign.pageVisits || [];
+    const buttonClicks = campaignDetails.campaign.buttonClicks || [];
+    const filteredVisits = pageVisits.filter((v: any) => {
+      const t = new Date(v.timestamp);
+      return t >= startDate && t <= endDate;
+    });
+    const filteredClicks = buttonClicks.filter((c: any) => {
+      const t = new Date(c.timestamp);
+      return t >= startDate && t <= endDate;
+    });
+    const uniqueVisitors = new Set(filteredVisits.map((v: any) => v.visitorId)).size;
+
+    return {
+      campaign: campaignDetails.campaign,
+      bookings: filteredBookings,
+      stats: {
+        totalClicks: filteredVisits.length,
+        totalButtonClicks: filteredClicks.length,
+        uniqueVisitors,
+        totalBookings: filteredBookings.length,
+        conversionRate:
+          uniqueVisitors > 0 ? ((filteredBookings.length / uniqueVisitors) * 100).toFixed(2) : '0.00',
+      },
+    };
+  }, [campaignDetails, dateRange?.fromDate, dateRange?.toDate]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -189,7 +193,7 @@ export default function CampaignStatsModal({
             </div>
           </div>
 
-          {loading ? (
+          {detailsLoading ? (
             <div className="p-12 text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto" />
               <p className="text-gray-600 mt-4">Loading campaign details...</p>
@@ -243,8 +247,8 @@ export default function CampaignStatsModal({
               <div className="p-6">
                 <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
                   <Calendar className="mr-2 text-orange-500" size={24} />
-                  Bookings ({filteredBookings ? filteredBookings.length : details.bookings.length})
-                  {filteredBookings && dateRange && (
+                  Bookings ({details.bookings.length})
+                  {dateRange?.fromDate && dateRange?.toDate && (
                     <span className="ml-3 text-sm font-normal text-orange-600 bg-orange-100 px-2 py-1 rounded-full">
                       Filtered: {new Date(dateRange.fromDate).toLocaleDateString()} -{' '}
                       {new Date(dateRange.toDate).toLocaleDateString()}
@@ -252,7 +256,7 @@ export default function CampaignStatsModal({
                   )}
                 </h3>
 
-                {(filteredBookings ? filteredBookings.length : details.bookings.length) === 0 ? (
+                {details.bookings.length === 0 ? (
                   <div className="text-center py-12 bg-gray-50 rounded-lg border border-gray-200">
                     <Calendar className="mx-auto text-gray-300 mb-4" size={48} />
                     <p className="text-gray-500 font-medium">No bookings yet</p>
@@ -260,18 +264,14 @@ export default function CampaignStatsModal({
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {(filteredBookings || details.bookings)
-                      .filter((booking) => {
-                        // Filter out "Unknown Client" with placeholder email
-                        if (booking.clientName === 'Unknown Client' && booking.clientEmail.includes('calendly.placeholder')) {
+                    {details.bookings
+                      .filter((booking: Booking) => {
+                        if (booking.clientName === 'Unknown Client' && booking.clientEmail?.includes('calendly.placeholder')) {
                           return false;
                         }
-                        // Filter out invalid dates (e.g. 1970-01-01)
                         if (booking.scheduledEventStartTime) {
                           const date = new Date(booking.scheduledEventStartTime);
-                          if (date.getFullYear() === 1970) {
-                            return false;
-                          }
+                          if (date.getFullYear() === 1970) return false;
                         }
                         return true;
                       })
