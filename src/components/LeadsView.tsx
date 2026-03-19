@@ -29,7 +29,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, PieChart, Pie, Cell, Legend, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Legend, CartesianGrid } from 'recharts';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
 import { useCrmAuth } from '../auth/CrmAuthContext';
@@ -436,55 +436,6 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
       total,
     };
   }, [filteredData, statusBreakdown]);
-
-  const qualificationChartData = useMemo(
-    () => {
-      const totals: Record<Qualification, number> = {
-        MQL: 0,
-        SQL: 0,
-        Converted: 0,
-      };
-
-      filteredData.forEach((lead) => {
-        const qualification = lead.qualification as Qualification | undefined;
-        if (qualification && totals[qualification] !== undefined) {
-          totals[qualification] += 1;
-        }
-      });
-
-      return [
-        { name: 'MQL', value: totals.MQL },
-        { name: 'SQL', value: totals.SQL },
-        { name: 'Converted', value: totals.Converted },
-      ];
-    },
-    [filteredData],
-  );
-
-  const pipelineStatusChartData = useMemo(
-    () => [
-      { name: 'Not Scheduled', value: statusStats.notScheduled },
-      { name: 'Booked', value: statusStats.booked },
-      { name: 'Completed', value: statusStats.completed },
-      { name: 'Cancelled', value: statusStats.canceled },
-      { name: 'No-Show', value: statusStats.noShow },
-      { name: 'Rescheduled', value: statusStats.rescheduled },
-      { name: 'Ignored', value: statusStats.ignored },
-      { name: 'Converted', value: statusStats.paid },
-    ],
-    [statusStats],
-  );
-
-  const qualificationColors: Record<string, string> = {
-    MQL: '#6366F1', // indigo
-    SQL: '#0EA5E9', // sky blue
-    Converted: '#22C55E', // modern green
-  };
-
-  const totalQualificationCount = useMemo(
-    () => qualificationChartData.reduce((sum, item) => sum + item.value, 0),
-    [qualificationChartData],
-  );
 
   // Format date range for display
   const dateRangeDisplay = useMemo(() => {

@@ -15,7 +15,7 @@ import {
   CartesianGrid,
   ComposedChart,
 } from 'recharts';
-import { Loader2, TrendingUp, TrendingDown, Calendar, RefreshCcw } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, RefreshCcw } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
@@ -41,8 +41,6 @@ const COLORS = {
   indigo: '#6366F1',
   teal: '#14B8A6',
 };
-
-const PIE_COLORS = ['#6366F1', '#0EA5E9', '#22C55E', '#F59E0B', '#F43F5E', '#8B5CF6', '#F97316', '#14B8A6', '#EC4899', '#84CC16'];
 
 const STATUS_COLORS: Record<string, string> = {
   'not-scheduled': '#9CA3AF',
@@ -147,27 +145,9 @@ const STATUS_LABELS: Record<string, string> = {
   paid: 'Paid',
 };
 
-const SOURCE_LABELS: Record<string, string> = {
-  calendly: 'Calendly',
-  meta_lead_ad: 'Meta Ads',
-  manual: 'Manual',
-  frontend_direct: 'Website',
-  bulk_import: 'Bulk Import',
-};
-
 // ── Format helpers ─────────────────────────────────────────────────
 const fmtCurrency = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n}`;
 const fmtPct = (n: number) => `${n.toFixed(1)}%`;
-const fmtMonth = (m: string) => {
-  const [y, mo] = m.split('-');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[parseInt(mo) - 1]} ${y.slice(2)}`;
-};
-const fmtDate = (d: string) => {
-  const parts = d.split('-');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${months[parseInt(parts[1]) - 1]} ${parseInt(parts[2])}`;
-};
 
 // ── Main Component ─────────────────────────────────────────────────
 export default function QualifiedLeadsGraphs({ className = '', filters = {}, monthlyStatusBreakdown = [] }: Props) {
