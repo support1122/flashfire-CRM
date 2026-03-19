@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef, lazy, Suspense } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Loader2,
@@ -38,6 +38,8 @@ import NotesModal from './NotesModal';
 import FollowUpModal, { type FollowUpData } from './FollowUpModal';
 import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
 import CustomWorkflowsModal from './CustomWorkflowsModal';
+
+const QualifiedLeadsGraphs = lazy(() => import('./QualifiedLeadsGraphs'));
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -1116,125 +1118,10 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
         </div>
       )}
 
-      {variant === 'qualified' && activeLeadsTab === 'graphs' && qualificationChartData.some((item) => item.value > 0) && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white border border-slate-200 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">MQL share</p>
-              <p className="text-2xl font-bold text-slate-900">
-                {totalQualificationCount > 0
-                  ? `${Math.round((qualificationChartData[0]?.value ?? 0) / totalQualificationCount * 100)}%`
-                  : '—'}
-              </p>
-              <p className="text-[11px] text-slate-500 mt-1">Of all qualified leads</p>
-            </div>
-            <div className="bg-white border border-slate-200 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">SQL share</p>
-              <p className="text-2xl font-bold text-slate-900">
-                {totalQualificationCount > 0
-                  ? `${Math.round((qualificationChartData[1]?.value ?? 0) / totalQualificationCount * 100)}%`
-                  : '—'}
-              </p>
-              <p className="text-[11px] text-slate-500 mt-1">Sales‑ready leads</p>
-            </div>
-            <div className="bg-white border border-slate-200 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Converted share</p>
-              <p className="text-2xl font-bold text-slate-900">
-                {totalQualificationCount > 0
-                  ? `${Math.round((qualificationChartData[2]?.value ?? 0) / totalQualificationCount * 100)}%`
-                  : '—'}
-              </p>
-              <p className="text-[11px] text-slate-500 mt-1">Paying customers</p>
-            </div>
-            <div className="bg-white border border-slate-200 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Overall conversion</p>
-              <p className="text-2xl font-bold text-slate-900">
-                {statusStats.total > 0
-                  ? `${Math.round((statusStats.paid / statusStats.total) * 100)}%`
-                  : '—'}
-              </p>
-              <p className="text-[11px] text-slate-500 mt-1">Converted / all filtered leads</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white border border-slate-200  p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">Qualification breakdown</h2>
-                <p className="text-xs text-slate-500">MQL, SQL & Converted for the current filters</p>
-              </div>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={qualificationChartData}>
-                  <XAxis dataKey="name" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
-                  <RechartsTooltip
-                    cursor={{ fill: 'rgba(15,23,42,0.03)' }}
-                    contentStyle={{ borderRadius: 8, borderColor: '#E2E8F0', fontSize: 12 }}
-                  />
-                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
-                    {qualificationChartData.map((entry) => (
-                      <Cell key={entry.name} fill={qualificationColors[entry.name] || '#0F172A'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-            <div className="bg-white border border-slate-200  p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-base font-semibold text-slate-900">Pipeline by status</h2>
-                <p className="text-xs text-slate-500">How leads move across meeting statuses</p>
-              </div>
-            </div>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pipelineStatusChartData.filter((item) => item.value > 0)}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={48}
-                    outerRadius={80}
-                    paddingAngle={2}
-                  >
-                    {pipelineStatusChartData
-                      .filter((item) => item.value > 0)
-                      .map((entry) => {
-                        const colorMap: Record<string, string> = {
-                          'Not Scheduled': '#9CA3AF', // neutral
-                          Booked: '#F59E0B',         // amber
-                          Completed: '#22C55E',      // green
-                          Cancelled: '#EF4444',      // red
-                          'No-Show': '#FB7185',      // rose
-                          Rescheduled: '#3B82F6',    // blue
-                          Ignored: '#6B7280',        // slate
-                          Converted: '#6366F1',      // indigo
-                        };
-                        return <Cell key={entry.name} fill={colorMap[entry.name] || '#E5E7EB'} />;
-                      })}
-                  </Pie>
-                  <Legend
-                    layout="vertical"
-                    align="right"
-                    verticalAlign="middle"
-                    iconType="circle"
-                    wrapperStyle={{ fontSize: 11 }}
-                  />
-                  <RechartsTooltip
-                    cursor={{ fill: 'rgba(15,23,42,0.03)' }}
-                    contentStyle={{ borderRadius: 8, borderColor: '#E2E8F0', fontSize: 12 }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            </div>
-          </div>
-        </div>
+      {variant === 'qualified' && activeLeadsTab === 'graphs' && (
+        <Suspense fallback={<div className="flex items-center justify-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" /></div>}>
+          <QualifiedLeadsGraphs />
+        </Suspense>
       )}
 
       {error && (

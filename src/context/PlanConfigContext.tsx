@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
@@ -100,13 +100,13 @@ export function PlanConfigProvider({ children }: { children: React.ReactNode }) 
     fetchConfig();
   }, [fetchConfig]);
 
-  const value: PlanConfigState = {
+  const value = useMemo<PlanConfigState>(() => ({
     planOptions,
     incentiveConfig,
     loading,
     error,
     refetch: fetchConfig,
-  };
+  }), [planOptions, incentiveConfig, loading, error, fetchConfig]);
 
   return (
     <PlanConfigContext.Provider value={value}>

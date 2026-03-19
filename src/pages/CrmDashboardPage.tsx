@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from 'react';
+import React, { Suspense, useEffect, useMemo, useState, type ComponentType } from 'react';
 import {
   BarChart3,
   ChevronLeft,
@@ -23,18 +23,29 @@ import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 import type { CrmPermission } from '../auth/crmTypes';
 import { PlanConfigProvider } from '../context/PlanConfigContext';
-import CampaignManager from '../components/CampaignManager';
-import EmailCampaign from '../components/EmailCampaign';
-import WhatsAppCampaign from '../components/WhatsAppCampaign';
-import AnalyticsDashboard from '../components/AnalyticsDashboard';
-import UnifiedDataView from '../components/UnifiedDataView';
-import Workflows from '../components/Workflows';
-import LeadsView from '../components/LeadsView';
-import QualifiedLeadsView from '../components/QualifiedLeadsView';
-import ClaimLeadsView from '../components/ClaimLeadsView';
-import MeetingInfoView from '../components/MeetingInfoView';
-import MetaLeadsView from '../components/MetaLeadsView';
 import '../index.css';
+
+const CampaignManager = React.lazy(() => import('../components/CampaignManager'));
+const EmailCampaign = React.lazy(() => import('../components/EmailCampaign'));
+const WhatsAppCampaign = React.lazy(() => import('../components/WhatsAppCampaign'));
+const AnalyticsDashboard = React.lazy(() => import('../components/AnalyticsDashboard'));
+const UnifiedDataView = React.lazy(() => import('../components/UnifiedDataView'));
+const Workflows = React.lazy(() => import('../components/Workflows'));
+const LeadsView = React.lazy(() => import('../components/LeadsView'));
+const QualifiedLeadsView = React.lazy(() => import('../components/QualifiedLeadsView'));
+const ClaimLeadsView = React.lazy(() => import('../components/ClaimLeadsView'));
+const MeetingInfoView = React.lazy(() => import('../components/MeetingInfoView'));
+const MetaLeadsView = React.lazy(() => import('../components/MetaLeadsView'));
+
+function TabSpinner() {
+  return (
+    <div className="flex items-center justify-center py-20">
+      <div className="h-2 w-48 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-full w-1/2 bg-orange-500 rounded-full animate-pulse" />
+      </div>
+    </div>
+  );
+}
 
 
 type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads';
@@ -386,7 +397,7 @@ export default function CrmDashboardPage() {
                 </div>
               </div>
             ) : (
-              <>
+              <Suspense fallback={<TabSpinner />}>
                 {/* Keep behavior close to the original CRM: render by active tab */}
                 {activeTab === 'campaigns' && <CampaignManager />}
                 {activeTab === 'emails' && (
@@ -426,7 +437,7 @@ export default function CrmDashboardPage() {
                 )}
                 {activeTab === 'claim_leads' && <ClaimLeadsView />}
                 {activeTab === 'meeting_links' && <MeetingInfoView />}
-              </>
+              </Suspense>
             )}
           </div>
         </section>
