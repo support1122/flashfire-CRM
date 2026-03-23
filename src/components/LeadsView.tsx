@@ -116,7 +116,7 @@ interface LeadsViewProps {
 }
 
 export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpenWhatsAppCampaign, onNavigateToWorkflows, defaultUtmSource, hideSourceFilter = false }: LeadsViewProps) {
-  const { token } = useCrmAuth();
+  const { token, hasPermission } = useCrmAuth();
   const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -170,6 +170,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
   const statusDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [statusDropdownPosition, setStatusDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   const [graphsRefreshKey, setGraphsRefreshKey] = useState(0);
+  const isBdaAdmin = hasPermission('bda_admin');
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
     const id = Date.now().toString();
@@ -339,6 +340,22 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
     bookings.forEach((booking) => sources.add(booking.utmSource || 'direct'));
     return Array.from(sources).sort();
   }, [bookings]);
+
+  const filterStatusOptions = useMemo(() => {
+    const options: BookingStatus[] = ['not-scheduled', 'scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'];
+    return isBdaAdmin ? options : options.filter((status) => status !== 'paid');
+  }, [isBdaAdmin]);
+
+  const rowStatusOptions = useMemo(() => {
+    const options: BookingStatus[] = ['not-scheduled', 'scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'];
+    return isBdaAdmin ? options : options.filter((status) => status !== 'paid');
+  }, [isBdaAdmin]);
+
+  useEffect(() => {
+    if (!isBdaAdmin && statusFilter === 'paid') {
+      setStatusFilter('all');
+    }
+  }, [isBdaAdmin, statusFilter]);
 
   const filteredData = useMemo(() => {
     return bookings.map((booking) => {
@@ -1194,7 +1211,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
                 className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 min-w-[130px] focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
               >
                 <option value="all">All statuses</option>
-                {(['not-scheduled', 'scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
+                {filterStatusOptions.map((status) => (
                   <option key={status} value={status}>{statusLabels[status]}</option>
                 ))}
               </select>
@@ -2042,7 +2059,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
               Change Status
             </div>
             <div className="py-1">
-              {(['not-scheduled', 'scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
+              {rowStatusOptions.map((status) => {
                 if (status === openRow.status) return null;
                 const statusIcon = status === 'not-scheduled' ? Clock : status === 'completed' ? CheckCircle2 : status === 'no-show' ? AlertTriangle : status === 'paid' ? DollarSign : status === 'rescheduled' ? Clock : status === 'canceled' ? X : status === 'ignored' ? X : Calendar;
                 const StatusIcon = statusIcon;
