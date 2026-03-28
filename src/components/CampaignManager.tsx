@@ -17,7 +17,12 @@ interface Campaign {
   campaignName: string;
   utmSource: string;
   utmMedium: string;
+  utmCampaign?: string | null;
+  utmContent?: string | null;
+  utmTerm?: string | null;
   generatedUrl: string;
+  /** Optional extra link path (same UTM set), e.g. blog/promo */
+  customPath?: string | null;
   totalClicks: number;
   totalButtonClicks?: number;
   uniqueVisitorsCount: number;
@@ -26,6 +31,38 @@ interface Campaign {
   createdAt: string;
   pageVisits?: any[];
   buttonClicks?: any[];
+}
+
+const FLASHFIRE_SITE = 'https://www.flashfirejobs.com';
+
+function buildUtmSearchParams(c: Pick<Campaign, 'utmSource' | 'utmMedium' | 'utmCampaign' | 'utmContent' | 'utmTerm'>) {
+  const p = new URLSearchParams();
+  p.set('utm_source', c.utmSource);
+  p.set('utm_medium', c.utmMedium || 'campaign');
+  if (c.utmCampaign) p.set('utm_campaign', c.utmCampaign);
+  if (c.utmContent) p.set('utm_content', c.utmContent);
+  if (c.utmTerm) p.set('utm_term', c.utmTerm);
+  return p.toString();
+}
+
+function buildRegisterLandingUrl(c: Campaign) {
+  return `${FLASHFIRE_SITE}/register?${buildUtmSearchParams(c)}`;
+}
+
+function buildCustomPathUrl(c: Campaign) {
+  if (!c.customPath?.trim()) return null;
+  const path = c.customPath.replace(/^\/+/, '');
+  return `${FLASHFIRE_SITE}/${path}?${buildUtmSearchParams(c)}`;
+}
+
+function buildCalendlyCampaignUrl(c: Campaign) {
+  const p = new URLSearchParams();
+  p.set('utm_source', c.utmSource);
+  p.set('utm_medium', c.utmMedium || 'direct');
+  if (c.utmCampaign) p.set('utm_campaign', c.utmCampaign);
+  if (c.utmContent) p.set('utm_content', c.utmContent);
+  if (c.utmTerm) p.set('utm_term', c.utmTerm);
+  return `https://calendly.com/feedback-flashfire/30min?${p.toString()}`;
 }
 
 interface CampaignDetails {
@@ -47,6 +84,7 @@ export default function CampaignManager() {
   const [exactUtmSource, setExactUtmSource] = useState('');
   const [utmMedium, setUtmMedium] = useState('campaign');
   const [utmCampaign, setUtmCampaign] = useState('');
+  const [customPathInput, setCustomPathInput] = useState('');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -178,6 +216,10 @@ export default function CampaignManager() {
       if (exactTrim) {
         body.utmSource = exactTrim.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/gi, '');
       }
+      const cp = customPathInput.trim();
+      if (cp) {
+        body.customPath = cp.replace(/^\/+/, '');
+      }
       const response = await fetch(`${API_BASE_URL}/api/campaigns`, {
         method: 'POST',
         headers: {
@@ -194,6 +236,7 @@ export default function CampaignManager() {
         setExactUtmSource('');
         setUtmMedium('campaign');
         setUtmCampaign('');
+        setCustomPathInput('');
         fetchCampaigns();
       } else {
         alert(data.message || 'Failed to create campaign');
@@ -361,6 +404,27 @@ export default function CampaignManager() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
                 />
               </div>
+
+              <div className="md:col-span-2">
+                <label htmlFor="customPath" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Custom site path (optional)
+                </label>
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                  <span className="text-sm text-gray-500 shrink-0 font-mono">flashfirejobs.com/</span>
+                  <input
+                    type="text"
+                    id="customPath"
+                    value={customPathInput}
+                    onChange={(e) => setCustomPathInput(e.target.value)}
+                    placeholder="e.g. blog/summer-sale or employers"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all font-mono text-sm"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Adds a fourth copy link with the same UTMs. Leave empty to only use home, register, and Calendly links.
+                  Register link <span className="font-mono">/register?utm_…</span> is always available on each campaign card.
+                </p>
+              </div>
             </div>
 
             <button
@@ -527,7 +591,7 @@ export default function CampaignManager() {
 
                     <div className="p-4 bg-gray-50 border-b border-gray-100 space-y-3">
                       <div>
-                        <div className="text-xs text-gray-500 mb-1 font-semibold">Website URL:</div>
+                        <div className="text-xs text-gray-500 mb-1 font-semibold">Website (home):</div>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 text-xs text-gray-700 truncate font-mono bg-white px-2 py-1 rounded border border-gray-200">
                             {campaign.generatedUrl}
@@ -538,9 +602,30 @@ export default function CampaignManager() {
                                 ? 'bg-green-500 text-white'
                                 : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
                               }`}
-                            title="Copy Website URL"
+                            title="Copy homepage URL with UTMs"
                           >
                             {copiedId === `web-${campaign.campaignId}` ? <Check size={16} /> : <Copy size={16} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs text-gray-500 mb-1 font-semibold">Register landing:</div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 text-xs text-gray-700 truncate font-mono bg-white px-2 py-1 rounded border border-gray-200">
+                            {buildRegisterLandingUrl(campaign)}
+                          </div>
+                          <button
+                            onClick={() =>
+                              handleCopyUrl(buildRegisterLandingUrl(campaign), `reg-${campaign.campaignId}`)
+                            }
+                            className={`p-2 rounded transition-all ${copiedId === `reg-${campaign.campaignId}`
+                                ? 'bg-green-500 text-white'
+                                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
+                              }`}
+                            title="Copy /register URL with UTMs"
+                          >
+                            {copiedId === `reg-${campaign.campaignId}` ? <Check size={16} /> : <Copy size={16} />}
                           </button>
                         </div>
                       </div>
@@ -549,27 +634,45 @@ export default function CampaignManager() {
                         <div className="text-xs text-gray-500 mb-1 font-semibold">Calendly URL:</div>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 text-xs text-gray-700 truncate font-mono bg-white px-2 py-1 rounded border border-gray-200">
-                            {`https://calendly.com/feedback-flashfire/30min?utm_source=${campaign.utmSource}&utm_medium=${campaign.utmMedium || 'direct'
-                              }`}
+                            {buildCalendlyCampaignUrl(campaign)}
                           </div>
                           <button
                             onClick={() =>
-                              handleCopyUrl(
-                                `https://calendly.com/feedback-flashfire/30min?utm_source=${campaign.utmSource}&utm_medium=${campaign.utmMedium || 'direct'
-                                }`,
-                                `cal-${campaign.campaignId}`,
-                              )
+                              handleCopyUrl(buildCalendlyCampaignUrl(campaign), `cal-${campaign.campaignId}`)
                             }
                             className={`p-2 rounded transition-all ${copiedId === `cal-${campaign.campaignId}`
                                 ? 'bg-green-500 text-white'
                                 : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
                               }`}
-                            title="Copy Calendly URL"
+                            title="Copy Calendly URL with UTMs"
                           >
                             {copiedId === `cal-${campaign.campaignId}` ? <Check size={16} /> : <Copy size={16} />}
                           </button>
                         </div>
                       </div>
+
+                      {buildCustomPathUrl(campaign) && (
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1 font-semibold">Custom path:</div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 text-xs text-gray-700 truncate font-mono bg-white px-2 py-1 rounded border border-gray-200">
+                              {buildCustomPathUrl(campaign)}
+                            </div>
+                            <button
+                              onClick={() =>
+                                handleCopyUrl(buildCustomPathUrl(campaign)!, `cust-${campaign.campaignId}`)
+                              }
+                              className={`p-2 rounded transition-all ${copiedId === `cust-${campaign.campaignId}`
+                                  ? 'bg-green-500 text-white'
+                                  : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
+                                }`}
+                              title="Copy custom path URL with UTMs"
+                            >
+                              {copiedId === `cust-${campaign.campaignId}` ? <Check size={16} /> : <Copy size={16} />}
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="p-4 space-y-2">
