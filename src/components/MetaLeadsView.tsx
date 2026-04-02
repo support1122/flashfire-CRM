@@ -55,6 +55,7 @@ function MetaLeadsViewContent({
       onNavigateToWorkflows={onNavigateToWorkflows}
       defaultUtmSource="meta_lead_ad"
       hideSourceFilter={true}
+      dateRangeOnBookingCreatedAt
     />
   );
 }
