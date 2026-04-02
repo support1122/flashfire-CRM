@@ -113,9 +113,19 @@ interface LeadsViewProps {
   onNavigateToWorkflows?: () => void;
   defaultUtmSource?: string; // Optional: Set default UTM source filter (e.g., 'meta_lead_ad')
   hideSourceFilter?: boolean; // Optional: Hide the source filter dropdown
+  /** When true, date range uses bookingCreatedAt (calendar date). Sent as dateRangeField=bookingCreatedAt to /api/leads/* — API must honor it. */
+  dateRangeOnBookingCreatedAt?: boolean;
 }
 
-export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpenWhatsAppCampaign, onNavigateToWorkflows, defaultUtmSource, hideSourceFilter = false }: LeadsViewProps) {
+export default function LeadsView({
+  variant = 'all',
+  onOpenEmailCampaign,
+  onOpenWhatsAppCampaign,
+  onNavigateToWorkflows,
+  defaultUtmSource,
+  hideSourceFilter = false,
+  dateRangeOnBookingCreatedAt = false,
+}: LeadsViewProps) {
   const { token } = useCrmAuth();
   const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -234,6 +244,9 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
       if (toDate) {
         params.append('toDate', toDate);
       }
+      if (dateRangeOnBookingCreatedAt && (fromDate || toDate)) {
+        params.append('dateRangeField', 'bookingCreatedAt');
+      }
       if (minAmount) {
         params.append('minAmount', minAmount);
       }
@@ -272,7 +285,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
       setRefreshing(false);
       setLoading(false);
     }
-  }, [token, variant, planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
+  }, [token, variant, planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -318,7 +331,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
     fetchLeads(page);
     setAllSelectedBookingIds(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [variant, planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount]);
+  }, [variant, planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
 
   useEffect(() => {
     const handleBookingUpdate = (event: CustomEvent) => {
@@ -380,13 +393,18 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
           return false;
         }
       }
+      if (dateRangeOnBookingCreatedAt && (fromDate || toDate)) {
+        const rowDay = format(parseISO(row.createdAt), 'yyyy-MM-dd');
+        if (fromDate && rowDay < fromDate) return false;
+        if (toDate && rowDay > toDate) return false;
+      }
       return true;
     }).sort((a, b) => {
       const aDate = a.scheduledTime ? parseISO(a.scheduledTime) : parseISO(a.createdAt);
       const bDate = b.scheduledTime ? parseISO(b.scheduledTime) : parseISO(b.createdAt);
       return bDate.getTime() - aDate.getTime();
     });
-  }, [bookings]);
+  }, [bookings, dateRangeOnBookingCreatedAt, fromDate, toDate]);
 
   // Use API statusBreakdown when available (correct full-filtered counts); fallback to filteredData for backwards compat
   const statusStats = useMemo(() => {
@@ -487,6 +505,9 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
       if (search) params.append('search', search);
       if (fromDate) params.append('fromDate', fromDate);
       if (toDate) params.append('toDate', toDate);
+      if (dateRangeOnBookingCreatedAt && (fromDate || toDate)) {
+        params.append('dateRangeField', 'bookingCreatedAt');
+      }
       if (minAmount) params.append('minAmount', minAmount);
       if (maxAmount) params.append('maxAmount', maxAmount);
       const headers: HeadersInit = {};
@@ -504,7 +525,7 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
     } finally {
       setSelectAllLoading(false);
     }
-  }, [token, utmFilter, planFilter, qualificationFilter, statusFilter, search, fromDate, toDate, minAmount, maxAmount, variant, allSelectedBookingIds]);
+  }, [token, utmFilter, planFilter, qualificationFilter, statusFilter, search, fromDate, toDate, minAmount, maxAmount, variant, allSelectedBookingIds, dateRangeOnBookingCreatedAt]);
 
   const handleSelectRow = useCallback((id: string) => {
     setSelectedRows((prev) => {
@@ -1025,7 +1046,9 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
       {dateRangeDisplay && (
         <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
           <h2 className="text-base font-semibold text-slate-900 mb-1">
-            Meetings from {dateRangeDisplay}
+            {dateRangeOnBookingCreatedAt
+              ? `Leads by booking created date (${dateRangeDisplay})`
+              : `Meetings from ${dateRangeDisplay}`}
           </h2>
           <p className="text-xs text-slate-500 mb-4">Monthly breakdown by status • Hover for details</p>
           {monthlyStatusBreakdown.length > 0 ? (
@@ -1258,6 +1281,11 @@ export default function LeadsView({ variant = 'all', onOpenEmailCampaign, onOpen
                   className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
                 />
               </div>
+              {dateRangeOnBookingCreatedAt && (
+                <p className="text-[10px] text-slate-500 max-w-[min(100%,22rem)]">
+                  Filters by <span className="font-medium text-slate-600">bookingCreatedAt</span> (calendar day in your timezone).
+                </p>
+              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Quick range</label>
