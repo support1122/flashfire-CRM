@@ -62,7 +62,7 @@ function buildCalendlyCampaignUrl(c: Campaign) {
   if (c.utmCampaign) p.set('utm_campaign', c.utmCampaign);
   if (c.utmContent) p.set('utm_content', c.utmContent);
   if (c.utmTerm) p.set('utm_term', c.utmTerm);
-  return `https://calendly.com/feedback-flashfire/30min?${p.toString()}`;
+  return `https://calendly.com/feedback-flashfire/15min?${p.toString()}`;
 }
 
 interface CampaignDetails {
