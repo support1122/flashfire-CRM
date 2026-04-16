@@ -17,7 +17,7 @@ interface Lead {
   clientEmail: string;
   clientPhone?: string;
   scheduledEventStartTime?: string;
-  bookingStatus: 'paid' | 'scheduled' | 'completed';
+  bookingStatus: 'paid' | 'scheduled' | 'completed' | 'rescheduled';
   paymentPlan?: {
     name: PlanName;
     price: number;
@@ -48,7 +48,7 @@ export default function ClaimLeadsView() {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<Partial<Lead>>({});
   const [showPaidConfirmModal, setShowPaidConfirmModal] = useState(false);
-  const [pendingStatusChange, setPendingStatusChange] = useState<{ status: 'paid' | 'scheduled' | 'completed' } | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{ status: 'paid' | 'scheduled' | 'completed' | 'rescheduled' } | null>(null);
   
   const [myLeads, setMyLeads] = useState<Lead[]>([]);
   const [myLeadsLoading, setMyLeadsLoading] = useState(false);
@@ -57,7 +57,7 @@ export default function ClaimLeadsView() {
   const [myLeadsTotalIncentives, setMyLeadsTotalIncentives] = useState<number>(0);
   const [myLeadsFromDate, setMyLeadsFromDate] = useState<string>('');
   const [myLeadsToDate, setMyLeadsToDate] = useState<string>('');
-  const [myLeadsStatusFilter, setMyLeadsStatusFilter] = useState<'all' | 'paid' | 'scheduled' | 'completed'>('all');
+  const [myLeadsStatusFilter, setMyLeadsStatusFilter] = useState<'all' | 'paid' | 'scheduled' | 'completed' | 'rescheduled'>('all');
   const [myLeadsPlanFilter, setMyLeadsPlanFilter] = useState<PlanName | 'all'>('all');
 
   /** Referral payment lines (plan + amount). Primary is formData.paymentPlan; these are additional. */
@@ -377,7 +377,7 @@ export default function ClaimLeadsView() {
     }
   };
 
-  const handleStatusUpdate = async (newStatus: 'paid' | 'scheduled' | 'completed') => {
+  const handleStatusUpdate = async (newStatus: 'paid' | 'scheduled' | 'completed' | 'rescheduled') => {
     if (!lead) return;
 
     setSaving(true);
@@ -940,7 +940,7 @@ export default function ClaimLeadsView() {
                         <select
                           value={lead.bookingStatus}
                           onChange={(e) => {
-                            const newStatus = e.target.value as 'paid' | 'scheduled' | 'completed';
+                            const newStatus = e.target.value as 'paid' | 'scheduled' | 'completed' | 'rescheduled';
                             if (newStatus === 'paid' && lead.bookingStatus !== 'paid') {
                               if (!formData.paymentPlan || !formData.paymentPlan.name) {
                                 setError('Please select a plan before marking as paid');
@@ -964,6 +964,7 @@ export default function ClaimLeadsView() {
                           <option value="scheduled">SCHEDULED</option>
                           <option value="paid">PAID</option>
                           <option value="completed">COMPLETED</option>
+                          <option value="rescheduled">RESCHEDULED</option>
                         </select>
                       </div>
 
@@ -1077,7 +1078,7 @@ export default function ClaimLeadsView() {
                 <select
                   value={myLeadsStatusFilter}
                   onChange={(e) => {
-                    setMyLeadsStatusFilter(e.target.value as 'all' | 'paid' | 'scheduled' | 'completed');
+                    setMyLeadsStatusFilter(e.target.value as 'all' | 'paid' | 'scheduled' | 'completed' | 'rescheduled');
                     setMyLeadsPage(1);
                   }}
                   className="text-[11px] border border-slate-200 px-3 py-2 rounded-lg bg-white min-w-[120px]"
@@ -1086,6 +1087,7 @@ export default function ClaimLeadsView() {
                   <option value="scheduled">Scheduled</option>
                   <option value="paid">Paid</option>
                   <option value="completed">Completed</option>
+                  <option value="rescheduled">Rescheduled</option>
                 </select>
                 <select
                   value={myLeadsPlanFilter}
