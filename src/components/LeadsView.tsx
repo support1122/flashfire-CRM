@@ -138,6 +138,12 @@ interface Booking {
   leadSource?: 'calendly' | 'meta_lead_ad' | 'manual' | 'frontend_direct' | 'bulk_import';
   metaLeadId?: string | null;
   metaFormName?: string;
+  metaCampaignName?: string | null;
+  metaAdName?: string | null;
+  metaAdsetName?: string | null;
+  metaPlatform?: string | null;
+  metaIsOrganic?: boolean | null;
+  metaLeadStatus?: string | null;
   /** Meta Lead Ads original created_time — aligns date filter with Meta export when present */
   metaRawData?: { created_time?: string };
   claimedBy?: {
@@ -200,6 +206,8 @@ export default function LeadsView({
   const [convertedCount, setConvertedCount] = useState(0);
   const [statusBreakdown, setStatusBreakdown] = useState<Record<string, number>>({});
   const [monthlyStatusBreakdown, setMonthlyStatusBreakdown] = useState<Array<Record<string, number | string>>>([]);
+  const [sourceOptions, setSourceOptions] = useState<string[]>([]);
+  const [mediumOptions, setMediumOptions] = useState<string[]>([]);
   const [campaignOptions, setCampaignOptions] = useState<string[]>([]);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [selectedBookingForNotes, setSelectedBookingForNotes] = useState<{ id: string; name: string; notes: string } | null>(null);
@@ -439,31 +447,53 @@ export default function LeadsView({
   useEffect(() => {
     let cancelled = false;
 
-    const fetchCampaignOptions = async () => {
+    const fetchUtmOptions = async () => {
       try {
         const headers: HeadersInit = {};
         if (token) headers.Authorization = `Bearer ${token}`;
 
-        const response = await fetch(`${API_BASE_URL}/api/campaigns`, { headers });
-        if (!response.ok) return;
+        // Fetch registered campaigns + distinct values actually present on bookings
+        // (including Meta campaign names) so the dropdown surfaces every filterable value.
+        const [campaignsRes, distinctRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/campaigns`, { headers }),
+          fetch(`${API_BASE_URL}/api/campaign-bookings/distinct-utm`, { headers }),
+        ]);
 
-        const data = await response.json();
-        const campaigns = Array.isArray(data?.data) ? data.data : [];
-        const options = campaigns
-          .map((campaign: { utmCampaign?: unknown }) =>
-            typeof campaign.utmCampaign === 'string' ? campaign.utmCampaign.trim() : ''
-          )
-          .filter(Boolean);
+        const campaigns = campaignsRes.ok ? (await campaignsRes.json())?.data || [] : [];
+        const distinct = distinctRes.ok ? (await distinctRes.json())?.data || {} : {};
+
+        const sourceOpts = [
+          ...(Array.isArray(campaigns) ? campaigns : [])
+            .map((c: { utmSource?: unknown }) => (typeof c.utmSource === 'string' ? c.utmSource.trim() : ''))
+            .filter(Boolean),
+          ...((distinct.utmSources || []) as string[]),
+        ];
+        const mediumOpts = [
+          ...(Array.isArray(campaigns) ? campaigns : [])
+            .map((c: { utmMedium?: unknown }) => (typeof c.utmMedium === 'string' ? c.utmMedium.trim() : ''))
+            .filter(Boolean),
+          ...((distinct.utmMediums || []) as string[]),
+        ];
+        // Merge registered Campaign.utmCampaign + distinct booking utmCampaign + metaCampaignName
+        const campaignOpts = [
+          ...(Array.isArray(campaigns) ? campaigns : [])
+            .map((c: { utmCampaign?: unknown }) => (typeof c.utmCampaign === 'string' ? c.utmCampaign.trim() : ''))
+            .filter(Boolean),
+          ...((distinct.utmCampaigns || []) as string[]),
+          ...((distinct.metaCampaignNames || []) as string[]),
+        ];
 
         if (!cancelled) {
-          setCampaignOptions((prev) => Array.from(new Set([...prev, ...options])).sort());
+          setSourceOptions((prev) => Array.from(new Set([...prev, ...sourceOpts, 'direct'])).sort());
+          setMediumOptions((prev) => Array.from(new Set([...prev, ...mediumOpts])).sort());
+          setCampaignOptions((prev) => Array.from(new Set([...prev, ...campaignOpts])).sort());
         }
       } catch {
-        // Keep leads table usable even if campaign list fetch fails.
+        // Keep leads table usable even if option fetch fails.
       }
     };
 
-    fetchCampaignOptions();
+    fetchUtmOptions();
 
     return () => {
       cancelled = true;
@@ -501,10 +531,15 @@ export default function LeadsView({
   }, []);
 
   useEffect(() => {
-    const page = 1;
-    setBookingsPage(page);
-    fetchLeads(page);
-    setAllSelectedBookingIds(null);
+    // Debounce filter-driven refetch: coalesce rapid dropdown/range changes into a single
+    // request instead of firing one per change.
+    const timer = setTimeout(() => {
+      const page = 1;
+      setBookingsPage(page);
+      fetchLeads(page);
+      setAllSelectedBookingIds(null);
+    }, 250);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variant, planFilter, statusFilter, qualificationFilter, utmFilter, mediumFilter, campaignFilter, search, fromDate, toDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
 
@@ -525,23 +560,31 @@ export default function LeadsView({
   }, [bookingsPage, fetchLeads]);
 
   const uniqueSources = useMemo(() => {
-    const sources = new Set<string>();
+    const sources = new Set<string>(sourceOptions);
     bookings.forEach((booking) => sources.add(booking.utmSource || 'direct'));
+    if (utmFilter !== 'all' && utmFilter.trim()) {
+      sources.add(utmFilter.trim());
+    }
     return Array.from(sources).sort();
-  }, [bookings]);
+  }, [bookings, sourceOptions, utmFilter]);
 
   const uniqueMediums = useMemo(() => {
-    const mediums = new Set<string>();
+    const mediums = new Set<string>(mediumOptions);
     bookings.forEach((booking) => {
       const medium = booking.utmMedium?.trim();
       if (medium) mediums.add(medium);
     });
+    if (mediumFilter !== 'all' && mediumFilter.trim()) {
+      mediums.add(mediumFilter.trim());
+    }
     return Array.from(mediums).sort();
-  }, [bookings]);
+  }, [bookings, mediumOptions, mediumFilter]);
 
   const uniqueCampaigns = useMemo(() => {
     const campaigns = new Set<string>(campaignOptions);
     bookings.forEach((booking) => {
+      const metaName = booking.metaCampaignName?.trim();
+      if (metaName) campaigns.add(metaName);
       const campaign = booking.utmCampaign?.trim();
       if (campaign) campaigns.add(campaign);
     });
@@ -567,7 +610,7 @@ export default function LeadsView({
         scheduledTime: booking.scheduledEventStartTime,
         source: booking.utmSource || 'direct',
         medium: booking.utmMedium || '',
-        campaign: booking.utmCampaign || '',
+        campaign: booking.metaCampaignName || booking.utmCampaign || '',
         status: booking.bookingStatus,
         qualification: booking.qualification ?? (booking.bookingStatus === 'paid' ? 'Converted' : booking.bookingStatus === 'completed' ? 'SQL' : 'MQL'),
         meetLink: booking.googleMeetUrl || (booking.calendlyMeetLink && booking.calendlyMeetLink !== 'Not Provided' ? booking.calendlyMeetLink : undefined),
