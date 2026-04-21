@@ -184,6 +184,8 @@ export default function LeadsView({
   const [quickRange, setQuickRange] = useState<QuickRange>('all');
   const [activeLeadsTab, setActiveLeadsTab] = useState<LeadsTab>('table');
   const [utmFilter, setUtmFilter] = useState<string>(defaultUtmSource || 'all');
+  const [mediumFilter, setMediumFilter] = useState<string>('all');
+  const [campaignFilter, setCampaignFilter] = useState<string>('all');
   const [minAmount, setMinAmount] = useState<string>('');
   const [maxAmount, setMaxAmount] = useState<string>('');
   const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null);
@@ -198,6 +200,7 @@ export default function LeadsView({
   const [convertedCount, setConvertedCount] = useState(0);
   const [statusBreakdown, setStatusBreakdown] = useState<Record<string, number>>({});
   const [monthlyStatusBreakdown, setMonthlyStatusBreakdown] = useState<Array<Record<string, number | string>>>([]);
+  const [campaignOptions, setCampaignOptions] = useState<string[]>([]);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [selectedBookingForNotes, setSelectedBookingForNotes] = useState<{ id: string; name: string; notes: string } | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -265,6 +268,8 @@ export default function LeadsView({
           fromDate,
           toDate,
           utmFilter,
+          mediumFilter,
+          campaignFilter,
           search,
           statusFilter,
           planFilter,
@@ -304,6 +309,8 @@ export default function LeadsView({
         do {
           const params = new URLSearchParams({ page: String(p), limit: '50' });
           if (utmFilter !== 'all') params.append('utmSource', utmFilter);
+          if (mediumFilter !== 'all') params.append('utmMedium', mediumFilter);
+          if (campaignFilter !== 'all') params.append('utmCampaign', campaignFilter);
           if (planFilter !== 'all') params.append('planName', planFilter);
           if (variant === 'qualified' && qualificationFilter !== 'all') {
             params.append('qualification', qualificationFilter);
@@ -355,6 +362,12 @@ export default function LeadsView({
 
         if (utmFilter !== 'all') {
           params.append('utmSource', utmFilter);
+        }
+        if (mediumFilter !== 'all') {
+          params.append('utmMedium', mediumFilter);
+        }
+        if (campaignFilter !== 'all') {
+          params.append('utmCampaign', campaignFilter);
         }
         if (planFilter !== 'all') {
           params.append('planName', planFilter);
@@ -413,7 +426,7 @@ export default function LeadsView({
       setRefreshing(false);
       setLoading(false);
     }
-  }, [token, variant, planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
+  }, [token, variant, planFilter, statusFilter, qualificationFilter, utmFilter, mediumFilter, campaignFilter, search, fromDate, toDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -422,6 +435,40 @@ export default function LeadsView({
 
     return () => clearTimeout(timer);
   }, [searchInput]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchCampaignOptions = async () => {
+      try {
+        const headers: HeadersInit = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+
+        const response = await fetch(`${API_BASE_URL}/api/campaigns`, { headers });
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const campaigns = Array.isArray(data?.data) ? data.data : [];
+        const options = campaigns
+          .map((campaign: { utmCampaign?: unknown }) =>
+            typeof campaign.utmCampaign === 'string' ? campaign.utmCampaign.trim() : ''
+          )
+          .filter(Boolean);
+
+        if (!cancelled) {
+          setCampaignOptions((prev) => Array.from(new Set([...prev, ...options])).sort());
+        }
+      } catch {
+        // Keep leads table usable even if campaign list fetch fails.
+      }
+    };
+
+    fetchCampaignOptions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const handleQuickRangeChange = useCallback((range: QuickRange) => {
     setQuickRange(range);
@@ -459,7 +506,7 @@ export default function LeadsView({
     fetchLeads(page);
     setAllSelectedBookingIds(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [variant, planFilter, statusFilter, qualificationFilter, utmFilter, search, fromDate, toDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
+  }, [variant, planFilter, statusFilter, qualificationFilter, utmFilter, mediumFilter, campaignFilter, search, fromDate, toDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
 
   useEffect(() => {
     const handleBookingUpdate = (event: CustomEvent) => {
@@ -482,6 +529,27 @@ export default function LeadsView({
     bookings.forEach((booking) => sources.add(booking.utmSource || 'direct'));
     return Array.from(sources).sort();
   }, [bookings]);
+
+  const uniqueMediums = useMemo(() => {
+    const mediums = new Set<string>();
+    bookings.forEach((booking) => {
+      const medium = booking.utmMedium?.trim();
+      if (medium) mediums.add(medium);
+    });
+    return Array.from(mediums).sort();
+  }, [bookings]);
+
+  const uniqueCampaigns = useMemo(() => {
+    const campaigns = new Set<string>(campaignOptions);
+    bookings.forEach((booking) => {
+      const campaign = booking.utmCampaign?.trim();
+      if (campaign) campaigns.add(campaign);
+    });
+    if (campaignFilter !== 'all' && campaignFilter.trim()) {
+      campaigns.add(campaignFilter.trim());
+    }
+    return Array.from(campaigns).sort();
+  }, [bookings, campaignOptions, campaignFilter]);
 
   const filteredData = useMemo(() => {
     return bookings.map((booking) => {
@@ -637,6 +705,8 @@ export default function LeadsView({
 
       const params = new URLSearchParams();
       if (utmFilter !== 'all') params.append('utmSource', utmFilter);
+      if (mediumFilter !== 'all') params.append('utmMedium', mediumFilter);
+      if (campaignFilter !== 'all') params.append('utmCampaign', campaignFilter);
       if (planFilter !== 'all') params.append('planName', planFilter);
       if (variant === 'qualified' && qualificationFilter !== 'all') params.append('qualification', qualificationFilter);
       if (statusFilter !== 'all') params.append('status', statusFilter);
@@ -660,7 +730,7 @@ export default function LeadsView({
     } finally {
       setSelectAllLoading(false);
     }
-  }, [token, utmFilter, planFilter, qualificationFilter, statusFilter, search, fromDate, toDate, minAmount, maxAmount, variant, allSelectedBookingIds, dateRangeOnBookingCreatedAt]);
+  }, [token, utmFilter, mediumFilter, campaignFilter, planFilter, qualificationFilter, statusFilter, search, fromDate, toDate, minAmount, maxAmount, variant, allSelectedBookingIds, dateRangeOnBookingCreatedAt]);
 
   const handleSelectRow = useCallback((id: string) => {
     setSelectedRows((prev) => {
@@ -1476,6 +1546,32 @@ export default function LeadsView({
                 </select>
               </div>
             )}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Medium</label>
+              <select
+                value={mediumFilter}
+                onChange={(e) => setMediumFilter(e.target.value)}
+                className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 min-w-[140px] focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+              >
+                <option value="all">All mediums</option>
+                {uniqueMediums.map((medium) => (
+                  <option key={medium} value={medium}>{medium}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Campaign</label>
+              <select
+                value={campaignFilter}
+                onChange={(e) => setCampaignFilter(e.target.value)}
+                className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 min-w-[160px] focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+              >
+                <option value="all">All campaigns</option>
+                {uniqueCampaigns.map((campaign) => (
+                  <option key={campaign} value={campaign}>{campaign}</option>
+                ))}
+              </select>
+            </div>
             {activeLeadsTab === 'table' && (
               <button
                 type="button"
@@ -1548,7 +1644,7 @@ export default function LeadsView({
               </div>
             </div>
             <div className="flex items-center gap-2 ml-auto">
-              {(fromDate || toDate || searchInput || planFilter !== 'all' || (utmFilter !== 'all' && !hideSourceFilter) || statusFilter !== 'all' || qualificationFilter !== 'all' || minAmount || maxAmount) && (
+              {(fromDate || toDate || searchInput || planFilter !== 'all' || (utmFilter !== 'all' && !hideSourceFilter) || mediumFilter !== 'all' || campaignFilter !== 'all' || statusFilter !== 'all' || qualificationFilter !== 'all' || minAmount || maxAmount) && (
                 <button
                   onClick={() => {
                     metaDateFilteredFullRef.current = null;
@@ -1557,6 +1653,8 @@ export default function LeadsView({
                     setToDate('');
                     setPlanFilter('all');
                     setUtmFilter(defaultUtmSource || 'all');
+                    setMediumFilter('all');
+                    setCampaignFilter('all');
                     setStatusFilter('all');
                     setQualificationFilter('all');
                     setSearchInput('');
@@ -1600,6 +1698,8 @@ export default function LeadsView({
               status: statusFilter,
               planName: planFilter,
               utmSource: utmFilter,
+              utmMedium: mediumFilter,
+              utmCampaign: campaignFilter,
               minAmount,
               maxAmount,
             }}

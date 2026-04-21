@@ -84,6 +84,8 @@ export interface QualifiedLeadsGraphsFilters {
   status?: string;
   planName?: string;
   utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
   minAmount?: string;
   maxAmount?: string;
 }
@@ -190,6 +192,8 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
       if (filters.status && filters.status !== 'all') params.append('status', filters.status);
       if (filters.planName && filters.planName !== 'all') params.append('planName', filters.planName);
       if (filters.utmSource && filters.utmSource !== 'all') params.append('utmSource', filters.utmSource);
+      if (filters.utmMedium && filters.utmMedium !== 'all') params.append('utmMedium', filters.utmMedium);
+      if (filters.utmCampaign && filters.utmCampaign !== 'all') params.append('utmCampaign', filters.utmCampaign);
       if (filters.minAmount) params.append('minAmount', filters.minAmount);
       if (filters.maxAmount) params.append('maxAmount', filters.maxAmount);
 
