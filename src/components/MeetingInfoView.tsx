@@ -32,20 +32,53 @@ interface PaginationInfo {
   totalPages: number;
 }
 
+interface MissedMeetingLogRow {
+  bookingId: string;
+  bdaName: string;
+  bdaEmail: string;
+  notes?: string | null;
+  markedAt?: string | null;
+  meetingScheduledStart?: string | null;
+  clientName?: string | null;
+  clientEmail?: string | null;
+  bookingStatus?: string | null;
+  meetingVideoUrl?: string | null;
+}
+
+function todayISO() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function MeetingInfoView() {
   const { token } = useCrmAuth();
   const [rows, setRows] = useState<MeetingInfoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [fromDate, setFromDate] = useState(todayISO());
+  const [toDate, setToDate] = useState(todayISO());
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [bdaAbsentCount, setBdaAbsentCount] = useState<number>(0);
+  const [missedLogs, setMissedLogs] = useState<MissedMeetingLogRow[]>([]);
+  const [loadingMissedLogs, setLoadingMissedLogs] = useState(false);
+
+  const getBookingStatusChip = (status?: string | null) => {
+    const value = String(status || '').toLowerCase();
+    if (value === 'no-show') return 'bg-rose-100 text-rose-800';
+    if (value === 'completed') return 'bg-emerald-100 text-emerald-800';
+    if (value === 'scheduled') return 'bg-blue-100 text-blue-800';
+    if (value === 'paid') return 'bg-violet-100 text-violet-800';
+    return 'bg-slate-100 text-slate-700';
+  };
 
   const fetchData = useCallback(() => {
     setLoading(true);
+    setLoadingMissedLogs(true);
     setError(null);
     const headers: HeadersInit = { 'Content-Type': 'application/json' };
     if (token) (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
@@ -81,11 +114,31 @@ export default function MeetingInfoView() {
           setRows(enrichedRows);
           setPagination(data.pagination || null);
           setBdaAbsentCount(typeof data.bdaAbsentCount === 'number' ? data.bdaAbsentCount : 0);
+          try {
+            const logsRes = await fetch(
+              `${API_BASE_URL}/api/bda-attendance/missed-logs?${params.toString()}`,
+              { headers }
+            );
+            const logsData = await logsRes.json();
+            if (logsData.success && Array.isArray(logsData.data)) {
+              setMissedLogs(logsData.data);
+            } else {
+              setMissedLogs([]);
+            }
+          } catch {
+            setMissedLogs([]);
+          } finally {
+            setLoadingMissedLogs(false);
+          }
         } else {
           setError(data.message || 'Failed to load');
+          setLoadingMissedLogs(false);
         }
       })
-      .catch(() => setError('Failed to load meeting info'))
+      .catch(() => {
+        setError('Failed to load meeting info');
+        setLoadingMissedLogs(false);
+      })
       .finally(() => setLoading(false));
   }, [token, fromDate, toDate, page, limit]);
 
@@ -197,6 +250,78 @@ export default function MeetingInfoView() {
       {error && (
         <div className="bg-orange-50 border border-orange-200 p-4 text-orange-700">{error}</div>
       )}
+
+      <div className="overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm">
+        <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
+          <h2 className="text-sm font-bold text-slate-900">Missed Meeting Logs</h2>
+          <p className="text-xs text-slate-600 mt-0.5">
+            DB stored absent rows with BDA + client email.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[10px] sm:text-xs table-auto">
+            <thead className="bg-slate-100 border-b border-slate-200">
+              <tr className="text-left">
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Meeting Date</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Client</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Client Email</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">BDA</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Status</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Reason</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loadingMissedLogs ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center">
+                    <Loader2 className="animate-spin text-orange-500 mx-auto" size={24} />
+                  </td>
+                </tr>
+              ) : (
+                missedLogs.map((log) => (
+                  <tr key={`${log.bookingId}-${log.bdaEmail}-${log.markedAt || ''}`} className="bg-red-50/60 hover:bg-red-50">
+                    <td className="px-4 py-3 text-slate-700">
+                      {log.meetingScheduledStart ? format(parseISO(log.meetingScheduledStart), 'MMM d, yyyy • h:mm a') : '—'}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-slate-900">{log.clientName || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{log.clientEmail || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{log.bdaName || log.bdaEmail || '—'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-red-100 text-red-800">
+                          Absent
+                        </span>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${getBookingStatusChip(
+                            log.bookingStatus
+                          )}`}
+                        >
+                          {log.bookingStatus || 'Unknown'}
+                        </span>
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
+                            log.meetingVideoUrl ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {log.meetingVideoUrl ? 'Video' : 'No Video'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">{log.notes || 'No response'}</td>
+                  </tr>
+                ))
+              )}
+              {!loadingMissedLogs && missedLogs.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500 text-sm">
+                    No missed meeting logs in selected date range.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       <div className="overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm">
         <div className="overflow-x-auto">
