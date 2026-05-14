@@ -7,13 +7,16 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfire
 const DEFAULT_PAGE_SIZE = 15;
 
 interface BdaAttendanceInfo {
-  status: 'present' | 'absent' | 'manual';
+  status: 'present' | 'absent' | 'manual' | 'unmarked';
   source: 'auto' | 'manual' | 'scheduler';
   bdaName: string;
   bdaEmail: string;
   joinedAt?: string;
   leftAt?: string;
   markedAt?: string;
+  durationMs?: number | null;
+  cumulativeDurationMs?: number | null;
+  notes?: string | null;
 }
 
 interface MeetingInfoRow {
@@ -36,13 +39,42 @@ interface MissedMeetingLogRow {
   bookingId: string;
   bdaName: string;
   bdaEmail: string;
+  status?: 'absent' | 'unmarked' | string | null;
+  source?: string | null;
   notes?: string | null;
   markedAt?: string | null;
+  joinedAt?: string | null;
+  leftAt?: string | null;
+  durationMs?: number | null;
+  cumulativeDurationMs?: number | null;
+  meetLink?: string | null;
   meetingScheduledStart?: string | null;
+  meetingScheduledEnd?: string | null;
   clientName?: string | null;
   clientEmail?: string | null;
   bookingStatus?: string | null;
   meetingVideoUrl?: string | null;
+}
+
+/** ms → "1h 12m", "8m", "45s", or "—" */
+function formatDuration(ms?: number | null): string {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) return '—';
+  const totalSec = Math.round(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+}
+
+function fmtTime(iso?: string | null): string {
+  if (!iso) return '—';
+  try {
+    return format(parseISO(iso), 'h:mm a');
+  } catch {
+    return '—';
+  }
 }
 
 function todayISO() {
@@ -168,7 +200,9 @@ export default function MeetingInfoView() {
             <p className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold">Meeting Info</p>
             <h1 className="text-3xl font-bold text-slate-900">Meeting Info</h1>
             <p className="text-slate-600 max-w-2xl mt-1">
-              Completed meetings with client names, dates, and video recordings. Rows highlighted in red indicate BDA was absent (no recording 2+ hours after meet).
+              Completed meetings with client names, dates, recordings and BDA time-in-meeting.
+              <span className="text-red-700 font-semibold"> Red</span> = BDA marked absent.
+              <span className="text-amber-700 font-semibold"> Amber</span> = no response captured (BDA may have forgotten to mark — not a confirmed absence).
             </p>
           </div>
         </div>
@@ -255,7 +289,9 @@ export default function MeetingInfoView() {
         <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
           <h2 className="text-sm font-bold text-slate-900">Missed Meeting Logs</h2>
           <p className="text-xs text-slate-600 mt-0.5">
-            DB stored absent rows with BDA + client email.
+            DB-stored rows where the BDA was <span className="font-semibold text-red-700">Absent</span> (explicitly marked)
+            or <span className="font-semibold text-amber-700">No Response</span> (no attendance captured — BDA may have
+            forgotten to mark; not a confirmed absence). In/out time and duration shown when available.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -267,53 +303,70 @@ export default function MeetingInfoView() {
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Client Email</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">BDA</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Status</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">In Time</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Out Time</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Duration</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Reason</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loadingMissedLogs ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center">
+                  <td colSpan={9} className="px-4 py-8 text-center">
                     <Loader2 className="animate-spin text-orange-500 mx-auto" size={24} />
                   </td>
                 </tr>
               ) : (
-                missedLogs.map((log) => (
-                  <tr key={`${log.bookingId}-${log.bdaEmail}-${log.markedAt || ''}`} className="bg-red-50/60 hover:bg-red-50">
-                    <td className="px-4 py-3 text-slate-700">
-                      {log.meetingScheduledStart ? format(parseISO(log.meetingScheduledStart), 'MMM d, yyyy • h:mm a') : '—'}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-900">{log.clientName || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700">{log.clientEmail || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700">{log.bdaName || log.bdaEmail || '—'}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-red-100 text-red-800">
-                          Absent
-                        </span>
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${getBookingStatusChip(
-                            log.bookingStatus
-                          )}`}
-                        >
-                          {log.bookingStatus || 'Unknown'}
-                        </span>
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
-                            log.meetingVideoUrl ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                          }`}
-                        >
-                          {log.meetingVideoUrl ? 'Video' : 'No Video'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700">{log.notes || 'No response'}</td>
-                  </tr>
-                ))
+                missedLogs.map((log) => {
+                  const isUnmarked = log.status === 'unmarked';
+                  const durationMs = log.durationMs ?? log.cumulativeDurationMs ?? null;
+                  return (
+                    <tr
+                      key={`${log.bookingId}-${log.bdaEmail}-${log.markedAt || ''}`}
+                      className={isUnmarked ? 'bg-amber-50/60 hover:bg-amber-50' : 'bg-red-50/60 hover:bg-red-50'}
+                    >
+                      <td className="px-4 py-3 text-slate-700">
+                        {log.meetingScheduledStart ? format(parseISO(log.meetingScheduledStart), 'MMM d, yyyy • h:mm a') : '—'}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{log.clientName || '—'}</td>
+                      <td className="px-4 py-3 text-slate-700">{log.clientEmail || '—'}</td>
+                      <td className="px-4 py-3 text-slate-700">{log.bdaName || log.bdaEmail || '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
+                              isUnmarked ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            {isUnmarked ? 'No Response' : 'Absent'}
+                          </span>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${getBookingStatusChip(
+                              log.bookingStatus
+                            )}`}
+                          >
+                            {log.bookingStatus || 'Unknown'}
+                          </span>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
+                              log.meetingVideoUrl ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {log.meetingVideoUrl ? 'Video' : 'No Video'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{fmtTime(log.joinedAt)}</td>
+                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{fmtTime(log.leftAt)}</td>
+                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap font-semibold">{formatDuration(durationMs)}</td>
+                      <td className="px-4 py-3 text-slate-700">{log.notes || (isUnmarked ? 'No response captured' : 'No response')}</td>
+                    </tr>
+                  );
+                })
               )}
               {!loadingMissedLogs && missedLogs.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-slate-500 text-sm">
+                  <td colSpan={9} className="px-4 py-8 text-center text-slate-500 text-sm">
                     No missed meeting logs in selected date range.
                   </td>
                 </tr>
@@ -331,13 +384,14 @@ export default function MeetingInfoView() {
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Client Name</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Date of Meet</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">BDA Status</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Time in Meeting</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Google Drive Video URL</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center">
+                  <td colSpan={5} className="px-4 py-12 text-center">
                     <Loader2 className="animate-spin text-orange-500 mx-auto" size={28} />
                   </td>
                 </tr>
@@ -345,12 +399,16 @@ export default function MeetingInfoView() {
                 rows.map((row) => {
                   const att = row.bdaAttendance;
                   const isAbsent = att ? att.status === 'absent' : row.bdaAbsent;
+                  const isUnmarked = att?.status === 'unmarked';
+                  const durationMs = att?.durationMs ?? att?.cumulativeDurationMs ?? null;
                   return (
                     <tr
                       key={row.bookingId}
                       className={`transition-colors ${
                         isAbsent
                           ? 'bg-red-50 hover:bg-red-100/80'
+                          : isUnmarked
+                          ? 'bg-amber-50 hover:bg-amber-100/70'
                           : 'bg-white hover:bg-slate-50/50'
                       }`}
                     >
@@ -368,6 +426,8 @@ export default function MeetingInfoView() {
                                 ? 'bg-emerald-100 text-emerald-800'
                                 : att.status === 'manual'
                                 ? 'bg-amber-100 text-amber-800'
+                                : att.status === 'unmarked'
+                                ? 'bg-amber-100 text-amber-800'
                                 : 'bg-red-100 text-red-800'
                             }`}
                           >
@@ -377,6 +437,8 @@ export default function MeetingInfoView() {
                                 : 'Present'
                               : att.status === 'manual'
                               ? 'Present (Manual)'
+                              : att.status === 'unmarked'
+                              ? 'No Response'
                               : 'Absent'}
                           </span>
                         ) : (
@@ -390,6 +452,18 @@ export default function MeetingInfoView() {
                               'No Data'
                             )}
                           </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                        {att && (att.joinedAt || durationMs) ? (
+                          <div className="flex flex-col leading-tight">
+                            <span className="font-semibold text-slate-800">{formatDuration(durationMs)}</span>
+                            <span className="text-[10px] text-slate-500">
+                              {fmtTime(att.joinedAt)} → {fmtTime(att.leftAt)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -417,7 +491,7 @@ export default function MeetingInfoView() {
               )}
               {!loading && rows.length === 0 && !error && (
                 <tr>
-                  <td colSpan={4} className="px-4 py-12 text-center text-slate-500 text-sm">
+                  <td colSpan={5} className="px-4 py-12 text-center text-slate-500 text-sm">
                     No completed meetings yet. Meetings will appear here once they have ended.
                   </td>
                 </tr>

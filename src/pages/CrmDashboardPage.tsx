@@ -17,6 +17,7 @@ import {
   UserCheck,
   Bell,
   Facebook,
+  Activity,
 } from 'lucide-react';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
@@ -36,6 +37,7 @@ const QualifiedLeadsView = React.lazy(() => import('../components/QualifiedLeads
 const ClaimLeadsView = React.lazy(() => import('../components/ClaimLeadsView'));
 const MeetingInfoView = React.lazy(() => import('../components/MeetingInfoView'));
 const MetaLeadsView = React.lazy(() => import('../components/MetaLeadsView'));
+const ActivityLogView = React.lazy(() => import('../components/ActivityLogView'));
 
 function TabSpinner() {
   return (
@@ -48,7 +50,7 @@ function TabSpinner() {
 }
 
 
-type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads';
+type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads' | 'activity';
 
 const TAB_CONFIG: Array<{
   tab: Tab;
@@ -67,6 +69,7 @@ const TAB_CONFIG: Array<{
   { tab: 'meta_leads', permission: 'meta_leads', label: 'Meta Leads', icon: Facebook },
   { tab: 'claim_leads', permission: 'claim_leads', label: 'Claim Your Leads', icon: UserCheck },
   { tab: 'meeting_links', permission: 'meeting_links', label: 'Meeting Info', icon: Video },
+  { tab: 'activity', permission: 'activity_logs', label: 'Activity Log', icon: Activity },
 ];
 
 export default function CrmDashboardPage() {
@@ -437,6 +440,7 @@ export default function CrmDashboardPage() {
                 )}
                 {activeTab === 'claim_leads' && <ClaimLeadsView />}
                 {activeTab === 'meeting_links' && <MeetingInfoView />}
+                {activeTab === 'activity' && <ActivityLogView />}
               </Suspense>
             )}
           </div>

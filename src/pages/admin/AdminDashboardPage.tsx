@@ -16,7 +16,8 @@ type CrmPermission =
   | 'meta_leads'
   | 'claim_leads'
   | 'meeting_links'
-  | 'bda_admin';
+  | 'bda_admin'
+  | 'activity_logs';
 
 const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: string }> = [
   { key: 'campaign_manager', label: 'Campaign Manager', description: 'UTM campaigns + bookings overview' },
@@ -30,6 +31,7 @@ const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: strin
   { key: 'claim_leads', label: 'Claim Leads', description: 'BDA lead claiming and management' },
   { key: 'meeting_links', label: 'Meeting Info', description: 'Meeting recordings and Google Drive video URLs' },
   { key: 'bda_admin', label: 'BDA Admin', description: 'Approve BDA claims and review notifications' },
+  { key: 'activity_logs', label: 'Activity Log', description: 'View every action across the CRM — who did what, when' },
 ];
 
 type CrmUserRow = {
