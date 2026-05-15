@@ -173,7 +173,8 @@ export default function LeadsView({
   hideSourceFilter = false,
   dateRangeOnBookingCreatedAt = false,
 }: LeadsViewProps) {
-  const { token } = useCrmAuth();
+  const { token, canEdit } = useCrmAuth();
+  const editable = canEdit('leads');
   const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1757,6 +1758,12 @@ export default function LeadsView({
         </div>
       )}
 
+      {!editable && (
+        <div className="mb-3 p-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">
+          View-only access — edit/delete/send actions disabled. Ask an admin for edit permission.
+        </div>
+      )}
+
       {activeLeadsTab === 'table' && (selectedRows.size > 0 || (allSelectedBookingIds && allSelectedBookingIds.length > 0)) && (
         <div className="bg-orange-50 border border-orange-200  px-4 py-3 flex items-center justify-between">
           <span className="text-xs font-semibold text-orange-900">
@@ -1765,20 +1772,24 @@ export default function LeadsView({
               : `${selectedRows.size} row${selectedRows.size !== 1 ? 's' : ''} selected`}
           </span>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsAttachWorkflowsModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 border border-violet-200 text-violet-700 rounded-lg bg-white hover:bg-violet-50 transition text-[11px] font-semibold"
-            >
-              <Workflow size={16} />
-              Attach Workflows ({selectedBookingIdsForBulk.length})
-            </button>
-            <button
-              onClick={handleBulkEmail}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-[11px] font-semibold"
-            >
-              <Send size={16} />
-              Send Email ({selectedBookingIdsForBulk.length})
-            </button>
+            {editable && (
+              <button
+                onClick={() => setIsAttachWorkflowsModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-violet-200 text-violet-700 rounded-lg bg-white hover:bg-violet-50 transition text-[11px] font-semibold"
+              >
+                <Workflow size={16} />
+                Attach Workflows ({selectedBookingIdsForBulk.length})
+              </button>
+            )}
+            {editable && (
+              <button
+                onClick={handleBulkEmail}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition text-[11px] font-semibold"
+              >
+                <Send size={16} />
+                Send Email ({selectedBookingIdsForBulk.length})
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -2067,33 +2078,37 @@ export default function LeadsView({
                             <FileText size={9} />
                           </a>
                         )}
-                        <button
-                          onClick={() => {
-                            setSelectedBookingForNotes({
-                              id: row.bookingId!,
-                              name: row.name,
-                              notes: row.meetingNotes || '',
-                            });
-                            setIsNotesModalOpen(true);
-                          }}
-                          title="Edit Notes"
-                          className="inline-flex items-center justify-center p-0.5 rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition flex-shrink-0"
-                        >
-                          <Edit size={9} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            onOpenEmailCampaign({
-                              recipients: [row.email],
-                              reason: 'lead_followup',
-                            });
-                          }}
-                          title="Send Email"
-                          className="inline-flex items-center justify-center p-0.5 rounded bg-orange-500 text-white hover:bg-orange-600 transition flex-shrink-0"
-                        >
-                          <Mail size={9} />
-                        </button>
-                        {onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
+                        {editable && (
+                          <button
+                            onClick={() => {
+                              setSelectedBookingForNotes({
+                                id: row.bookingId!,
+                                name: row.name,
+                                notes: row.meetingNotes || '',
+                              });
+                              setIsNotesModalOpen(true);
+                            }}
+                            title="Edit Notes"
+                            className="inline-flex items-center justify-center p-0.5 rounded border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 transition flex-shrink-0"
+                          >
+                            <Edit size={9} />
+                          </button>
+                        )}
+                        {editable && (
+                          <button
+                            onClick={() => {
+                              onOpenEmailCampaign({
+                                recipients: [row.email],
+                                reason: 'lead_followup',
+                              });
+                            }}
+                            title="Send Email"
+                            className="inline-flex items-center justify-center p-0.5 rounded bg-orange-500 text-white hover:bg-orange-600 transition flex-shrink-0"
+                          >
+                            <Mail size={9} />
+                          </button>
+                        )}
+                        {editable && onOpenWhatsAppCampaign && row.phone && row.phone !== 'Not Specified' && (
                           <button
                             onClick={() => {
                               const phone = row.phone!.replace(/[^\d+]/g, '');
@@ -2110,21 +2125,25 @@ export default function LeadsView({
                             <MessageCircle size={9} />
                           </button>
                         )}
-                        <button
-                          onClick={() => row.bookingId && setCustomWorkflowsForLead({ bookingId: row.bookingId, name: row.name })}
-                          title={row.bookingId ? 'Custom Workflows' : 'Custom workflows require a lead record'}
-                          disabled={!row.bookingId}
-                          className="inline-flex items-center justify-center p-0.5 rounded border border-violet-200 text-violet-700 bg-white hover:bg-violet-50 transition flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Workflow size={9} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(row)}
-                          title="Delete Lead"
-                          className="inline-flex items-center justify-center p-0.5 rounded bg-rose-500 text-white hover:bg-rose-600 transition flex-shrink-0"
-                        >
-                          <Trash2 size={9} />
-                        </button>
+                        {editable && (
+                          <button
+                            onClick={() => row.bookingId && setCustomWorkflowsForLead({ bookingId: row.bookingId, name: row.name })}
+                            title={row.bookingId ? 'Custom Workflows' : 'Custom workflows require a lead record'}
+                            disabled={!row.bookingId}
+                            className="inline-flex items-center justify-center p-0.5 rounded border border-violet-200 text-violet-700 bg-white hover:bg-violet-50 transition flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Workflow size={9} />
+                          </button>
+                        )}
+                        {editable && (
+                          <button
+                            onClick={() => handleDeleteClick(row)}
+                            title="Delete Lead"
+                            className="inline-flex items-center justify-center p-0.5 rounded bg-rose-500 text-white hover:bg-rose-600 transition flex-shrink-0"
+                          >
+                            <Trash2 size={9} />
+                          </button>
+                        )}
                       </div>
                       {row.notes && (
                         <div className="text-[9px] text-slate-500 bg-slate-100 rounded px-1 py-0.5 border border-slate-200 mt-1">
@@ -2233,7 +2252,7 @@ export default function LeadsView({
       </div>
       )}
 
-      {isNotesModalOpen && selectedBookingForNotes && (
+      {editable && isNotesModalOpen && selectedBookingForNotes && (
         <NotesModal
           isOpen={isNotesModalOpen}
           onClose={() => {

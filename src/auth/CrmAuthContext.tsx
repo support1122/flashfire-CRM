@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import type { CrmPermission, CrmUser } from './crmTypes';
+import type { CrmModule, CrmPermission, CrmUser } from './crmTypes';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -13,6 +13,7 @@ interface CrmAuthContextValue {
   verifyOtp: (email: string, otp: string, rememberMe?: boolean) => Promise<void>;
   logout: () => void;
   hasPermission: (permission: CrmPermission) => boolean;
+  canEdit: (module: CrmModule) => boolean;
 }
 
 const CrmAuthContext = createContext<CrmAuthContextValue | null>(null);
@@ -68,7 +69,21 @@ export function CrmAuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const hasPermission = useCallback(
-    (permission: CrmPermission) => !!user?.permissions?.includes(permission),
+    (permission: CrmPermission) => {
+      const perms = user?.permissions;
+      if (!perms) return false;
+      if (perms.includes(permission)) return true;
+      // Holding `<module>_edit` implies view access for that module.
+      if (!permission.endsWith('_edit')) {
+        return perms.includes(`${permission}_edit` as CrmPermission);
+      }
+      return false;
+    },
+    [user]
+  );
+
+  const canEdit = useCallback(
+    (module: CrmModule) => !!user?.permissions?.includes(`${module}_edit` as CrmPermission),
     [user]
   );
 
@@ -113,8 +128,9 @@ export function CrmAuthProvider({ children }: { children: React.ReactNode }) {
       verifyOtp,
       logout,
       hasPermission,
+      canEdit,
     }),
-    [hasPermission, logout, requestOtp, status, token, user, verifyOtp]
+    [canEdit, hasPermission, logout, requestOtp, status, token, user, verifyOtp]
   );
 
   return <CrmAuthContext.Provider value={value}>{children}</CrmAuthContext.Provider>;

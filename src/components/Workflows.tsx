@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { usePlanConfig } from '../context/PlanConfigContext';
+import { useCrmAuth } from '../auth/CrmAuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -281,6 +282,8 @@ const TemplatePreview = ({ templateName, variables }: { templateName?: string; v
 
 function Workflows() {
   const { planOptions } = usePlanConfig();
+  const { canEdit } = useCrmAuth();
+  const editable = canEdit('workflows');
   const [activeTab, setActiveTab] = useState<ActiveTab>('workflows');
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -971,40 +974,44 @@ function Workflows() {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              <button
-                onClick={() => handleDeleteWorkflow(deleteModal.log!, false)}
-                disabled={deletingLogId === deleteModal.log!.logId}
-                className="w-full px-4 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {deletingLogId === deleteModal.log!.logId ? (
-                  <>
-                    <Loader2 className="animate-spin" size={16} />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 size={16} />
-                    <span>Delete This Workflow</span>
-                  </>
-                )}
-              </button>
-              <button
-                onClick={() => handleDeleteWorkflow(deleteModal.log!, true)}
-                disabled={deletingLogId === deleteModal.log!.logId}
-                className="w-full px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {deletingLogId === deleteModal.log!.logId ? (
-                  <>
-                    <Loader2 className="animate-spin" size={16} />
-                    <span>Deleting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trash2 size={16} />
-                    <span>Delete All Workflows for This User ({getActionLabel(deleteModal.log!.triggerAction)})</span>
-                  </>
-                )}
-              </button>
+              {editable && (
+                <button
+                  onClick={() => handleDeleteWorkflow(deleteModal.log!, false)}
+                  disabled={deletingLogId === deleteModal.log!.logId}
+                  className="w-full px-4 py-2.5 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {deletingLogId === deleteModal.log!.logId ? (
+                    <>
+                      <Loader2 className="animate-spin" size={16} />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={16} />
+                      <span>Delete This Workflow</span>
+                    </>
+                  )}
+                </button>
+              )}
+              {editable && (
+                <button
+                  onClick={() => handleDeleteWorkflow(deleteModal.log!, true)}
+                  disabled={deletingLogId === deleteModal.log!.logId}
+                  className="w-full px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {deletingLogId === deleteModal.log!.logId ? (
+                    <>
+                      <Loader2 className="animate-spin" size={16} />
+                      <span>Deleting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 size={16} />
+                      <span>Delete All Workflows for This User ({getActionLabel(deleteModal.log!.triggerAction)})</span>
+                    </>
+                  )}
+                </button>
+              )}
               <button
                 onClick={() => setDeleteModal({ show: false, log: null })}
                 disabled={deletingLogId === deleteModal.log!.logId}
@@ -1097,6 +1104,12 @@ function Workflows() {
         {activeTab === 'workflows' && (
           <>
             {/* Create New Workflow */}
+            {!editable && (
+              <div className="mb-6 p-4 text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-xl">
+                View-only access — ask an admin for edit permission to build workflows.
+              </div>
+            )}
+            {editable && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
               <h2 className="text-xl font-semibold text-slate-900 mb-4">Create New Workflow</h2>
 
@@ -1536,6 +1549,7 @@ function Workflows() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Existing Workflows */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
@@ -1619,21 +1633,25 @@ function Workflows() {
                             </>
                           ) : (
                             <>
-                              <button
-                                onClick={() => startEditing(workflow.workflowId)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                title="Edit workflow"
-                              >
-                                <Edit size={18} />
-                              </button>
-                              <button
-                                onClick={() => deleteWorkflow(workflow.workflowId)}
-                                disabled={saving === workflow.workflowId}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
-                                title="Delete workflow"
-                              >
-                                <Trash2 size={18} />
-                              </button>
+                              {editable && (
+                                <button
+                                  onClick={() => startEditing(workflow.workflowId)}
+                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                  title="Edit workflow"
+                                >
+                                  <Edit size={18} />
+                                </button>
+                              )}
+                              {editable && (
+                                <button
+                                  onClick={() => deleteWorkflow(workflow.workflowId)}
+                                  disabled={saving === workflow.workflowId}
+                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition"
+                                  title="Delete workflow"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              )}
                             </>
                           )}
                         </div>
