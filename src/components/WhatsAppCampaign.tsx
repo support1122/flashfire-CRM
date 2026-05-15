@@ -15,6 +15,7 @@ import {
   Play,
 } from 'lucide-react';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
+import { useCrmAuth } from '../auth/CrmAuthContext';
 
 interface WhatsAppCampaignProps {
   prefill?: WhatsAppPrefillPayload | null;
@@ -67,6 +68,8 @@ interface ScheduledWhatsAppCampaign extends WhatsAppCampaign {
 }
 
 export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAppCampaignProps = {}) {
+  const { canEdit } = useCrmAuth();
+  const editable = canEdit('whatsapp_campaign');
   const [templateName, setTemplateName] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [mobileNumbers, setMobileNumbers] = useState('');
@@ -542,6 +545,12 @@ export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAp
               Create New WhatsApp Campaign
             </h2>
 
+            {!editable && (
+              <div className="mb-3 p-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">
+                View-only access — WhatsApp send disabled. Ask an admin for edit permission.
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -779,41 +788,45 @@ export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAp
               )}
 
               <div className="flex flex-col md:flex-row gap-3">
-                <button
-                  type="submit"
-                  disabled={loading || loadingTemplates || templates.length === 0}
-                  className="flex-1 py-4 px-6 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-bold text-lg hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <Loader className="animate-spin" size={20} />
-                      Creating Campaign...
-                    </>
-                  ) : (
-                    <>
-                      <Send size={20} />
-                      Create WhatsApp Campaign
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => handleSubmit(e as any, { scheduled: true })}
-                  disabled={loading || loadingTemplates || templates.length === 0}
-                  className="flex-1 py-4 px-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-bold text-lg hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {loading ? (
-                    <>
-                      <Loader className="animate-spin" size={20} />
-                      Scheduling...
-                    </>
-                  ) : (
-                    <>
-                      <Clock size={20} />
-                      Schedule WhatsApp
-                    </>
-                  )}
-                </button>
+                {editable && (
+                  <button
+                    type="submit"
+                    disabled={loading || loadingTemplates || templates.length === 0}
+                    className="flex-1 py-4 px-6 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-bold text-lg hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader className="animate-spin" size={20} />
+                        Creating Campaign...
+                      </>
+                    ) : (
+                      <>
+                        <Send size={20} />
+                        Create WhatsApp Campaign
+                      </>
+                    )}
+                  </button>
+                )}
+                {editable && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleSubmit(e as any, { scheduled: true })}
+                    disabled={loading || loadingTemplates || templates.length === 0}
+                    className="flex-1 py-4 px-6 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-bold text-lg hover:from-blue-600 hover:to-blue-700 transition-all transform hover:scale-[1.02] shadow-lg hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader className="animate-spin" size={20} />
+                        Scheduling...
+                      </>
+                    ) : (
+                      <>
+                        <Clock size={20} />
+                        Schedule WhatsApp
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </form>
           </div>
@@ -872,7 +885,7 @@ export default function WhatsAppCampaign({ prefill, onPrefillConsumed }: WhatsAp
                           </span>
                           
                           {/* Send Now Button - Only show if campaign has pending messages */}
-                          {(campaign.status === 'SCHEDULED' || campaign.status === 'IN_PROGRESS' || campaign.status === 'PARTIAL') && 
+                          {editable && (campaign.status === 'SCHEDULED' || campaign.status === 'IN_PROGRESS' || campaign.status === 'PARTIAL') &&
                            (campaign.totalRecipients - campaign.successCount - campaign.failedCount) > 0 && (
                             <button
                               onClick={() => handleSendNow(campaign.campaignId)}

@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 const ADMIN_TOKEN_KEY = 'flashfire_crm_admin_token';
 
-type CrmPermission =
+type CrmModule =
   | 'email_campaign'
   | 'campaign_manager'
   | 'whatsapp_campaign'
@@ -19,11 +19,13 @@ type CrmPermission =
   | 'bda_admin'
   | 'activity_logs';
 
-const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: string }> = [
+type CrmPermission = CrmModule | `${CrmModule}_edit`;
+
+const PERMISSIONS: Array<{ key: CrmModule; label: string; description: string; viewOnly?: boolean }> = [
   { key: 'campaign_manager', label: 'Campaign Manager', description: 'UTM campaigns + bookings overview' },
   { key: 'email_campaign', label: 'Email Campaign', description: 'SendGrid email campaigns' },
   { key: 'whatsapp_campaign', label: 'WhatsApp Campaign', description: 'WhatsApp campaigns + scheduling' },
-  { key: 'analytics', label: 'Analytics', description: 'Performance dashboards + insights' },
+  { key: 'analytics', label: 'Analytics', description: 'Performance dashboards + insights', viewOnly: true },
   { key: 'all_data', label: 'All Data', description: 'Unified data view + notes/actions' },
   { key: 'workflows', label: 'Workflows', description: 'Workflow builder + logs' },
   { key: 'leads', label: 'Leads', description: 'MQL / SQL / Converted management + revenue tracking' },
@@ -31,7 +33,7 @@ const PERMISSIONS: Array<{ key: CrmPermission; label: string; description: strin
   { key: 'claim_leads', label: 'Claim Leads', description: 'BDA lead claiming and management' },
   { key: 'meeting_links', label: 'Meeting Info', description: 'Meeting recordings and Google Drive video URLs' },
   { key: 'bda_admin', label: 'BDA Admin', description: 'Approve BDA claims and review notifications' },
-  { key: 'activity_logs', label: 'Activity Log', description: 'View every action across the CRM — who did what, when' },
+  { key: 'activity_logs', label: 'Activity Log', description: 'View every action across the CRM — who did what, when', viewOnly: true },
 ];
 
 type CrmUserRow = {
@@ -44,7 +46,12 @@ type CrmUserRow = {
 };
 
 function permissionLabel(key: CrmPermission) {
-  return PERMISSIONS.find((p) => p.key === key)?.label || key;
+  if (key.endsWith('_edit')) {
+    const base = key.slice(0, -'_edit'.length) as CrmModule;
+    const m = PERMISSIONS.find((p) => p.key === base);
+    return m ? `${m.label} (edit)` : key;
+  }
+  return PERMISSIONS.find((p) => p.key === (key as CrmModule))?.label || key;
 }
 
 async function safeJson(res: Response) {
@@ -135,8 +142,28 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const togglePermission = (perm: CrmPermission) => {
-    setEditorPermissions((prev) => (prev.includes(perm) ? prev.filter((p) => p !== perm) : [...prev, perm]));
+  const toggleView = (module: CrmModule) => {
+    setEditorPermissions((prev) => {
+      const hasView = prev.includes(module);
+      if (hasView) {
+        // Removing view also removes edit (edit without view is meaningless).
+        return prev.filter((p) => p !== module && p !== (`${module}_edit` as CrmPermission));
+      }
+      return [...prev, module];
+    });
+  };
+
+  const toggleEdit = (module: CrmModule) => {
+    const editKey = `${module}_edit` as CrmPermission;
+    setEditorPermissions((prev) => {
+      const hasEdit = prev.includes(editKey);
+      if (hasEdit) {
+        return prev.filter((p) => p !== editKey);
+      }
+      // Granting edit auto-grants view.
+      const next = prev.includes(module) ? prev : [...prev, module];
+      return [...next, editKey];
+    });
   };
 
   const resetEditor = () => {
@@ -363,25 +390,53 @@ export default function AdminDashboardPage() {
 
                 <div>
                   <div className="text-sm font-extrabold text-slate-900">Module Access</div>
-                  <p className="text-xs text-slate-500 mt-1">Select which sections appear after OTP login.</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    <span className="font-bold">View</span> shows the tab (read-only).
+                    <span className="font-bold"> Edit</span> allows create/update/delete inside that tab.
+                    Edit implies View.
+                  </p>
                   <div className="mt-3 space-y-2">
-                    {PERMISSIONS.map((p) => (
-                      <label
-                        key={p.key}
-                        className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 hover:border-orange-200 hover:bg-orange-50/40 transition-colors cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={editorPermissions.includes(p.key)}
-                          onChange={() => togglePermission(p.key)}
-                          className="mt-1 h-4 w-4"
-                        />
-                        <div>
-                          <div className="text-sm font-bold text-slate-900">{p.label}</div>
-                          <div className="text-xs text-slate-600">{p.description}</div>
+                    {PERMISSIONS.map((p) => {
+                      const hasView = editorPermissions.includes(p.key);
+                      const hasEdit = editorPermissions.includes(`${p.key}_edit` as CrmPermission);
+                      return (
+                        <div
+                          key={p.key}
+                          className="flex items-start gap-3 p-3 rounded-xl border border-slate-200 hover:border-orange-200 hover:bg-orange-50/40 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-bold text-slate-900">{p.label}</div>
+                            <div className="text-xs text-slate-600">{p.description}</div>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={hasView}
+                                onChange={() => toggleView(p.key)}
+                                className="h-4 w-4"
+                              />
+                              <span className="text-xs font-semibold text-slate-700">View</span>
+                            </label>
+                            {p.viewOnly ? (
+                              <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                                View-only module
+                              </span>
+                            ) : (
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={hasEdit}
+                                  onChange={() => toggleEdit(p.key)}
+                                  className="h-4 w-4"
+                                />
+                                <span className="text-xs font-semibold text-orange-700">Edit</span>
+                              </label>
+                            )}
+                          </div>
                         </div>
-                      </label>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -438,14 +493,21 @@ export default function AdminDashboardPage() {
                               {(u.permissions || []).length === 0 ? (
                                 <span className="text-xs font-semibold text-slate-500">No permissions</span>
                               ) : (
-                                u.permissions.map((p) => (
-                                  <span
-                                    key={p}
-                                    className="text-xs font-bold px-2 py-1 rounded-lg bg-orange-50 text-orange-700 border border-orange-200"
-                                  >
-                                    {permissionLabel(p)}
-                                  </span>
-                                ))
+                                u.permissions.map((p) => {
+                                  const isEdit = p.endsWith('_edit');
+                                  const cls = isEdit
+                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                    : 'bg-slate-50 text-slate-700 border-slate-200';
+                                  return (
+                                    <span
+                                      key={p}
+                                      className={`text-xs font-bold px-2 py-1 rounded-lg border ${cls}`}
+                                      title={isEdit ? 'Can edit (mutate)' : 'Can view (read-only)'}
+                                    >
+                                      {permissionLabel(p)}
+                                    </span>
+                                  );
+                                })
                               )}
                             </div>
                           </div>

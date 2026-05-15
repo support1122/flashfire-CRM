@@ -1,21 +1,25 @@
-export type CrmPermission =
-  | 'email_campaign'
-  | 'campaign_manager'
-  | 'whatsapp_campaign'
-  | 'analytics'
-  | 'all_data'
-  | 'workflows'
-  | 'leads'
-  | 'meta_leads'
-  | 'claim_leads'
-  | 'meeting_links'
-  | 'bda_admin'
-  | 'activity_logs';
+export const CRM_MODULES = [
+  'email_campaign',
+  'campaign_manager',
+  'whatsapp_campaign',
+  'analytics',
+  'all_data',
+  'workflows',
+  'leads',
+  'meta_leads',
+  'claim_leads',
+  'meeting_links',
+  'bda_admin',
+  'activity_logs',
+] as const;
+
+export type CrmModule = (typeof CRM_MODULES)[number];
+
+// View key = the module name. Edit key = `<module>_edit`.
+export type CrmPermission = CrmModule | `${CrmModule}_edit`;
 
 export interface CrmUser {
   email: string;
   name: string;
   permissions: CrmPermission[];
 }
-
-

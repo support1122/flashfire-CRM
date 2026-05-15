@@ -42,6 +42,7 @@ import InsertDataModal, { type InsertDataFormData } from './InsertDataModal';
 import FollowUpModal, { type FollowUpData } from './FollowUpModal';
 import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
 import { usePlanConfig, type PlanOption, type PlanName } from '../context/PlanConfigContext';
+import { useCrmAuth } from '../auth/CrmAuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -197,6 +198,8 @@ interface CampaignDetails {
 }
 
 export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCampaign }: UnifiedDataViewProps) {
+  const { canEdit } = useCrmAuth();
+  const editable = canEdit('all_data');
   const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [usersWithoutBookings, setUsersWithoutBookings] = useState<UserWithoutBooking[]>([]);
@@ -1164,6 +1167,11 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       </div>
 
       <div className="bg-white border border-slate-200 px-6 py-6 shadow-sm">
+        {!editable && (
+          <div className="mb-3 p-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">
+            View-only access — Insert/Email/WhatsApp actions disabled. Ask an admin for edit permission.
+          </div>
+        )}
         <div className="flex flex-col items-center text-center gap-4">
           <div>
             <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-50 text-orange-600 text-[10px] font-semibold uppercase tracking-wide">
@@ -1192,13 +1200,15 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                 </>
               )}
             </button>
-            <button
-              onClick={() => setIsInsertModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 border border-orange-200 text-orange-700  bg-white hover:bg-orange-50 transition text-[11px] font-semibold"
-            >
-              <Plus size={12} className="text-orange-500" />
-              Insert Data
-            </button>
+            {editable && (
+              <button
+                onClick={() => setIsInsertModalOpen(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 border border-orange-200 text-orange-700  bg-white hover:bg-orange-50 transition text-[11px] font-semibold"
+              >
+                <Plus size={12} className="text-orange-500" />
+                Insert Data
+              </button>
+            )}
             <button
               onClick={() => {
                 clearAllCache();
@@ -1242,7 +1252,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
             </button>
             {filteredUsersWithoutBookings.length > 0 && (
               <div className="flex items-center gap-2">
-                {onOpenWhatsAppCampaign && (
+                {editable && onOpenWhatsAppCampaign && (
                   <button
                     onClick={() => {
                       const phones = filteredUsersWithoutBookings
@@ -1253,12 +1263,12 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                           return null;
                         })
                         .filter((phone): phone is string => phone !== null && phone.length > 0);
-                      
+
                       if (phones.length === 0) {
                         alert('No valid phone numbers found in selected users');
                         return;
                       }
-                      
+
                       onOpenWhatsAppCampaign({
                         mobileNumbers: phones,
                         reason: 'users_without_meetings_bulk',
@@ -1270,19 +1280,21 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                     WhatsApp All ({filteredUsersWithoutBookings.length})
                   </button>
                 )}
-              <button
-                onClick={() => {
-                  const emails = filteredUsersWithoutBookings.map((row) => row.email).filter(Boolean);
-                  onOpenEmailCampaign({
-                    recipients: emails,
-                    reason: 'users_without_meetings_bulk',
-                  });
-                }}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white  hover:bg-orange-600 transition text-[10px] font-semibold"
-              >
-                <Send size={12} />
-                Email All ({filteredUsersWithoutBookings.length})
-              </button>
+              {editable && (
+                <button
+                  onClick={() => {
+                    const emails = filteredUsersWithoutBookings.map((row) => row.email).filter(Boolean);
+                    onOpenEmailCampaign({
+                      recipients: emails,
+                      reason: 'users_without_meetings_bulk',
+                    });
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white  hover:bg-orange-600 transition text-[10px] font-semibold"
+                >
+                  <Send size={12} />
+                  Email All ({filteredUsersWithoutBookings.length})
+                </button>
+              )}
               </div>
             )}
           </div>

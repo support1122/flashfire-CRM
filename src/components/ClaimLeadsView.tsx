@@ -38,7 +38,8 @@ interface Lead {
 }
 
 export default function ClaimLeadsView() {
-  const { user, token } = useCrmAuth();
+  const { user, token, canEdit } = useCrmAuth();
+  const editable = canEdit('claim_leads');
   const { planOptions, incentiveConfig } = usePlanConfig();
   const [activeTab, setActiveTab] = useState<ActiveTab>('claim');
   const [clientEmail, setClientEmail] = useState('');
@@ -635,6 +636,11 @@ export default function ClaimLeadsView() {
 
               {lead && (
                 <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-6">
+                  {!editable && (
+                    <div className="mb-3 p-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">
+                      View-only access — claim/save actions disabled. Ask an admin for edit permission.
+                    </div>
+                  )}
                   <div className="flex items-center justify-between border-b border-slate-200 pb-4">
                     <div>
                       <h2 className="text-xl font-bold text-slate-900">Lead Details</h2>
@@ -659,7 +665,7 @@ export default function ClaimLeadsView() {
                           </span>
                         </div>
                       )}
-                    {!isClaimed && (
+                    {!isClaimed && editable && (
                       <button
                         onClick={handleClaim}
                         disabled={loading}
@@ -669,14 +675,16 @@ export default function ClaimLeadsView() {
                         Claim This Lead
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => setReferralPayments(r => [...r, { planName: 'PRIME', amount: 0, currency: formData.paymentPlan?.currency || 'USD' }])}
-                      className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition font-semibold"
-                    >
-                      <UserPlus size={18} />
-                      + Referral
-                    </button>
+                    {editable && (
+                      <button
+                        type="button"
+                        onClick={() => setReferralPayments(r => [...r, { planName: 'PRIME', amount: 0, currency: formData.paymentPlan?.currency || 'USD' }])}
+                        className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition font-semibold"
+                      >
+                        <UserPlus size={18} />
+                        + Referral
+                      </button>
+                    )}
                     {isClaimed && (
                       <div className="flex items-center gap-3">
                         <div className="text-sm">
@@ -684,14 +692,16 @@ export default function ClaimLeadsView() {
                           <p className="font-semibold text-slate-900">{lead.claimedBy?.name}</p>
                           <p className="text-slate-500">{lead.claimedBy?.email}</p>
                         </div>
-                        <button
-                          onClick={handleUnclaim}
-                          disabled={loading}
-                          className="inline-flex items-center gap-2 px-4 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition font-semibold disabled:opacity-50"
-                        >
-                          <XCircle size={18} />
-                          Unclaim This Lead
-                        </button>
+                        {editable && (
+                          <button
+                            onClick={handleUnclaim}
+                            disabled={loading}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-rose-500 text-white rounded-lg hover:bg-rose-600 transition font-semibold disabled:opacity-50"
+                          >
+                            <XCircle size={18} />
+                            Unclaim This Lead
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -708,7 +718,7 @@ export default function ClaimLeadsView() {
                           value={formData.clientName || ''}
                           onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          disabled={!isClaimed || saving}
+                          disabled={!isClaimed || saving || !editable}
                         />
                       </div>
 
@@ -735,7 +745,7 @@ export default function ClaimLeadsView() {
                           value={formData.clientPhone || ''}
                           onChange={(e) => setFormData({ ...formData, clientPhone: e.target.value })}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          disabled={!isClaimed || saving}
+                          disabled={!isClaimed || saving || !editable}
                         />
                       </div>
 
@@ -749,7 +759,7 @@ export default function ClaimLeadsView() {
                           value={formData.scheduledEventStartTime || ''}
                           onChange={(e) => setFormData({ ...formData, scheduledEventStartTime: e.target.value })}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          disabled={!isClaimed || saving}
+                          disabled={!isClaimed || saving || !editable}
                         />
                       </div>
                     </div>
@@ -788,7 +798,7 @@ export default function ClaimLeadsView() {
                             }
                           }}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white cursor-pointer"
-                          disabled={saving}
+                          disabled={saving || !editable}
                           title={!isClaimed ? 'Select plan and amount, then Claim to save. After claiming, use Save to update.' : undefined}
                         >
                           <option value="">Select Plan</option>
@@ -821,7 +831,7 @@ export default function ClaimLeadsView() {
                               });
                             }}
                             className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white cursor-pointer"
-                            disabled={saving}
+                            disabled={saving || !editable}
                           >
                             <option value="USD">USD ($)</option>
                             <option value="CAD">CAD (CA$)</option>
@@ -869,7 +879,7 @@ export default function ClaimLeadsView() {
                             }
                           }}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
-                          disabled={saving}
+                          disabled={saving || !editable}
                           placeholder={`Enter amount paid (e.g., ${formData.paymentPlan?.currency === 'CAD' ? '799' : '599'})`}
                           title="Required. Incentive is prorated by this amount vs plan price."
                         />
@@ -899,6 +909,7 @@ export default function ClaimLeadsView() {
                                   setReferralPayments(r => r.map((x, i) => i === idx ? { ...x, planName: v } : x));
                                 }}
                                 className="border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white min-w-[140px]"
+                                disabled={!editable}
                               >
                                 {planOptions.map((p) => (
                                   <option key={p.key} value={p.key}>{p.label} ({p.displayPrice})</option>
@@ -917,14 +928,19 @@ export default function ClaimLeadsView() {
                                 }}
                                 placeholder="Amount"
                                 className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-24"
+                                disabled={!editable}
                               />
                               <span className="text-sm text-emerald-700 font-semibold">
                                 ₹{getIncentiveProrated(refLine.planName, refLine.amount, refLine.currency).toFixed(0)}
                               </span>
                               <button
                                 type="button"
-                                onClick={() => setReferralPayments(r => r.filter((_, i) => i !== idx))}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                onClick={() => {
+                                  if (!editable) return;
+                                  setReferralPayments(r => r.filter((_, i) => i !== idx));
+                                }}
+                                disabled={!editable}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
                                 title="Remove referral"
                               >
                                 <Trash2 size={16} />
@@ -967,7 +983,7 @@ export default function ClaimLeadsView() {
                             }
                           }}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white cursor-pointer"
-                          disabled={saving}
+                          disabled={saving || !editable}
                           title={!isClaimed ? 'You can change status before or after claiming.' : undefined}
                         >
                           <option value="scheduled">SCHEDULED</option>
@@ -986,7 +1002,7 @@ export default function ClaimLeadsView() {
                           onChange={(e) => setFormData({ ...formData, meetingNotes: e.target.value })}
                           rows={4}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          disabled={!isClaimed || saving}
+                          disabled={!isClaimed || saving || !editable}
                         />
                       </div>
 
@@ -999,13 +1015,13 @@ export default function ClaimLeadsView() {
                           onChange={(e) => setFormData({ ...formData, anythingToKnow: e.target.value })}
                           rows={3}
                           className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500"
-                          disabled={!isClaimed || saving}
+                          disabled={!isClaimed || saving || !editable}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {isClaimed && (
+                  {isClaimed && editable && (
                     <div className="flex justify-end pt-4 border-t border-slate-200">
                       <button
                         onClick={handleSave}

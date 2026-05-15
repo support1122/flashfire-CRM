@@ -16,6 +16,7 @@ import {
   Save,
 } from 'lucide-react';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
+import { useCrmAuth } from '../auth/CrmAuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -77,6 +78,8 @@ interface EmailTemplate {
 }
 
 export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampaignProps) {
+  const { canEdit } = useCrmAuth();
+  const editable = canEdit('email_campaign');
   const [domainName, setDomainName] = useState('');
   const [templateName, setTemplateName] = useState('Lead Not Booked Call Follow up 1');
   const [templateId, setTemplateId] = useState('');
@@ -622,6 +625,11 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
 
           {activeTab === 'create' && (
             <form onSubmit={handleCreateScheduledCampaign} className="space-y-6">
+              {!editable && (
+                <div className="mb-3 p-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">
+                  View-only access — campaign create/send disabled. Ask an admin for edit permission.
+                </div>
+              )}
               {/* Template Selector Dropdown */}
               <div>
                 <label htmlFor="savedTemplate" className="block text-sm font-semibold text-gray-700 mb-2">
@@ -694,24 +702,26 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
                     className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
                     required
                   />
-                  <button
-                    type="button"
-                    onClick={handleSaveTemplate}
-                    disabled={!domainName || !templateId || !templateName || loading}
-                    className="px-6 py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-all transform hover:scale-[1.02] shadow-md hover:shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2"
-                  >
-                    {savingTemplate ? (
-                      <>
-                        <Loader className="animate-spin" size={18} />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save size={18} />
-                        Save Template
-                      </>
-                    )}
-                  </button>
+                  {editable && (
+                    <button
+                      type="button"
+                      onClick={handleSaveTemplate}
+                      disabled={!domainName || !templateId || !templateName || loading}
+                      className="px-6 py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-all transform hover:scale-[1.02] shadow-md hover:shadow-lg disabled:bg-gray-400 disabled:cursor-not-allowed disabled:transform-none flex items-center gap-2"
+                    >
+                      {savingTemplate ? (
+                        <>
+                          <Loader className="animate-spin" size={18} />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save size={18} />
+                          Save Template
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -867,35 +877,37 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={loading}
-                className={`w-full py-4 px-6 rounded-lg font-semibold text-white transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2 ${
-                  loading
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 shadow-lg hover:shadow-xl'
-                }`}
-              >
-                {loading ? (
-                  <>
-                    <Loader className="animate-spin" size={20} />
-                    {(templateName.toLowerCase().includes('mark as no show') || 
-                      templateName.toLowerCase().includes('no show') ||
-                      prefill?.reason === 'no_show_followup') 
-                      ? 'Sending Emails...' 
-                      : 'Creating Scheduled Campaign...'}
-                  </>
-                ) : (
-                  <>
-                    <Send size={20} />
-                    {(templateName.toLowerCase().includes('mark as no show') || 
-                      templateName.toLowerCase().includes('no show') ||
-                      prefill?.reason === 'no_show_followup') 
-                      ? 'Send Email Immediately' 
-                      : 'Create Scheduled Campaign'}
-                  </>
-                )}
-              </button>
+              {editable && (
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className={`w-full py-4 px-6 rounded-lg font-semibold text-white transition-all transform hover:scale-[1.02] flex items-center justify-center gap-2 ${
+                    loading
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 shadow-lg hover:shadow-xl'
+                  }`}
+                >
+                  {loading ? (
+                    <>
+                      <Loader className="animate-spin" size={20} />
+                      {(templateName.toLowerCase().includes('mark as no show') ||
+                        templateName.toLowerCase().includes('no show') ||
+                        prefill?.reason === 'no_show_followup')
+                        ? 'Sending Emails...'
+                        : 'Creating Scheduled Campaign...'}
+                    </>
+                  ) : (
+                    <>
+                      <Send size={20} />
+                      {(templateName.toLowerCase().includes('mark as no show') ||
+                        templateName.toLowerCase().includes('no show') ||
+                        prefill?.reason === 'no_show_followup')
+                        ? 'Send Email Immediately'
+                        : 'Create Scheduled Campaign'}
+                    </>
+                  )}
+                </button>
+              )}
             </form>
           )}
 
@@ -945,7 +957,7 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
                         <div className="flex items-center gap-3">
                           {getStatusIcon(campaign.status)}
                           <span className={getStatusBadge(campaign.status)}>{campaign.status.toUpperCase()}</span>
-                          {campaign.status !== 'completed' && campaign.status !== 'cancelled' && (
+                          {editable && campaign.status !== 'completed' && campaign.status !== 'cancelled' && (
                             <button
                               onClick={() => handleToggleCampaignStatus(campaign._id, campaign.status)}
                               disabled={togglingStatus.includes(campaign._id)}
@@ -1188,24 +1200,25 @@ export default function EmailCampaign({ prefill, onPrefillConsumed }: EmailCampa
                                     </div>
                                   ))}
                                 </div>
-                                <button
-                                  onClick={() => handleResend(campaign._id, campaign.failedEmails)}
-                                  disabled={resendingEmails.includes(campaign._id)}
-                                  className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all flex items-center gap-2 text-sm font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
-                                >
-                                  {resendingEmails.includes(campaign._id) ? (
-                                    <>
-                                      <Loader className="animate-spin" size={16} />
-                                      Resending...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <RotateCw size={16} />
-                                      Resend Failed Emails
-                                    </>
-                                  )}
-                                  
-                                </button>
+                                {editable && (
+                                  <button
+                                    onClick={() => handleResend(campaign._id, campaign.failedEmails)}
+                                    disabled={resendingEmails.includes(campaign._id)}
+                                    className="mt-3 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all flex items-center gap-2 text-sm font-medium disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                  >
+                                    {resendingEmails.includes(campaign._id) ? (
+                                      <>
+                                        <Loader className="animate-spin" size={16} />
+                                        Resending...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <RotateCw size={16} />
+                                        Resend Failed Emails
+                                      </>
+                                    )}
+                                  </button>
+                                )}
                               </div>
                             )}
                             {campaign.successfulEmails.length === 0 && campaign.failedEmails.length === 0 && (

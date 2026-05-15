@@ -10,6 +10,7 @@ import {
   Loader,
 } from 'lucide-react';
 import CampaignStatsModal from './CampaignStatsModal';
+import { useCrmAuth } from '../auth/CrmAuthContext';
 
 interface Campaign {
   _id: string;
@@ -80,6 +81,8 @@ interface CampaignDetails {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
 export default function CampaignManager() {
+  const { canEdit } = useCrmAuth();
+  const editable = canEdit('campaign_manager');
   const [campaignName, setCampaignName] = useState('');
   const [exactUtmSource, setExactUtmSource] = useState('');
   const [utmMedium, setUtmMedium] = useState('campaign');
@@ -345,6 +348,7 @@ export default function CampaignManager() {
             Create New Campaign
           </h2>
 
+          {editable ? (
           <form onSubmit={handleCreateCampaign} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
@@ -429,8 +433,8 @@ export default function CampaignManager() {
 
             <button
               type="submit"
-              disabled={loading}
-              className={`w-full py-4 px-6 rounded-lg font-semibold text-white transition-all transform hover:scale-[1.02] ${loading
+              disabled={loading || !editable}
+              className={`w-full py-4 px-6 rounded-lg font-semibold text-white transition-all transform hover:scale-[1.02] ${loading || !editable
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 shadow-lg hover:shadow-xl'
                 }`}
@@ -438,6 +442,9 @@ export default function CampaignManager() {
               {loading ? 'Creating Campaign...' : 'Generate Campaign URL'}
             </button>
           </form>
+          ) : (
+            <div className="p-4 text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-xl">View-only access — ask an admin for edit permission to create campaigns.</div>
+          )}
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-6 mb-8 border border-orange-100">
@@ -684,6 +691,7 @@ export default function CampaignManager() {
                           View Stats
                         </button>
                       </div>
+                      {editable && (
                       <button
                         onClick={() => handleDeleteCampaign(campaign.campaignId)}
                         disabled={deletingId === campaign.campaignId}
@@ -704,6 +712,7 @@ export default function CampaignManager() {
                           </>
                         )}
                       </button>
+                      )}
                     </div>
                   </div>
                 );
