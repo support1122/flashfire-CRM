@@ -15,7 +15,7 @@ import {
   CartesianGrid,
   ComposedChart,
 } from 'recharts';
-import { Loader2, TrendingUp, TrendingDown, RefreshCcw } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, RefreshCcw, Search } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
@@ -75,7 +75,34 @@ interface AnalyticsData {
   monthlyComparison: Array<{ month: string; total: number; mql: number; sql: number; converted: number; revenue: number }>;
   monthlyStatus: Array<{ month: string; total: number; completed: number; noShow: number; cancelled: number; rescheduled: number; paid: number; scheduled: number; notScheduled: number }>;
   monthlySourceType: Array<{ month: string; total: number; paid: number; organic: number }>;
+  utmSourceMonthly: Array<{ month: string; source: string; count: number }>;
+  utmMediumMonthly: Array<{ month: string; medium: string; count: number }>;
+  utmSourceStatus: Array<UtmStatusRow & { month: string; source: string }>;
+  utmMediumStatus: Array<UtmStatusRow & { month: string; medium: string }>;
 }
+
+interface UtmStatusRow {
+  total: number;
+  completed: number;
+  noShow: number;
+  cancelled: number;
+  rescheduled: number;
+  paid: number;
+  scheduled: number;
+  notScheduled: number;
+}
+
+// Colour palette for dynamic UTM stacked-bar segments.
+const UTM_PALETTE = [
+  '#F97316', '#6366F1', '#22C55E', '#0EA5E9', '#EC4899',
+  '#F59E0B', '#14B8A6', '#8B5CF6', '#94A3B8',
+];
+
+const MON_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmtMonthLabel = (m: string) => {
+  const [y, mo] = m.split('-');
+  return `${MON_ABBR[parseInt(mo, 10) - 1] || mo} ${y}`;
+};
 
 type DateRange = 'all' | '7d' | '30d' | '90d' | '6m' | '1y';
 
@@ -170,6 +197,152 @@ const STATUS_LABELS: Record<string, string> = {
 // ── Format helpers ─────────────────────────────────────────────────
 const fmtCurrency = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n}`;
 const fmtPct = (n: number) => `${n.toFixed(1)}%`;
+
+// ── UTM status table (search + sort + fixed-height internal scroll) ──
+const UTM_STATUS_COLS: Array<{ key: keyof UtmStatusRow; label: string; cls: string }> = [
+  { key: 'total', label: 'Total', cls: 'text-slate-900 font-bold' },
+  { key: 'notScheduled', label: 'Not Scheduled', cls: 'text-slate-600' },
+  { key: 'scheduled', label: 'Scheduled', cls: 'text-amber-600' },
+  { key: 'completed', label: 'Completed', cls: 'text-green-600' },
+  { key: 'noShow', label: 'No-Show', cls: 'text-rose-600' },
+  { key: 'cancelled', label: 'Cancelled', cls: 'text-red-700' },
+  { key: 'rescheduled', label: 'Rescheduled', cls: 'text-blue-600' },
+  { key: 'paid', label: 'Paid', cls: 'text-indigo-600 font-semibold' },
+];
+
+const EMPTY_UTM_ROW: UtmStatusRow = {
+  total: 0, completed: 0, noShow: 0, cancelled: 0, rescheduled: 0, paid: 0, scheduled: 0, notScheduled: 0,
+};
+
+const UtmStatusTable = memo(
+  ({ label, subtitle, rows }: { label: string; subtitle: string; rows: Array<UtmStatusRow & { month: string; name: string }> }) => {
+    const [search, setSearch] = useState('');
+    const [sortKey, setSortKey] = useState<keyof UtmStatusRow>('total');
+    const [mFrom, setMFrom] = useState('');
+    const [mTo, setMTo] = useState('');
+
+    // Distinct months present in the data (for the From/To pickers).
+    const monthOptions = useMemo(
+      () => [...new Set(rows.map((r) => r.month).filter(Boolean))].sort(),
+      [rows]
+    );
+
+    // Collapse the per-(month, name) rows into one row per name for the selected
+    // month range — "All" when no range is picked.
+    const aggregated = useMemo(() => {
+      const map = new Map<string, UtmStatusRow & { name: string }>();
+      for (const r of rows) {
+        if (mFrom && r.month < mFrom) continue;
+        if (mTo && r.month > mTo) continue;
+        const cur = map.get(r.name) || { name: r.name, ...EMPTY_UTM_ROW };
+        for (const c of UTM_STATUS_COLS) cur[c.key] += Number(r[c.key]) || 0;
+        map.set(r.name, cur);
+      }
+      return [...map.values()];
+    }, [rows, mFrom, mTo]);
+
+    const filtered = useMemo(() => {
+      const q = search.trim().toLowerCase();
+      return aggregated
+        .filter((r) => !q || r.name.toLowerCase().includes(q))
+        .slice()
+        .sort((a, b) => Number(b[sortKey]) - Number(a[sortKey]));
+    }, [aggregated, search, sortKey]);
+
+    return (
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">{label} — Leads &amp; Status</h3>
+            <p className="text-[11px] text-slate-500 mt-0.5">{subtitle}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-[11px] font-medium text-slate-500">Month</label>
+            <select
+              value={mFrom}
+              onChange={(e) => setMFrom(e.target.value)}
+              className="h-8 px-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white"
+              title="From month"
+            >
+              <option value="">All</option>
+              {monthOptions.map((m) => <option key={m} value={m}>{fmtMonthLabel(m)}</option>)}
+            </select>
+            <span className="text-[11px] text-slate-400">to</span>
+            <select
+              value={mTo}
+              onChange={(e) => setMTo(e.target.value)}
+              className="h-8 px-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white"
+              title="To month"
+            >
+              <option value="">All</option>
+              {monthOptions.map((m) => <option key={m} value={m}>{fmtMonthLabel(m)}</option>)}
+            </select>
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={`Search ${label.toLowerCase()}…`}
+                className="h-8 pl-7 pr-2.5 w-44 rounded-lg border border-slate-200 text-xs text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
+              />
+            </div>
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as keyof UtmStatusRow)}
+              className="h-8 px-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white"
+              title="Sort by"
+            >
+              {UTM_STATUS_COLS.map((c) => (
+                <option key={c.key} value={c.key}>Sort: {c.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {filtered.length === 0 ? (
+          <div className="py-8 text-center text-slate-500 text-sm">
+            {rows.length === 0
+              ? 'No data'
+              : aggregated.length === 0
+                ? 'No data for the selected months'
+                : 'No matches'}
+          </div>
+        ) : (
+          // Fixed height — scroll happens INSIDE this box, not the whole page.
+          <div className="max-h-[340px] overflow-auto border border-slate-100 rounded-lg">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 z-10 bg-slate-50">
+                <tr className="text-left text-slate-500 border-b border-slate-200">
+                  <th className="py-2 px-3 font-semibold bg-slate-50">{label}</th>
+                  {UTM_STATUS_COLS.map((c) => (
+                    <th key={c.key} className="py-2 px-2 font-semibold text-right bg-slate-50 whitespace-nowrap">
+                      {c.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.name} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="py-2 px-3 font-semibold text-slate-800 break-all max-w-[200px]">{r.name}</td>
+                    {UTM_STATUS_COLS.map((c) => (
+                      <td key={c.key} className={`py-2 px-2 text-right ${c.cls}`}>{r[c.key]}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-[11px] text-slate-400 mt-2">
+          Showing {filtered.length} of {aggregated.length} {label.toLowerCase()}s
+          {(mFrom || mTo) ? ' (month-filtered)' : ''} • counts are unique leads, current status
+        </p>
+      </div>
+    );
+  }
+);
+UtmStatusTable.displayName = 'UtmStatusTable';
 
 // ── Main Component ─────────────────────────────────────────────────
 export default function QualifiedLeadsGraphs({ className = '', filters = {}, monthlyStatusBreakdown = [] }: Props) {
@@ -389,6 +562,44 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
         total: r.total,
       }));
   }, [data, monthlyChartFrom, monthlyChartTo]);
+
+  // Pivot UTM monthly rows ({month, <key>, count}) into stacked-bar data.
+  // Keeps the top 8 values by volume, the rest collapse into "Other".
+  const pivotUtm = (rows: Array<{ month: string; count: number } & Record<string, string | number>>, keyField: string) => {
+    const byKey = new Map<string, number>();
+    rows.forEach((r) => {
+      const k = String(r[keyField] || '—');
+      byKey.set(k, (byKey.get(k) || 0) + r.count);
+    });
+    const top = [...byKey.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map((e) => e[0]);
+    const topSet = new Set(top);
+    let hasOther = false;
+    const months = new Map<string, Record<string, number>>();
+    rows.forEach((r) => {
+      if (!inMonthRange(r.month)) return;
+      const raw = String(r[keyField] || '—');
+      const k = topSet.has(raw) ? raw : 'Other';
+      if (k === 'Other') hasOther = true;
+      const m = months.get(r.month) || {};
+      m[k] = (m[k] || 0) + r.count;
+      months.set(r.month, m);
+    });
+    const dataRows = [...months.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([month, vals]) => ({ monthLabel: fmtMonth(month), ...vals }));
+    const keys = [...top];
+    if (hasOther) keys.push('Other');
+    return { data: dataRows, keys };
+  };
+
+  const utmSourceChart = useMemo(
+    () => pivotUtm((data?.utmSourceMonthly || []) as never, 'source'),
+    [data, monthlyChartFrom, monthlyChartTo]
+  );
+  const utmMediumChart = useMemo(
+    () => pivotUtm((data?.utmMediumMonthly || []) as never, 'medium'),
+    [data, monthlyChartFrom, monthlyChartTo]
+  );
 
   // ── Render ─────────────────────────────────────────────────────
   if (loading && !data) {
@@ -906,6 +1117,86 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
           </div>
         </ChartCard>
       </div>
+
+      {/* ── Row 7: Monthly Leads by UTM Source ───────────────── */}
+      <div className="w-full">
+        <ChartCard
+          title="Monthly Leads by UTM Source"
+          subtitle="Where leads came from (utmSource) — stacked per month. Top 8 sources shown, rest grouped as Other."
+        >
+          {utmSourceChart.data.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-slate-500 text-sm">No data for selected range</div>
+          ) : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={utmSourceChart.data} margin={{ top: 12, right: 12, left: 0, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
+                  <Tooltip cursor={cursorStyle} contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                  {utmSourceChart.keys.map((k, i) => (
+                    <Bar
+                      key={k}
+                      dataKey={k}
+                      stackId="utmsrc"
+                      fill={UTM_PALETTE[i % UTM_PALETTE.length]}
+                      radius={i === utmSourceChart.keys.length - 1 ? [6, 6, 0, 0] : undefined}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* UTM Source — leads & status table */}
+      <UtmStatusTable
+        label="UTM Source"
+        subtitle="How many unique leads came from each source and their current status."
+        rows={(data.utmSourceStatus || []).map((r) => ({ ...r, name: r.source }))}
+      />
+
+      {/* ── Row 8: Monthly Leads by UTM Medium ───────────────── */}
+      <div className="w-full">
+        <ChartCard
+          title="Monthly Leads by UTM Medium"
+          subtitle="How leads arrived (utmMedium) — stacked per month. Top 8 mediums shown, rest grouped as Other."
+        >
+          {utmMediumChart.data.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-slate-500 text-sm">No data for selected range</div>
+          ) : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={utmMediumChart.data} margin={{ top: 12, right: 12, left: 0, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
+                  <Tooltip cursor={cursorStyle} contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                  {utmMediumChart.keys.map((k, i) => (
+                    <Bar
+                      key={k}
+                      dataKey={k}
+                      stackId="utmmed"
+                      fill={UTM_PALETTE[i % UTM_PALETTE.length]}
+                      radius={i === utmMediumChart.keys.length - 1 ? [6, 6, 0, 0] : undefined}
+                    />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* UTM Medium — leads & status table */}
+      <UtmStatusTable
+        label="UTM Medium"
+        subtitle="How many unique leads came via each medium and their current status."
+        rows={(data.utmMediumStatus || []).map((r) => ({ ...r, name: r.medium }))}
+      />
     </div>
   );
 }
