@@ -17,7 +17,8 @@ type CrmModule =
   | 'claim_leads'
   | 'meeting_links'
   | 'bda_admin'
-  | 'activity_logs';
+  | 'activity_logs'
+  | 'lead_analytics';
 
 type CrmPermission = CrmModule | `${CrmModule}_edit`;
 
@@ -34,6 +35,7 @@ const PERMISSIONS: Array<{ key: CrmModule; label: string; description: string; v
   { key: 'meeting_links', label: 'Meeting Info', description: 'Meeting recordings and Google Drive video URLs' },
   { key: 'bda_admin', label: 'BDA Admin', description: 'Approve BDA claims and review notifications' },
   { key: 'activity_logs', label: 'Activity Log', description: 'View every action across the CRM — who did what, when', viewOnly: true },
+  { key: 'lead_analytics', label: 'Graphs', description: 'Lead graphs — monthly status, paid vs organic, paid clients', viewOnly: true },
 ];
 
 type CrmUserRow = {
