@@ -299,11 +299,51 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
       .filter((r) => r.month && inMonthRange(r.month))
       .map((r) => ({
         monthLabel: fmtMonth(r.month),
+        'Not Scheduled': r.notScheduled,
+        Scheduled: r.scheduled,
         Completed: r.completed,
         'No-Show': r.noShow,
         Cancelled: r.cancelled,
         Rescheduled: r.rescheduled,
         Paid: r.paid,
+      }));
+  }, [data, monthlyChartFrom, monthlyChartTo]);
+
+  // Plain-language summary — what most people actually want to see at a glance.
+  const summary = useMemo(() => {
+    const sb = data?.statusBreakdown || [];
+    const get = (s: string) => sb.find((r) => r.status === s)?.count || 0;
+    const organic = (data?.monthlySourceType || []).reduce((s, r) => s + r.organic, 0);
+    const paidAds = (data?.monthlySourceType || []).reduce((s, r) => s + r.paid, 0);
+    return {
+      totalLeads: sb.reduce((s, r) => s + r.count, 0),
+      organic,
+      paidAds,
+      meetingsDone: get('completed'),
+      noShow: get('no-show'),
+      cancelled: get('canceled'),
+      rescheduled: get('rescheduled'),
+      paidCustomers: get('paid'),
+      scheduled: get('scheduled'),
+      notScheduled: get('not-scheduled'),
+      // A meeting was scheduled for every lead that progressed past "not-scheduled":
+      // scheduled + completed + no-show + cancelled + rescheduled + paid.
+      meetingsScheduled:
+        get('scheduled') + get('completed') + get('no-show') +
+        get('canceled') + get('rescheduled') + get('paid'),
+    };
+  }, [data]);
+
+  // Monthly: meetings scheduled vs not scheduled (derived from monthlyStatus)
+  const monthlyMeetingData = useMemo(() => {
+    if (!data?.monthlyStatus) return [];
+    return data.monthlyStatus
+      .filter((r) => r.month && inMonthRange(r.month))
+      .map((r) => ({
+        monthLabel: fmtMonth(r.month),
+        'Meeting Scheduled':
+          r.scheduled + r.completed + r.noShow + r.cancelled + r.rescheduled + r.paid,
+        'Not Scheduled': r.notScheduled,
       }));
   }, [data, monthlyChartFrom, monthlyChartTo]);
 
@@ -380,6 +420,32 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
           >
             <RefreshCcw size={14} className={`text-slate-600 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
+        </div>
+      </div>
+
+      {/* ── Simple Summary (plain language) ──────────────────── */}
+      <div>
+        <h3 className="text-sm font-bold text-slate-900 mb-2">Quick Summary</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {[
+            { label: 'Total Leads', value: summary.totalLeads, color: 'text-slate-900', bg: 'bg-slate-50 border-slate-200', hint: 'Every lead in this view' },
+            { label: 'Organic Leads', value: summary.organic, color: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200', hint: 'Came in without paid ads' },
+            { label: 'Paid (Ad) Leads', value: summary.paidAds, color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200', hint: 'Came from ad campaigns' },
+            { label: 'Meetings Scheduled', value: summary.meetingsScheduled, color: 'text-teal-700', bg: 'bg-teal-50 border-teal-200', hint: 'Leads who booked a meeting (any status after)' },
+            { label: 'Not Scheduled', value: summary.notScheduled, color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200', hint: 'Submitted details, no meeting booked yet' },
+            { label: 'Scheduled', value: summary.scheduled, color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', hint: 'Meeting booked, BDA not updated yet' },
+            { label: 'Meetings Done', value: summary.meetingsDone, color: 'text-green-700', bg: 'bg-green-50 border-green-200', hint: 'Meeting completed' },
+            { label: 'No Show', value: summary.noShow, color: 'text-rose-700', bg: 'bg-rose-50 border-rose-200', hint: 'Lead did not join' },
+            { label: 'Cancelled', value: summary.cancelled, color: 'text-red-800', bg: 'bg-red-50 border-red-200', hint: 'Meeting cancelled' },
+            { label: 'Rescheduled', value: summary.rescheduled, color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200', hint: 'Moved to a new time' },
+            { label: 'Paid Customers', value: summary.paidCustomers, color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200', hint: 'Converted to paying customer' },
+          ].map((c) => (
+            <div key={c.label} className={`border rounded-xl p-4 ${c.bg}`}>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{c.label}</p>
+              <p className={`text-3xl font-extrabold mt-1 ${c.color}`}>{c.value.toLocaleString()}</p>
+              <p className="text-[10px] text-slate-400 mt-1 leading-tight">{c.hint}</p>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -695,8 +761,8 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
         return (
           <div className="w-full">
             <ChartCard
-              title="Monthly Lead Status"
-              subtitle="Completed, No-Show, Cancelled, Rescheduled, Paid — per month"
+              title="Monthly Lead Status — All Leads"
+              subtitle="Not Scheduled, Scheduled, Completed, No-Show, Cancelled, Rescheduled, Paid — per month"
               headerRight={monthRangePicker}
             >
               {monthlyStatusData.length === 0 ? (
@@ -711,6 +777,8 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
                         <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
                         <Tooltip cursor={cursorStyle} contentStyle={tooltipStyle} />
                         <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                        <Bar dataKey="Not Scheduled" stackId="s" fill="#9CA3AF" />
+                        <Bar dataKey="Scheduled" stackId="s" fill="#F59E0B" />
                         <Bar dataKey="Completed" stackId="s" fill="#22C55E" />
                         <Bar dataKey="No-Show" stackId="s" fill="#FB7185" />
                         <Bar dataKey="Cancelled" stackId="s" fill="#BE123C" />
@@ -721,10 +789,46 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
                   </div>
                 </div>
               )}
+              {/* Status meaning explainer */}
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-[11px] text-slate-600 border-t border-slate-100 pt-3">
+                <p><span className="font-bold text-slate-800">Not Scheduled:</span> lead submitted their details but hasn't booked a meeting yet.</p>
+                <p><span className="font-bold text-slate-800">Scheduled:</span> meeting is booked, but the BDA hasn't updated the status in the CRM yet.</p>
+                <p><span className="font-bold text-slate-800">Completed:</span> meeting happened.</p>
+                <p><span className="font-bold text-slate-800">No-Show:</span> lead didn't join the booked meeting.</p>
+                <p><span className="font-bold text-slate-800">Cancelled:</span> meeting was cancelled.</p>
+                <p><span className="font-bold text-slate-800">Rescheduled:</span> meeting moved to a new time.</p>
+                <p><span className="font-bold text-slate-800">Paid:</span> lead converted into a paying customer.</p>
+              </div>
             </ChartCard>
           </div>
         );
       })()}
+
+      {/* ── Row 5b: Meetings Scheduled vs Not Scheduled (Monthly) ── */}
+      <div className="w-full">
+        <ChartCard
+          title="Meetings Scheduled vs Not Scheduled — Monthly"
+          subtitle="Scheduled = lead booked a meeting. Not Scheduled = submitted details but no meeting booked yet."
+        >
+          {monthlyMeetingData.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-slate-500 text-sm">No data for selected range</div>
+          ) : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyMeetingData} margin={{ top: 12, right: 12, left: 0, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
+                  <Tooltip cursor={cursorStyle} contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                  <Bar dataKey="Meeting Scheduled" fill={COLORS.teal} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Not Scheduled" fill="#9CA3AF" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </ChartCard>
+      </div>
 
       {/* ── Row 6: Paid vs Organic Leads (Monthly) ───────────── */}
       <div className="w-full">
