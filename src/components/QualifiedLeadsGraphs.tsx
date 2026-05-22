@@ -73,6 +73,8 @@ interface AnalyticsData {
   bdaPerformance: Array<{ name: string; email: string; claimed: number; converted: number; completed: number; revenue: number; conversionRate: number }>;
   leadSourceType: Array<{ source: string; total: number; mql: number; sql: number; converted: number }>;
   monthlyComparison: Array<{ month: string; total: number; mql: number; sql: number; converted: number; revenue: number }>;
+  monthlyStatus: Array<{ month: string; total: number; completed: number; noShow: number; cancelled: number; rescheduled: number; paid: number; scheduled: number; notScheduled: number }>;
+  monthlySourceType: Array<{ month: string; total: number; paid: number; organic: number }>;
 }
 
 type DateRange = 'all' | '7d' | '30d' | '90d' | '6m' | '1y';
@@ -88,7 +90,25 @@ export interface QualifiedLeadsGraphsFilters {
   utmCampaign?: string;
   minAmount?: string;
   maxAmount?: string;
+  leadSource?: string;
+  bdaEmail?: string;
+  sourceType?: string;
 }
+
+const LEAD_SOURCE_OPTIONS = [
+  { value: 'all', label: 'All Sources' },
+  { value: 'calendly', label: 'Calendly' },
+  { value: 'meta_lead_ad', label: 'Meta Lead Ad' },
+  { value: 'manual', label: 'Manual' },
+  { value: 'frontend_direct', label: 'Frontend Direct' },
+  { value: 'bulk_import', label: 'Bulk Import' },
+];
+
+const SOURCE_TYPE_OPTIONS = [
+  { value: 'all', label: 'Paid + Organic' },
+  { value: 'paid', label: 'Paid only' },
+  { value: 'organic', label: 'Organic only' },
+];
 
 interface Props {
   className?: string;
@@ -161,6 +181,10 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
   const [refreshing, setRefreshing] = useState(false);
   const [monthlyChartFrom, setMonthlyChartFrom] = useState<string>('');
   const [monthlyChartTo, setMonthlyChartTo] = useState<string>('');
+  // Internal filters (in addition to the ones inherited from the parent)
+  const [fLeadSource, setFLeadSource] = useState<string>(filters.leadSource || 'all');
+  const [fSourceType, setFSourceType] = useState<string>(filters.sourceType || 'all');
+  const [fBdaEmail, setFBdaEmail] = useState<string>(filters.bdaEmail || 'all');
 
   // Use parent filters when provided; otherwise fall back to internal date range
   const dateParams = useMemo(() => {
@@ -196,6 +220,13 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
       if (filters.utmCampaign && filters.utmCampaign !== 'all') params.append('utmCampaign', filters.utmCampaign);
       if (filters.minAmount) params.append('minAmount', filters.minAmount);
       if (filters.maxAmount) params.append('maxAmount', filters.maxAmount);
+      // Internal filters take precedence over the inherited ones.
+      const leadSource = fLeadSource !== 'all' ? fLeadSource : filters.leadSource;
+      const sourceType = fSourceType !== 'all' ? fSourceType : filters.sourceType;
+      const bdaEmail = fBdaEmail !== 'all' ? fBdaEmail : filters.bdaEmail;
+      if (leadSource && leadSource !== 'all') params.append('leadSource', leadSource);
+      if (sourceType && sourceType !== 'all') params.append('sourceType', sourceType);
+      if (bdaEmail && bdaEmail !== 'all') params.append('bdaEmail', bdaEmail);
 
       const headers: HeadersInit = {};
       if (token) headers.Authorization = `Bearer ${token}`;
@@ -211,7 +242,7 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
       setLoading(false);
       setRefreshing(false);
     }
-  }, [token, dateParams, filters]);
+  }, [token, dateParams, filters, fLeadSource, fSourceType, fBdaEmail]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -242,6 +273,51 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
     if (!data?.revenueByPlan) return 0;
     return data.revenueByPlan.reduce((s, r) => s + r.revenue, 0);
   }, [data]);
+
+  const bdaOptions = useMemo(() => {
+    if (!data?.bdaPerformance) return [];
+    return data.bdaPerformance
+      .filter((b) => b.email)
+      .map((b) => ({ value: b.email, label: b.name || b.email }));
+  }, [data]);
+
+  // Month labels + range filter shared by the monthly charts
+  const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const fmtMonth = (m: string) => {
+    const [y, mo] = m.split('-');
+    return `${MONTH_LABELS[parseInt(mo, 10) - 1] || mo} ${y}`;
+  };
+  const inMonthRange = (m: string) => {
+    if (monthlyChartFrom && m < monthlyChartFrom) return false;
+    if (monthlyChartTo && m > monthlyChartTo) return false;
+    return true;
+  };
+
+  const monthlyStatusData = useMemo(() => {
+    if (!data?.monthlyStatus) return [];
+    return data.monthlyStatus
+      .filter((r) => r.month && inMonthRange(r.month))
+      .map((r) => ({
+        monthLabel: fmtMonth(r.month),
+        Completed: r.completed,
+        'No-Show': r.noShow,
+        Cancelled: r.cancelled,
+        Rescheduled: r.rescheduled,
+        Paid: r.paid,
+      }));
+  }, [data, monthlyChartFrom, monthlyChartTo]);
+
+  const monthlySourceData = useMemo(() => {
+    if (!data?.monthlySourceType) return [];
+    return data.monthlySourceType
+      .filter((r) => r.month && inMonthRange(r.month))
+      .map((r) => ({
+        monthLabel: fmtMonth(r.month),
+        Paid: r.paid,
+        Organic: r.organic,
+        total: r.total,
+      }));
+  }, [data, monthlyChartFrom, monthlyChartTo]);
 
   // ── Render ─────────────────────────────────────────────────────
   if (loading && !data) {
@@ -305,6 +381,55 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
             <RefreshCcw size={14} className={`text-slate-600 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
+      </div>
+
+      {/* ── Filter Bar ───────────────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Lead Source</label>
+          <select
+            value={fLeadSource}
+            onChange={(e) => setFLeadSource(e.target.value)}
+            className="h-9 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
+          >
+            {LEAD_SOURCE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Acquisition</label>
+          <select
+            value={fSourceType}
+            onChange={(e) => setFSourceType(e.target.value)}
+            className="h-9 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
+          >
+            {SOURCE_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">BDA</label>
+          <select
+            value={fBdaEmail}
+            onChange={(e) => setFBdaEmail(e.target.value)}
+            className="h-9 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500"
+          >
+            <option value="all">All BDAs</option>
+            {bdaOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        {(fLeadSource !== 'all' || fSourceType !== 'all' || fBdaEmail !== 'all') && (
+          <button
+            onClick={() => { setFLeadSource('all'); setFSourceType('all'); setFBdaEmail('all'); }}
+            className="h-9 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-600 transition"
+          >
+            Clear filters
+          </button>
+        )}
       </div>
 
       {/* ── KPI Row ──────────────────────────────────────────── */}
@@ -547,6 +672,86 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
           </div>
         );
       })()}
+
+      {/* ── Row 5: Monthly Lead Status (from analytics, respects all filters) ── */}
+      {(() => {
+        const monthOptions = (data.monthlyStatus || []).map((m) => m.month).filter(Boolean);
+        const monthRangePicker = (
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-[11px] font-medium text-slate-500">From</label>
+            <select value={monthlyChartFrom} onChange={(e) => setMonthlyChartFrom(e.target.value)} className="h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white">
+              <option value="">All</option>
+              {monthOptions.map((mo) => <option key={mo} value={mo}>{fmtMonth(mo)}</option>)}
+            </select>
+            <label className="text-[11px] font-medium text-slate-500">To</label>
+            <select value={monthlyChartTo} onChange={(e) => setMonthlyChartTo(e.target.value)} className="h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white">
+              <option value="">All</option>
+              {monthOptions.map((mo) => <option key={mo} value={mo}>{fmtMonth(mo)}</option>)}
+            </select>
+          </div>
+        );
+        const barWidth = 56;
+        const minW = Math.max(420, monthlyStatusData.length * barWidth);
+        return (
+          <div className="w-full">
+            <ChartCard
+              title="Monthly Lead Status"
+              subtitle="Completed, No-Show, Cancelled, Rescheduled, Paid — per month"
+              headerRight={monthRangePicker}
+            >
+              {monthlyStatusData.length === 0 ? (
+                <div className="h-32 flex items-center justify-center text-slate-500 text-sm">No data for selected range</div>
+              ) : (
+                <div className="h-96 min-h-[384px] overflow-x-auto overflow-y-hidden">
+                  <div style={{ minWidth: minW }} className="h-full">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={minW}>
+                      <BarChart data={monthlyStatusData} margin={{ top: 12, right: 12, left: 0, bottom: 12 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                        <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
+                        <Tooltip cursor={cursorStyle} contentStyle={tooltipStyle} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                        <Bar dataKey="Completed" stackId="s" fill="#22C55E" />
+                        <Bar dataKey="No-Show" stackId="s" fill="#FB7185" />
+                        <Bar dataKey="Cancelled" stackId="s" fill="#BE123C" />
+                        <Bar dataKey="Rescheduled" stackId="s" fill="#3B82F6" />
+                        <Bar dataKey="Paid" stackId="s" fill="#6366F1" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </ChartCard>
+          </div>
+        );
+      })()}
+
+      {/* ── Row 6: Paid vs Organic Leads (Monthly) ───────────── */}
+      <div className="w-full">
+        <ChartCard
+          title="Paid vs Organic Leads — Monthly"
+          subtitle="Paid = from ad campaigns (UTM cpc/ppc/paid, Meta ads). Organic = everything else."
+        >
+          {monthlySourceData.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-slate-500 text-sm">No data for selected range</div>
+          ) : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={monthlySourceData} margin={{ top: 12, right: 12, left: 0, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
+                  <Tooltip cursor={cursorStyle} contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                  <Bar dataKey="Paid" fill={COLORS.orange} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Organic" fill={COLORS.emerald} radius={[4, 4, 0, 0]} />
+                  <Line type="monotone" dataKey="total" stroke={COLORS.slate} strokeWidth={2} dot={false} name="Total" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </ChartCard>
+      </div>
     </div>
   );
 }
