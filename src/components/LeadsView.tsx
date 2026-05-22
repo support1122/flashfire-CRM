@@ -1395,7 +1395,15 @@ export default function LeadsView({
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
-                  data={monthlyStatusBreakdown.map((m) => ({
+                  data={monthlyStatusBreakdown
+                    // Never show months ahead of the current month, even if future
+                    // meetings are already booked for them.
+                    .filter((m) => {
+                      const now = new Date();
+                      const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                      return typeof m.month === 'string' && m.month <= currentYM;
+                    })
+                    .map((m) => ({
                     ...m,
                     monthLabel: (() => {
                       const [y, mo] = (m.month as string).split('-');
@@ -1403,7 +1411,7 @@ export default function LeadsView({
                       return `${months[parseInt(mo, 10) - 1]} ${y}`;
                     })(),
                     NotScheduled: m['not-scheduled'] ?? 0,
-                    Booked: m.booked ?? 0,
+                    Scheduled: m.booked ?? 0,
                     Cancelled: m.canceled ?? 0,
                     NoShow: m['no-show'] ?? 0,
                     Completed: m.completed ?? 0,
@@ -1424,7 +1432,7 @@ export default function LeadsView({
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
                   <Bar dataKey="NotScheduled" stackId="a" fill="#3B82F6" name="Not Scheduled" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="Booked" stackId="a" fill="#F97316" name="Booked" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Scheduled" stackId="a" fill="#F97316" name="Scheduled" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="Cancelled" stackId="a" fill="#BE123C" name="Cancelled" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="NoShow" stackId="a" fill="#FB7185" name="No-Show" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="Completed" stackId="a" fill="#22C55E" name="Completed" radius={[0, 0, 0, 0]} />
@@ -1443,7 +1451,7 @@ export default function LeadsView({
                 </div>
               )}
               <div className="flex items-baseline gap-2">
-                <span className="text-slate-600 text-[11px] font-medium">Booked</span>
+                <span className="text-slate-600 text-[11px] font-medium">Scheduled</span>
                 <span className="text-lg font-bold text-orange-600">{statusStats.booked}</span>
               </div>
               <div className="flex items-baseline gap-2">
@@ -1453,6 +1461,10 @@ export default function LeadsView({
               <div className="flex items-baseline gap-2">
                 <span className="text-slate-600 text-[11px] font-medium">No-Show</span>
                 <span className="text-lg font-bold text-rose-600">{statusStats.noShow}</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-slate-600 text-[11px] font-medium">Rescheduled</span>
+                <span className="text-lg font-bold text-amber-600">{statusStats.rescheduled}</span>
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-slate-600 text-[11px] font-medium">Completed</span>

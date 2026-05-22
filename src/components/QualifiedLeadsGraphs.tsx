@@ -287,7 +287,14 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
     const [y, mo] = m.split('-');
     return `${MONTH_LABELS[parseInt(mo, 10) - 1] || mo} ${y}`;
   };
+  // Current month as YYYY-MM — charts never render months ahead of this,
+  // even when future meetings are already booked.
+  const currentYM = (() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+  })();
   const inMonthRange = (m: string) => {
+    if (m > currentYM) return false;
     if (monthlyChartFrom && m < monthlyChartFrom) return false;
     if (monthlyChartTo && m > monthlyChartTo) return false;
     return true;
@@ -834,7 +841,7 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
       <div className="w-full">
         <ChartCard
           title="Paid vs Organic Leads — Monthly"
-          subtitle="Paid = from ad campaigns (UTM cpc/ppc/paid, Meta ads). Organic = everything else."
+          subtitle="How each lead is classified is explained below the chart."
         >
           {monthlySourceData.length === 0 ? (
             <div className="h-32 flex items-center justify-center text-slate-500 text-sm">No data for selected range</div>
@@ -854,6 +861,21 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
               </ResponsiveContainer>
             </div>
           )}
+          {/* Calculation explainer */}
+          <div className="mt-4 border-t border-slate-100 pt-3 space-y-2 text-[11px] text-slate-600">
+            <p className="font-bold text-slate-800">How a lead is counted as Paid vs Organic:</p>
+            <div className="rounded-lg bg-orange-50 border border-orange-200 p-2.5">
+              <span className="font-bold text-orange-700">Paid</span> — lead came from a paid ad. A lead is Paid if <span className="font-semibold">any</span> of these is true:
+              <ul className="list-disc ml-5 mt-1 space-y-0.5">
+                <li><code className="bg-white px-1 rounded">metaIsOrganic = false</code> — a Meta (Facebook/Instagram) paid-ad lead</li>
+                <li><code className="bg-white px-1 rounded">utmMedium</code> is <code className="bg-white px-1 rounded">cpc</code>, <code className="bg-white px-1 rounded">ppc</code>, <code className="bg-white px-1 rounded">paid</code> or <code className="bg-white px-1 rounded">paid_social</code></li>
+                <li><code className="bg-white px-1 rounded">metaAdId</code> is present — lead is tied to a specific ad</li>
+              </ul>
+            </div>
+            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5">
+              <span className="font-bold text-emerald-700">Organic</span> — everything else: website forms, direct traffic, organic social, referrals, manual entries. No paid-ad marker on the lead.
+            </div>
+          </div>
         </ChartCard>
       </div>
     </div>

@@ -38,6 +38,7 @@ const ClaimLeadsView = React.lazy(() => import('../components/ClaimLeadsView'));
 const MeetingInfoView = React.lazy(() => import('../components/MeetingInfoView'));
 const MetaLeadsView = React.lazy(() => import('../components/MetaLeadsView'));
 const ActivityLogView = React.lazy(() => import('../components/ActivityLogView'));
+const GraphsView = React.lazy(() => import('../components/GraphsView'));
 
 function TabSpinner() {
   return (
@@ -50,7 +51,7 @@ function TabSpinner() {
 }
 
 
-type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads' | 'activity';
+type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs';
 
 const TAB_CONFIG: Array<{
   tab: Tab;
@@ -70,6 +71,7 @@ const TAB_CONFIG: Array<{
   { tab: 'claim_leads', permission: 'claim_leads', label: 'Claim Your Leads', icon: UserCheck },
   { tab: 'meeting_links', permission: 'meeting_links', label: 'Meeting Info', icon: Video },
   { tab: 'activity', permission: 'activity_logs', label: 'Activity Log', icon: Activity },
+  { tab: 'graphs', permission: 'lead_analytics', label: 'Graphs', icon: BarChart3 },
 ];
 
 export default function CrmDashboardPage() {
@@ -441,6 +443,7 @@ export default function CrmDashboardPage() {
                 {activeTab === 'claim_leads' && <ClaimLeadsView />}
                 {activeTab === 'meeting_links' && <MeetingInfoView />}
                 {activeTab === 'activity' && <ActivityLogView />}
+                {activeTab === 'graphs' && <GraphsView />}
               </Suspense>
             )}
           </div>
