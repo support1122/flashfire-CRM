@@ -77,8 +77,8 @@ interface AnalyticsData {
   monthlySourceType: Array<{ month: string; total: number; paid: number; organic: number }>;
   utmSourceMonthly: Array<{ month: string; source: string; count: number }>;
   utmMediumMonthly: Array<{ month: string; medium: string; count: number }>;
-  utmSourceStatus: Array<UtmStatusRow & { source: string }>;
-  utmMediumStatus: Array<UtmStatusRow & { medium: string }>;
+  utmSourceStatus: Array<UtmStatusRow & { month: string; source: string }>;
+  utmMediumStatus: Array<UtmStatusRow & { month: string; medium: string }>;
 }
 
 interface UtmStatusRow {
@@ -97,6 +97,12 @@ const UTM_PALETTE = [
   '#F97316', '#6366F1', '#22C55E', '#0EA5E9', '#EC4899',
   '#F59E0B', '#14B8A6', '#8B5CF6', '#94A3B8',
 ];
+
+const MON_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmtMonthLabel = (m: string) => {
+  const [y, mo] = m.split('-');
+  return `${MON_ABBR[parseInt(mo, 10) - 1] || mo} ${y}`;
+};
 
 type DateRange = 'all' | '7d' | '30d' | '90d' | '6m' | '1y';
 
@@ -204,18 +210,44 @@ const UTM_STATUS_COLS: Array<{ key: keyof UtmStatusRow; label: string; cls: stri
   { key: 'paid', label: 'Paid', cls: 'text-indigo-600 font-semibold' },
 ];
 
+const EMPTY_UTM_ROW: UtmStatusRow = {
+  total: 0, completed: 0, noShow: 0, cancelled: 0, rescheduled: 0, paid: 0, scheduled: 0, notScheduled: 0,
+};
+
 const UtmStatusTable = memo(
-  ({ label, subtitle, rows }: { label: string; subtitle: string; rows: Array<UtmStatusRow & { name: string }> }) => {
+  ({ label, subtitle, rows }: { label: string; subtitle: string; rows: Array<UtmStatusRow & { month: string; name: string }> }) => {
     const [search, setSearch] = useState('');
     const [sortKey, setSortKey] = useState<keyof UtmStatusRow>('total');
+    const [mFrom, setMFrom] = useState('');
+    const [mTo, setMTo] = useState('');
+
+    // Distinct months present in the data (for the From/To pickers).
+    const monthOptions = useMemo(
+      () => [...new Set(rows.map((r) => r.month).filter(Boolean))].sort(),
+      [rows]
+    );
+
+    // Collapse the per-(month, name) rows into one row per name for the selected
+    // month range — "All" when no range is picked.
+    const aggregated = useMemo(() => {
+      const map = new Map<string, UtmStatusRow & { name: string }>();
+      for (const r of rows) {
+        if (mFrom && r.month < mFrom) continue;
+        if (mTo && r.month > mTo) continue;
+        const cur = map.get(r.name) || { name: r.name, ...EMPTY_UTM_ROW };
+        for (const c of UTM_STATUS_COLS) cur[c.key] += Number(r[c.key]) || 0;
+        map.set(r.name, cur);
+      }
+      return [...map.values()];
+    }, [rows, mFrom, mTo]);
 
     const filtered = useMemo(() => {
       const q = search.trim().toLowerCase();
-      return rows
+      return aggregated
         .filter((r) => !q || r.name.toLowerCase().includes(q))
         .slice()
         .sort((a, b) => Number(b[sortKey]) - Number(a[sortKey]));
-    }, [rows, search, sortKey]);
+    }, [aggregated, search, sortKey]);
 
     return (
       <div className="bg-white border border-slate-200 rounded-xl p-5">
@@ -224,7 +256,27 @@ const UtmStatusTable = memo(
             <h3 className="text-sm font-semibold text-slate-900">{label} — Leads &amp; Status</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">{subtitle}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-[11px] font-medium text-slate-500">Month</label>
+            <select
+              value={mFrom}
+              onChange={(e) => setMFrom(e.target.value)}
+              className="h-8 px-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white"
+              title="From month"
+            >
+              <option value="">All</option>
+              {monthOptions.map((m) => <option key={m} value={m}>{fmtMonthLabel(m)}</option>)}
+            </select>
+            <span className="text-[11px] text-slate-400">to</span>
+            <select
+              value={mTo}
+              onChange={(e) => setMTo(e.target.value)}
+              className="h-8 px-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 bg-white"
+              title="To month"
+            >
+              <option value="">All</option>
+              {monthOptions.map((m) => <option key={m} value={m}>{fmtMonthLabel(m)}</option>)}
+            </select>
             <div className="relative">
               <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -249,7 +301,11 @@ const UtmStatusTable = memo(
 
         {filtered.length === 0 ? (
           <div className="py-8 text-center text-slate-500 text-sm">
-            {rows.length === 0 ? 'No data' : 'No matches'}
+            {rows.length === 0
+              ? 'No data'
+              : aggregated.length === 0
+                ? 'No data for the selected months'
+                : 'No matches'}
           </div>
         ) : (
           // Fixed height — scroll happens INSIDE this box, not the whole page.
@@ -279,7 +335,8 @@ const UtmStatusTable = memo(
           </div>
         )}
         <p className="text-[11px] text-slate-400 mt-2">
-          Showing {filtered.length} of {rows.length} {label.toLowerCase()}s • counts are unique leads, current status
+          Showing {filtered.length} of {aggregated.length} {label.toLowerCase()}s
+          {(mFrom || mTo) ? ' (month-filtered)' : ''} • counts are unique leads, current status
         </p>
       </div>
     );
