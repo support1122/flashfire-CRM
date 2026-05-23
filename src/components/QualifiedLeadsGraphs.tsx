@@ -79,6 +79,7 @@ interface AnalyticsData {
   utmMediumMonthly: Array<{ month: string; medium: string; count: number }>;
   utmSourceStatus: Array<UtmStatusRow & { month: string; source: string }>;
   utmMediumStatus: Array<UtmStatusRow & { month: string; medium: string }>;
+  metaLeadsMonthly: Array<{ month: string; total: number; booked: number; notBooked: number }>;
 }
 
 interface UtmStatusRow {
@@ -141,6 +142,9 @@ interface Props {
   className?: string;
   filters?: QualifiedLeadsGraphsFilters;
   monthlyStatusBreakdown?: Array<Record<string, number | string>>;
+  // Per-month paid-client counts from the clients-tracking DB. When supplied,
+  // the "Paid" bar in Monthly Lead Status uses these instead of CRM bookingStatus.
+  paidClientsMonthly?: Array<{ month: string; total: number }>;
 }
 
 // ── Shared tooltip style ───────────────────────────────────────────
@@ -345,7 +349,7 @@ const UtmStatusTable = memo(
 UtmStatusTable.displayName = 'UtmStatusTable';
 
 // ── Main Component ─────────────────────────────────────────────────
-export default function QualifiedLeadsGraphs({ className = '', filters = {}, monthlyStatusBreakdown = [] }: Props) {
+export default function QualifiedLeadsGraphs({ className = '', filters = {}, monthlyStatusBreakdown = [], paidClientsMonthly }: Props) {
   const { token } = useCrmAuth();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -494,8 +498,11 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
     return true;
   };
 
+  // When paid-client data (clients-tracking DB) is supplied, the Paid bar uses it.
+  const usePaidClients = Array.isArray(paidClientsMonthly);
   const monthlyStatusData = useMemo(() => {
     if (!data?.monthlyStatus) return [];
+    const pcMap = new Map((paidClientsMonthly || []).map((p) => [p.month, p.total]));
     return data.monthlyStatus
       .filter((r) => r.month && inMonthRange(r.month))
       .map((r) => ({
@@ -506,7 +513,18 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
         'No-Show': r.noShow,
         Cancelled: r.cancelled,
         Rescheduled: r.rescheduled,
-        Paid: r.paid,
+        Paid: usePaidClients ? (pcMap.get(r.month) || 0) : r.paid,
+      }));
+  }, [data, paidClientsMonthly, usePaidClients, monthlyChartFrom, monthlyChartTo]);
+
+  const metaLeadsData = useMemo(() => {
+    if (!data?.metaLeadsMonthly) return [];
+    return data.metaLeadsMonthly
+      .filter((r) => r.month && inMonthRange(r.month))
+      .map((r) => ({
+        monthLabel: fmtMonth(r.month),
+        'Booked Meeting': r.booked,
+        'Not Booked': r.notBooked,
       }));
   }, [data, monthlyChartFrom, monthlyChartTo]);
 
@@ -1044,7 +1062,9 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
                 <p><span className="font-bold text-slate-800">No-Show:</span> lead didn't join the booked meeting.</p>
                 <p><span className="font-bold text-slate-800">Cancelled:</span> meeting was cancelled.</p>
                 <p><span className="font-bold text-slate-800">Rescheduled:</span> meeting moved to a new time.</p>
-                <p><span className="font-bold text-slate-800">Paid:</span> lead converted into a paying customer.</p>
+                <p><span className="font-bold text-slate-800">Paid:</span> {usePaidClients
+                  ? 'paying clients for that month, taken from the clients-tracking system.'
+                  : 'lead converted into a paying customer.'}</p>
               </div>
             </ChartCard>
           </div>
@@ -1074,6 +1094,36 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
               </ResponsiveContainer>
             </div>
           )}
+        </ChartCard>
+      </div>
+
+      {/* ── Row 5c: Meta Leads — Booked vs Not Booked ───────── */}
+      <div className="w-full">
+        <ChartCard
+          title="Meta Leads — Booked vs Not Booked a Meeting"
+          subtitle="Meta (Facebook / Instagram) leads who submitted their details — how many went on to book a meeting and how many did not."
+        >
+          {metaLeadsData.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-slate-500 text-sm">No Meta leads in range</div>
+          ) : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={metaLeadsData} margin={{ top: 12, right: 12, left: 0, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
+                  <Tooltip cursor={cursorStyle} contentStyle={tooltipStyle} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                  <Bar dataKey="Booked Meeting" stackId="meta" fill={COLORS.emerald} />
+                  <Bar dataKey="Not Booked" stackId="meta" fill="#9CA3AF" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          <p className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600">
+            <span className="font-bold text-slate-800">Booked Meeting</span> — Meta lead progressed past "not scheduled" (booked a slot).
+            <span className="font-bold text-slate-800"> Not Booked</span> — Meta lead submitted details but never booked a meeting.
+          </p>
         </ChartCard>
       </div>
 

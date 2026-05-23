@@ -87,7 +87,8 @@ export default function GraphsView() {
   return (
     <div className="space-y-8">
       {/* ── Lead graphs (status, paid vs organic, scheduled) ── */}
-      <QualifiedLeadsGraphs />
+      {/* Paid bar in Monthly Lead Status uses real paid-client counts once loaded. */}
+      <QualifiedLeadsGraphs paidClientsMonthly={pc ? pc.monthly.map((m) => ({ month: m.month, total: m.total })) : undefined} />
 
       {/* ── Paid Clients (from clients-tracking DB) ── */}
       <div className="space-y-4">
