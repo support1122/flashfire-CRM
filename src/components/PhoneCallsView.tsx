@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Phone, PhoneIncoming, PhoneOutgoing, RefreshCcw, Search } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
+import { ChevronDown, ChevronRight, FileText, Loader2, Phone, PhoneIncoming, PhoneOutgoing, RefreshCcw, Search, Sparkles } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
@@ -18,6 +18,7 @@ interface CallRow {
   durationSec?: number;
   recordingUrl?: string;
   transcriptUrl?: string;
+  aiSummary?: string;
 }
 
 const fmtDuration = (s = 0) => {
@@ -49,6 +50,37 @@ export default function PhoneCallsView() {
   const [error, setError] = useState<string | null>(null);
   const [direction, setDirection] = useState<'all' | 'inbound' | 'outbound'>('all');
   const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [transcripts, setTranscripts] = useState<Record<string, { loading: boolean; text?: string; error?: string }>>({});
+
+  const toggleExpand = useCallback(async (call: CallRow) => {
+    setExpanded((prev) => {
+      const n = new Set(prev);
+      if (n.has(call.callId)) n.delete(call.callId);
+      else n.add(call.callId);
+      return n;
+    });
+    // Lazy-fetch the transcript on first expand if a URL exists and we don't have it yet.
+    if (!expanded.has(call.callId) && call.transcriptUrl && !transcripts[call.callId]) {
+      setTranscripts((t) => ({ ...t, [call.callId]: { loading: true } }));
+      try {
+        const headers: HeadersInit = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(
+          `${API_BASE_URL}/api/crm/call-logs/${encodeURIComponent(call.callId)}/transcript`,
+          { headers }
+        );
+        if (!res.ok) throw new Error(`Server ${res.status}`);
+        const text = await res.text();
+        setTranscripts((t) => ({ ...t, [call.callId]: { loading: false, text } }));
+      } catch (e) {
+        setTranscripts((t) => ({
+          ...t,
+          [call.callId]: { loading: false, error: e instanceof Error ? e.message : 'Failed' },
+        }));
+      }
+    }
+  }, [expanded, transcripts, token]);
 
   const fetchRows = useCallback(async () => {
     try {
@@ -149,6 +181,7 @@ export default function PhoneCallsView() {
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                 <tr className="text-left text-slate-500">
+                  <th className="py-2 px-2 font-semibold w-6"></th>
                   <th className="py-2 px-3 font-semibold">When</th>
                   <th className="py-2 px-3 font-semibold">Dir</th>
                   <th className="py-2 px-3 font-semibold">Sales</th>
@@ -160,47 +193,99 @@ export default function PhoneCallsView() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.callId} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="py-2 px-3 text-slate-700 whitespace-nowrap">{fmtTime(r.startedAt)}</td>
-                    <td className="py-2 px-3">
-                      {r.direction === 'inbound' ? (
-                        <PhoneIncoming size={14} className="text-blue-600" />
-                      ) : r.direction === 'outbound' ? (
-                        <PhoneOutgoing size={14} className="text-emerald-600" />
-                      ) : (
-                        <Phone size={14} className="text-slate-400" />
+                {rows.map((r) => {
+                  const isOpen = expanded.has(r.callId);
+                  const hasDetails = !!(r.aiSummary || r.transcriptUrl);
+                  return (
+                    <Fragment key={r.callId}>
+                      <tr className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="py-2 px-2 align-top">
+                          {hasDetails ? (
+                            <button
+                              onClick={() => toggleExpand(r)}
+                              className="p-0.5 rounded hover:bg-slate-200 text-slate-500"
+                              title={isOpen ? 'Hide details' : 'Show what happened on the call'}
+                            >
+                              {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </button>
+                          ) : (
+                            <span className="text-slate-300">·</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-slate-700 whitespace-nowrap">{fmtTime(r.startedAt)}</td>
+                        <td className="py-2 px-3">
+                          {r.direction === 'inbound' ? (
+                            <PhoneIncoming size={14} className="text-blue-600" />
+                          ) : r.direction === 'outbound' ? (
+                            <PhoneOutgoing size={14} className="text-emerald-600" />
+                          ) : (
+                            <Phone size={14} className="text-slate-400" />
+                          )}
+                        </td>
+                        <td className="py-2 px-3 text-slate-700">
+                          <div className="font-semibold">{r.salesName || '—'}</div>
+                          <div className="text-[10px] text-slate-500">{r.salesEmail}</div>
+                        </td>
+                        <td className="py-2 px-3 text-slate-700">
+                          <div className="font-semibold">{r.leadName || '—'}</div>
+                          <div className="text-[10px] text-slate-500">{r.leadEmail || ''}</div>
+                        </td>
+                        <td className="py-2 px-3 text-slate-700 font-mono">{r.leadNumber || '—'}</td>
+                        <td className="py-2 px-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${statusColor(r.status)}`}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-right text-slate-700 font-semibold">{fmtDuration(r.durationSec)}</td>
+                        <td className="py-2 px-3">
+                          {r.recordingUrl ? (
+                            <audio
+                              src={`${API_BASE_URL}/api/crm/call-logs/${encodeURIComponent(r.callId)}/recording`}
+                              controls
+                              preload="none"
+                              className="h-7 w-44"
+                            />
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                      {isOpen && hasDetails && (
+                        <tr className="bg-slate-50/60 border-b border-slate-200">
+                          <td></td>
+                          <td colSpan={8} className="py-3 px-3">
+                            {r.aiSummary && (
+                              <div className="mb-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
+                                <div className="flex items-center gap-1.5 text-indigo-700 font-bold text-[11px] mb-1">
+                                  <Sparkles size={12} /> AI Summary
+                                </div>
+                                <p className="text-[12px] text-slate-800 whitespace-pre-wrap leading-relaxed">{r.aiSummary}</p>
+                              </div>
+                            )}
+                            {r.transcriptUrl && (
+                              <div className="p-3 rounded-lg bg-white border border-slate-200">
+                                <div className="flex items-center gap-1.5 text-slate-700 font-bold text-[11px] mb-1">
+                                  <FileText size={12} /> Transcript
+                                </div>
+                                {transcripts[r.callId]?.loading ? (
+                                  <div className="flex items-center gap-2 text-[11px] text-slate-500">
+                                    <Loader2 size={12} className="animate-spin" /> Loading transcript…
+                                  </div>
+                                ) : transcripts[r.callId]?.error ? (
+                                  <p className="text-[11px] text-rose-600">{transcripts[r.callId]?.error}</p>
+                                ) : (
+                                  <pre className="text-[11px] text-slate-800 whitespace-pre-wrap font-sans leading-relaxed max-h-72 overflow-auto">
+                                    {transcripts[r.callId]?.text || '—'}
+                                  </pre>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td className="py-2 px-3 text-slate-700">
-                      <div className="font-semibold">{r.salesName || '—'}</div>
-                      <div className="text-[10px] text-slate-500">{r.salesEmail}</div>
-                    </td>
-                    <td className="py-2 px-3 text-slate-700">
-                      <div className="font-semibold">{r.leadName || '—'}</div>
-                      <div className="text-[10px] text-slate-500">{r.leadEmail || ''}</div>
-                    </td>
-                    <td className="py-2 px-3 text-slate-700 font-mono">{r.leadNumber || '—'}</td>
-                    <td className="py-2 px-3">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${statusColor(r.status)}`}>
-                        {r.status}
-                      </span>
-                    </td>
-                    <td className="py-2 px-3 text-right text-slate-700 font-semibold">{fmtDuration(r.durationSec)}</td>
-                    <td className="py-2 px-3">
-                      {r.recordingUrl ? (
-                        <audio
-                          src={`${API_BASE_URL}/api/crm/call-logs/${encodeURIComponent(r.callId)}/recording`}
-                          controls
-                          preload="none"
-                          className="h-7 w-44"
-                        />
-                      ) : (
-                        <span className="text-slate-400">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
