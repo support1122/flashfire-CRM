@@ -8,14 +8,30 @@ interface CallRow {
   callId: string;
   direction: 'inbound' | 'outbound' | 'internal';
   status: string;
+  callResult?: string;
+  recordingStatus?: string;
   salesEmail?: string;
   salesName?: string;
+  salesNumber?: string;
+  callerExtNumber?: string;
+  callerDeviceType?: string;
+  callerCountryIso?: string;
   leadName?: string;
   leadEmail?: string;
   leadNumber?: string;
+  calleeExtNumber?: string;
+  calleeCountryIso?: string;
   bookingId?: string;
   startedAt?: string;
+  answeredAt?: string;
+  endedAt?: string;
   durationSec?: number;
+  callType?: string;
+  connectType?: string;
+  international?: boolean;
+  hideCallerId?: boolean;
+  endToEnd?: boolean;
+  source?: 'webhook' | 'sync' | 'unknown';
   recordingUrl?: string;
   transcriptUrl?: string;
   aiSummary?: string;
@@ -33,6 +49,16 @@ const fmtTime = (iso?: string) => {
   const d = new Date(iso);
   return d.toLocaleString();
 };
+
+function Field({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
+  const v = value && String(value).trim() !== '' ? String(value) : '—';
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wide text-slate-400 font-semibold">{label}</div>
+      <div className={`text-[11px] text-slate-800 break-all ${mono ? 'font-mono' : ''}`}>{v}</div>
+    </div>
+  );
+}
 
 const statusColor = (s: string) => {
   if (s === 'answered' || s === 'completed') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
@@ -82,6 +108,9 @@ export default function PhoneCallsView() {
     }
   }, [expanded, transcripts, token]);
 
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
   const fetchRows = useCallback(async () => {
     try {
       setLoading(true);
@@ -103,6 +132,31 @@ export default function PhoneCallsView() {
     }
   }, [token, direction, search]);
 
+  /** Pull fresh data from Zoom (calls /api/crm/call-logs/sync) then refresh the table. */
+  const syncFromZoom = useCallback(async () => {
+    try {
+      setSyncing(true);
+      setSyncMsg(null);
+      const headers: HeadersInit = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/api/crm/call-logs/sync?lookbackDays=30`, {
+        method: 'POST',
+        headers,
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setSyncMsg(json.error || `Sync failed (${res.status})`);
+      } else {
+        setSyncMsg(`Pulled ${json.fetched} call(s) • ${json.matched} matched leads`);
+      }
+      await fetchRows();
+    } catch (e) {
+      setSyncMsg(e instanceof Error ? e.message : 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  }, [token, fetchRows]);
+
   useEffect(() => {
     const t = setTimeout(fetchRows, 300); // debounce search
     return () => clearTimeout(t);
@@ -118,14 +172,26 @@ export default function PhoneCallsView() {
             <p className="text-xs text-slate-500">Zoom Phone calls — auto-matched to leads by number.</p>
           </div>
         </div>
-        <button
-          onClick={fetchRows}
-          disabled={loading}
-          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50"
-          title="Refresh"
-        >
-          <RefreshCcw size={14} className={`text-slate-600 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          {syncMsg && <span className="text-[11px] text-slate-500">{syncMsg}</span>}
+          <button
+            onClick={syncFromZoom}
+            disabled={syncing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold disabled:opacity-50"
+            title="Pull latest from Zoom now (also runs every 5 min)"
+          >
+            <RefreshCcw size={13} className={syncing ? 'animate-spin' : ''} />
+            {syncing ? 'Syncing…' : 'Sync from Zoom'}
+          </button>
+          <button
+            onClick={fetchRows}
+            disabled={loading}
+            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50"
+            title="Refresh table (no Zoom call)"
+          >
+            <RefreshCcw size={14} className={`text-slate-600 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-4 flex flex-wrap items-center gap-3">
@@ -195,7 +261,9 @@ export default function PhoneCallsView() {
               <tbody>
                 {rows.map((r) => {
                   const isOpen = expanded.has(r.callId);
-                  const hasDetails = !!(r.aiSummary || r.transcriptUrl);
+                  // Always allow expand — we show full metadata (Zoom fields)
+                  // even when there is no recording / transcript / AI summary.
+                  const hasDetails = true;
                   return (
                     <Fragment key={r.callId}>
                       <tr className="border-b border-slate-100 hover:bg-slate-50">
@@ -254,6 +322,41 @@ export default function PhoneCallsView() {
                         <tr className="bg-slate-50/60 border-b border-slate-200">
                           <td></td>
                           <td colSpan={8} className="py-3 px-3">
+                            {/* Full metadata grid */}
+                            <div className="mb-3 p-3 rounded-lg bg-white border border-slate-200">
+                              <div className="flex items-center gap-1.5 text-slate-700 font-bold text-[11px] mb-2">
+                                <Phone size={12} /> Call Details
+                              </div>
+                              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-1.5 text-[11px]">
+                                <Field label="Call ID" value={r.callId} mono />
+                                <Field label="Started" value={fmtTime(r.startedAt)} />
+                                <Field label="Answered" value={fmtTime(r.answeredAt)} />
+                                <Field label="Ended" value={fmtTime(r.endedAt)} />
+                                <Field label="Duration" value={fmtDuration(r.durationSec)} />
+                                <Field label="Direction" value={r.direction} />
+                                <Field label="Result" value={r.callResult || r.status} />
+                                <Field label="Recording" value={r.recordingStatus || '—'} />
+                                <Field label="Call type" value={r.callType} />
+                                <Field label="Connect type" value={r.connectType} />
+                                <Field label="International" value={r.international == null ? '—' : r.international ? 'Yes' : 'No'} />
+                                <Field label="End-to-end" value={r.endToEnd == null ? '—' : r.endToEnd ? 'Yes' : 'No'} />
+                                <Field label="Hide caller ID" value={r.hideCallerId == null ? '—' : r.hideCallerId ? 'Yes' : 'No'} />
+                                <Field label="Source" value={r.source} />
+                                <Field label="Sales name" value={r.salesName} />
+                                <Field label="Sales email" value={r.salesEmail} />
+                                <Field label="Sales number" value={r.salesNumber} mono />
+                                <Field label="Sales ext" value={r.callerExtNumber} mono />
+                                <Field label="Sales device" value={r.callerDeviceType} />
+                                <Field label="Sales country" value={r.callerCountryIso} />
+                                <Field label="Lead name" value={r.leadName} />
+                                <Field label="Lead email" value={r.leadEmail} />
+                                <Field label="Lead number" value={r.leadNumber} mono />
+                                <Field label="Lead ext" value={r.calleeExtNumber} mono />
+                                <Field label="Lead country" value={r.calleeCountryIso} />
+                                <Field label="Matched bookingId" value={r.bookingId || '—'} mono />
+                              </div>
+                            </div>
+
                             {r.aiSummary && (
                               <div className="mb-3 p-3 rounded-lg bg-indigo-50 border border-indigo-200">
                                 <div className="flex items-center gap-1.5 text-indigo-700 font-bold text-[11px] mb-1">
