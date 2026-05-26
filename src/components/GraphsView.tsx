@@ -11,8 +11,10 @@ import {
   PieChart,
   Pie,
   Cell,
+  ComposedChart,
+  Line,
 } from 'recharts';
-import { Loader2, RefreshCcw, Users } from 'lucide-react';
+import { Loader2, RefreshCcw, Users, TrendingUp } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 import QualifiedLeadsGraphs from './QualifiedLeadsGraphs';
 
@@ -49,6 +51,61 @@ export default function GraphsView() {
   const [pc, setPc] = useState<PaidClientsData | null>(null);
   const [pcError, setPcError] = useState<string | null>(null);
   const [pcLoading, setPcLoading] = useState(true);
+
+  // Completed → Paid monthly conversion (standalone, not buried in Qualified Leads).
+  const [convMonthly, setConvMonthly] = useState<Array<{ month: string; completed: number; paid: number }>>([]);
+  const [convLoading, setConvLoading] = useState(false);
+
+  const fetchConversion = useCallback(async () => {
+    try {
+      setConvLoading(true);
+      const headers: HeadersInit = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/api/leads/analytics`, { headers });
+      const json = await res.json();
+      if (!res.ok || !json.success) return;
+      const ms = json.data?.monthlyStatus || [];
+      setConvMonthly(ms.map((r: { month: string; completed?: number; paid?: number }) => ({
+        month: r.month,
+        completed: r.completed || 0,
+        paid: r.paid || 0,
+      })));
+    } catch {
+      /* ignore */
+    } finally {
+      setConvLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => { fetchConversion(); }, [fetchConversion]);
+
+  const conversionChart = useMemo(() => {
+    const cap = (() => {
+      const n = new Date();
+      return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+    })();
+    return convMonthly
+      .filter((r) => r.month && r.month <= cap)
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map((r) => {
+        const rate = r.completed > 0 ? Math.round((r.paid / r.completed) * 1000) / 10 : 0;
+        const [y, mo] = r.month.split('-');
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return {
+          monthLabel: `${months[parseInt(mo, 10) - 1] || mo} ${y}`,
+          Completed: r.completed,
+          Paid: r.paid,
+          rate,
+        };
+      });
+  }, [convMonthly]);
+
+  const conversionTotals = useMemo(() => {
+    const c = conversionChart.reduce((s, r) => s + r.Completed, 0);
+    const p = conversionChart.reduce((s, r) => s + r.Paid, 0);
+    const pct = c > 0 ? Math.round((p / c) * 1000) / 10 : 0;
+    return { c, p, pct };
+  }, [conversionChart]);
 
   const fetchPaidClients = useCallback(async () => {
     try {
@@ -89,6 +146,61 @@ export default function GraphsView() {
       {/* ── Lead graphs (status, paid vs organic, scheduled) ── */}
       {/* Paid bar in Monthly Lead Status uses real paid-client counts once loaded. */}
       <QualifiedLeadsGraphs paidClientsMonthly={pc ? pc.monthly.map((m) => ({ month: m.month, total: m.total })) : undefined} />
+
+      {/* ── Completed Meetings → Paid Conversion (standalone) ── */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp size={18} className="text-amber-600" />
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Completed → Paid Conversion</h3>
+              <p className="text-[11px] text-slate-500">
+                {convLoading
+                  ? 'Loading…'
+                  : `${conversionTotals.c} completed · ${conversionTotals.p} paid · overall ${conversionTotals.pct}%`}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={fetchConversion}
+            disabled={convLoading}
+            className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50"
+            title="Refresh"
+          >
+            <RefreshCcw size={14} className={`text-slate-600 ${convLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+        {conversionChart.length === 0 ? (
+          <div className="h-40 flex items-center justify-center text-slate-500 text-sm">
+            {convLoading ? 'Loading…' : 'No data'}
+          </div>
+        ) : (
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={conversionChart} margin={{ top: 12, right: 24, left: 0, bottom: 12 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit="%" width={42} domain={[0, 100]} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(15,23,42,0.04)' }}
+                  contentStyle={{ borderRadius: 8, borderColor: '#E2E8F0', fontSize: 12, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  formatter={(v: number, name: string) => name === 'rate' ? [`${v}%`, 'Conversion'] : [v, name]}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                <Bar yAxisId="left" dataKey="Completed" fill="#22C55E" radius={[4, 4, 0, 0]} />
+                <Bar yAxisId="left" dataKey="Paid" fill="#6366F1" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="rate" name="Conversion %" stroke="#F59E0B" strokeWidth={2} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        <div className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600 space-y-0.5">
+          <p><span className="font-bold text-slate-800">Completed</span> = lead's meeting happened.</p>
+          <p><span className="font-bold text-slate-800">Paid</span> = lead became a paying customer.</p>
+          <p><span className="font-bold text-slate-800">Conversion %</span> = Paid ÷ Completed per month. Higher = sales closing better after meetings.</p>
+        </div>
+      </div>
 
       {/* ── Paid Clients (from clients-tracking DB) ── */}
       <div className="space-y-4">
