@@ -27,7 +27,7 @@ const PERMISSIONS: Array<{ key: CrmModule; label: string; description: string; v
   { key: 'campaign_manager', label: 'Campaign Manager', description: 'UTM campaigns + bookings overview' },
   { key: 'email_campaign', label: 'Email Campaign', description: 'SendGrid email campaigns' },
   { key: 'whatsapp_campaign', label: 'WhatsApp Campaign', description: 'WhatsApp campaigns + scheduling' },
-  { key: 'analytics', label: 'Analytics', description: 'Performance dashboards + insights', viewOnly: true },
+  { key: 'analytics', label: 'Analytics', description: 'Performance dashboards + insights' },
   { key: 'all_data', label: 'All Data', description: 'Unified data view + notes/actions' },
   { key: 'workflows', label: 'Workflows', description: 'Workflow builder + logs' },
   { key: 'leads', label: 'Leads', description: 'MQL / SQL / Converted management + revenue tracking' },
@@ -35,9 +35,9 @@ const PERMISSIONS: Array<{ key: CrmModule; label: string; description: string; v
   { key: 'claim_leads', label: 'Claim Leads', description: 'BDA lead claiming and management' },
   { key: 'meeting_links', label: 'Meeting Info', description: 'Meeting recordings and Google Drive video URLs' },
   { key: 'bda_admin', label: 'BDA Admin', description: 'Approve BDA claims and review notifications' },
-  { key: 'activity_logs', label: 'Activity Log', description: 'View every action across the CRM — who did what, when', viewOnly: true },
-  { key: 'lead_analytics', label: 'Graphs', description: 'Lead graphs — monthly status, paid vs organic, paid clients', viewOnly: true },
-  { key: 'phone_calls', label: 'Phone Calls', description: 'Access Zoom Phone call recordings and per-lead call history', viewOnly: true },
+  { key: 'activity_logs', label: 'Activity Log', description: 'View every action across the CRM — who did what, when' },
+  { key: 'lead_analytics', label: 'Graphs', description: 'Lead graphs — monthly status, paid vs organic, paid clients' },
+  { key: 'phone_calls', label: 'Phone Calls', description: 'Access Zoom Phone call recordings and per-lead call history' },
 ];
 
 type CrmUserRow = {
