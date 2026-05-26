@@ -135,6 +135,21 @@ export default function PhoneCallsView() {
     }
   }, [token, direction, search]);
 
+  const fetchGaps = useCallback(async () => {
+    try {
+      setGapsLoading(true);
+      const headers: HeadersInit = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/api/crm/phone-gaps/no-show?days=60&limit=200`, { headers });
+      const json = await res.json();
+      if (res.ok && json.success) setGaps(json.data || []);
+    } catch {
+      /* ignore — UI degrades gracefully */
+    } finally {
+      setGapsLoading(false);
+    }
+  }, [token]);
+
   /** Pull fresh data from Zoom (calls /api/crm/call-logs/sync) then refresh the table. */
   const syncFromZoom = useCallback(async () => {
     try {
@@ -164,21 +179,6 @@ export default function PhoneCallsView() {
     const t = setTimeout(fetchRows, 300); // debounce search
     return () => clearTimeout(t);
   }, [fetchRows]);
-
-  const fetchGaps = useCallback(async () => {
-    try {
-      setGapsLoading(true);
-      const headers: HeadersInit = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
-      const res = await fetch(`${API_BASE_URL}/api/crm/phone-gaps/no-show?days=60&limit=200`, { headers });
-      const json = await res.json();
-      if (res.ok && json.success) setGaps(json.data || []);
-    } catch {
-      /* ignore — UI degrades gracefully */
-    } finally {
-      setGapsLoading(false);
-    }
-  }, [token]);
 
   useEffect(() => {
     fetchGaps();
