@@ -1928,15 +1928,28 @@ export default function LeadsView({
                           </a>
                           {(() => {
                             const mins = lookupCallMins(row.phone);
-                            if (!mins || mins.calls === 0) return null;
-                            return (
-                              <span
-                                className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1 mt-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200"
-                                title={`${mins.calls} call${mins.calls === 1 ? '' : 's'} • ${mins.seconds}s total`}
-                              >
-                                📞 {mins.minutes} min
-                              </span>
-                            );
+                            if (mins && mins.calls > 0) {
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1 mt-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200"
+                                  title={`${mins.calls} call${mins.calls === 1 ? '' : 's'} • ${mins.seconds}s total`}
+                                >
+                                  📞 {mins.minutes} min
+                                </span>
+                              );
+                            }
+                            // Lead marked No-Show but BDA never called them — flag it.
+                            if (row.status === 'no-show') {
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-0.5 text-[8px] font-bold px-1 mt-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200"
+                                  title="Lead is No-Show but no outbound call was ever made — call them."
+                                >
+                                  📵 Not called
+                                </span>
+                              );
+                            }
+                            return null;
                           })()}
                         </>
                       ) : (

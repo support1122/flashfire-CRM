@@ -12,7 +12,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { Loader2, RefreshCcw, Users } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Phone, RefreshCcw, Users } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 import QualifiedLeadsGraphs from './QualifiedLeadsGraphs';
 
@@ -49,6 +49,28 @@ export default function GraphsView() {
   const [pc, setPc] = useState<PaidClientsData | null>(null);
   const [pcError, setPcError] = useState<string | null>(null);
   const [pcLoading, setPcLoading] = useState(true);
+
+  // No-show leads never called gap panel — same data as Phone Calls tab.
+  const [gaps, setGaps] = useState<Array<{ bookingId: string; clientName?: string; clientEmail?: string; clientPhone?: string; scheduledEventStartTime?: string }>>([]);
+  const [gapsLoading, setGapsLoading] = useState(false);
+  const [gapsOpen, setGapsOpen] = useState(false);
+
+  const fetchGaps = useCallback(async () => {
+    try {
+      setGapsLoading(true);
+      const headers: HeadersInit = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/api/crm/phone-gaps/no-show?days=60&limit=200`, { headers });
+      const json = await res.json();
+      if (res.ok && json.success) setGaps(json.data || []);
+    } catch {
+      /* ignore */
+    } finally {
+      setGapsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => { fetchGaps(); }, [fetchGaps]);
 
   const fetchPaidClients = useCallback(async () => {
     try {
@@ -89,6 +111,78 @@ export default function GraphsView() {
       {/* ── Lead graphs (status, paid vs organic, scheduled) ── */}
       {/* Paid bar in Monthly Lead Status uses real paid-client counts once loaded. */}
       <QualifiedLeadsGraphs paidClientsMonthly={pc ? pc.monthly.map((m) => ({ month: m.month, total: m.total })) : undefined} />
+
+      {/* ── No-show leads never called — surfaced as its own section ── */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setGapsOpen((v) => !v)}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-amber-100/40 transition text-left"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-amber-700 text-base">📵</span>
+            <div>
+              <div className="text-sm font-bold text-amber-900">
+                {gapsLoading ? 'Checking…' : `${gaps.length} no-show lead${gaps.length === 1 ? '' : 's'} never called`}
+              </div>
+              <div className="text-[11px] text-amber-700">
+                Last 60 days · bookingStatus = no-show, zero outbound calls on file.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              role="button"
+              onClick={(e) => { e.stopPropagation(); fetchGaps(); }}
+              className="p-1 rounded hover:bg-amber-100 text-amber-700"
+              title="Re-check now"
+            >
+              <RefreshCcw size={12} className={gapsLoading ? 'animate-spin' : ''} />
+            </span>
+            {gapsOpen ? <ChevronDown size={14} className="text-amber-700" /> : <ChevronRight size={14} className="text-amber-700" />}
+          </div>
+        </button>
+        {gapsOpen && gaps.length > 0 && (
+          <div className="max-h-72 overflow-auto border-t border-amber-200">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-amber-50">
+                <tr className="text-left text-amber-800 border-b border-amber-200">
+                  <th className="py-2 px-3 font-semibold">Lead</th>
+                  <th className="py-2 px-3 font-semibold">Email</th>
+                  <th className="py-2 px-3 font-semibold">Phone</th>
+                  <th className="py-2 px-3 font-semibold">Meeting (no-show)</th>
+                  <th className="py-2 px-3 font-semibold w-24">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gaps.map((g) => (
+                  <tr key={g.bookingId} className="border-b border-amber-100 hover:bg-amber-100/40">
+                    <td className="py-2 px-3 text-slate-800 font-semibold">{g.clientName || '—'}</td>
+                    <td className="py-2 px-3 text-slate-700">{g.clientEmail || '—'}</td>
+                    <td className="py-2 px-3 text-slate-700 font-mono">{g.clientPhone || '—'}</td>
+                    <td className="py-2 px-3 text-slate-600">
+                      {g.scheduledEventStartTime ? new Date(g.scheduledEventStartTime).toLocaleString() : '—'}
+                    </td>
+                    <td className="py-2 px-3">
+                      {g.clientPhone ? (
+                        <a
+                          href={`zoomphonecall://${g.clientPhone.replace(/[^\d+]/g, '')}`}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded bg-orange-500 text-white hover:bg-orange-600"
+                          title={`Call ${g.clientPhone} via Zoom Phone`}
+                        >
+                          <Phone size={11} /> Call
+                        </a>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* ── Paid Clients (from clients-tracking DB) ── */}
       <div className="space-y-4">

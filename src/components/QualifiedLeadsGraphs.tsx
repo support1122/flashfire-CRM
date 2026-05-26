@@ -556,6 +556,31 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
     };
   }, [data]);
 
+  // Monthly conversion — Completed meetings vs Paid customers + conversion rate.
+  const completedVsPaidData = useMemo(() => {
+    if (!data?.monthlyStatus) return [];
+    return data.monthlyStatus
+      .filter((r) => r.month && inMonthRange(r.month))
+      .map((r) => {
+        const completed = r.completed || 0;
+        const paid = r.paid || 0;
+        const rate = completed > 0 ? Math.round((paid / completed) * 1000) / 10 : 0;
+        return {
+          monthLabel: fmtMonth(r.month),
+          Completed: completed,
+          Paid: paid,
+          rate,
+        };
+      });
+  }, [data, monthlyChartFrom, monthlyChartTo]);
+
+  const completedVsPaidTotals = useMemo(() => {
+    const c = completedVsPaidData.reduce((s, r) => s + r.Completed, 0);
+    const p = completedVsPaidData.reduce((s, r) => s + r.Paid, 0);
+    const pct = c > 0 ? Math.round((p / c) * 1000) / 10 : 0;
+    return { completed: c, paid: p, pct };
+  }, [completedVsPaidData]);
+
   // Monthly: meetings scheduled vs not scheduled (derived from monthlyStatus)
   const monthlyMeetingData = useMemo(() => {
     if (!data?.monthlyStatus) return [];
@@ -1164,6 +1189,43 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
             <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5">
               <span className="font-bold text-emerald-700">Organic</span> — everything else: website forms, direct traffic, organic social, referrals, manual entries. No paid-ad marker on the lead.
             </div>
+          </div>
+        </ChartCard>
+      </div>
+
+      {/* ── Row 6b: Completed Meetings → Paid Conversion ────── */}
+      <div className="w-full">
+        <ChartCard
+          title="Completed Meetings → Paid Conversion (Monthly)"
+          subtitle={`Bars = unique leads in each status, per month. Line = Paid ÷ Completed conversion rate. Overall: ${completedVsPaidTotals.completed} completed, ${completedVsPaidTotals.paid} paid → ${completedVsPaidTotals.pct}%.`}
+        >
+          {completedVsPaidData.length === 0 ? (
+            <div className="h-32 flex items-center justify-center text-slate-500 text-sm">No data for selected range</div>
+          ) : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={completedVsPaidData} margin={{ top: 12, right: 24, left: 0, bottom: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit="%" width={42} domain={[0, 100]} />
+                  <Tooltip
+                    cursor={cursorStyle}
+                    contentStyle={tooltipStyle}
+                    formatter={(v: number, name: string) => name === 'rate' ? [`${v}%`, 'Conversion'] : [v, name]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                  <Bar yAxisId="left" dataKey="Completed" fill={COLORS.converted} radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="Paid" fill={COLORS.indigo} radius={[4, 4, 0, 0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="rate" name="Conversion %" stroke={COLORS.amber} strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+          <div className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600">
+            <p><span className="font-bold text-slate-800">Completed:</span> lead's meeting happened.</p>
+            <p><span className="font-bold text-slate-800">Paid:</span> lead became a paying customer.</p>
+            <p><span className="font-bold text-slate-800">Conversion %</span> = Paid ÷ Completed for the month. Higher = sales closing better after meetings.</p>
           </div>
         </ChartCard>
       </div>
