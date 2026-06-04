@@ -46,6 +46,7 @@ type CrmUserRow = {
   name: string;
   permissions: CrmPermission[];
   isActive: boolean;
+  isAdmin?: boolean;
   createdAt?: string;
 };
 
@@ -74,8 +75,11 @@ export default function AdminDashboardPage() {
       return null;
     }
   });
-  const [password, setPassword] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authInfo, setAuthInfo] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
   const [users, setUsers] = useState<CrmUserRow[]>([]);
@@ -86,6 +90,7 @@ export default function AdminDashboardPage() {
   const [editorName, setEditorName] = useState('');
   const [editorPermissions, setEditorPermissions] = useState<CrmPermission[]>([]);
   const [editorIsActive, setEditorIsActive] = useState(true);
+  const [editorIsAdmin, setEditorIsAdmin] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const sortedUsers = useMemo(() => {
@@ -118,29 +123,55 @@ export default function AdminDashboardPage() {
       localStorage.removeItem(ADMIN_TOKEN_KEY);
     } catch {}
     setAdminToken(null);
-    setPassword('');
+    setAdminEmail('');
+    setOtp('');
+    setOtpSent(false);
     setUsers([]);
   };
 
-  const onAdminLogin = async (e: React.FormEvent) => {
+  const requestAdminOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthInfo(null);
+    setAuthLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/crm/admin/otp/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: adminEmail.trim().toLowerCase() }),
+      });
+      const body = await safeJson(res);
+      if (!res.ok) throw new Error(body?.error || 'Failed to send code');
+      setOtpSent(true);
+      setAuthInfo('A 6-digit code was sent to your email.');
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : 'Failed to send code');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const verifyAdminOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
     setAuthLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/api/crm/admin/login`, {
+      const res = await fetch(`${API_BASE_URL}/api/crm/admin/otp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email: adminEmail.trim().toLowerCase(), otp: otp.trim() }),
       });
       const body = await safeJson(res);
-      if (!res.ok || !body?.token) throw new Error(body?.error || 'Invalid password');
+      if (!res.ok || !body?.token) throw new Error(body?.error || 'Invalid code');
       try {
         localStorage.setItem(ADMIN_TOKEN_KEY, body.token);
       } catch {}
       setAdminToken(body.token);
-      setPassword('');
+      setOtp('');
+      setOtpSent(false);
     } catch (e) {
-      setAuthError(e instanceof Error ? e.message : 'Invalid password');
+      setAuthError(e instanceof Error ? e.message : 'Invalid code');
+      setOtp('');
     } finally {
       setAuthLoading(false);
     }
@@ -175,6 +206,7 @@ export default function AdminDashboardPage() {
     setEditorName('');
     setEditorPermissions([]);
     setEditorIsActive(true);
+    setEditorIsAdmin(false);
   };
 
   const onSaveUser = async (e: React.FormEvent) => {
@@ -194,6 +226,7 @@ export default function AdminDashboardPage() {
           name: editorName.trim(),
           permissions: editorPermissions,
           isActive: editorIsActive,
+          isAdmin: editorIsAdmin,
         }),
       });
       const body = await safeJson(res);
@@ -230,6 +263,7 @@ export default function AdminDashboardPage() {
     setEditorName(u.name);
     setEditorPermissions(u.permissions || []);
     setEditorIsActive(u.isActive !== false);
+    setEditorIsAdmin(u.isAdmin === true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -256,38 +290,78 @@ export default function AdminDashboardPage() {
                   <p className="text-red-700 text-sm font-semibold">{authError}</p>
                 </div>
               )}
+              {!authError && authInfo && (
+                <div className="mb-5 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                  <p className="text-emerald-700 text-sm font-semibold">{authInfo}</p>
+                </div>
+              )}
 
-              <form onSubmit={onAdminLogin} className="space-y-5">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2" htmlFor="admin-password">
-                    Admin Password
-                  </label>
-                  <div className="relative">
-                    <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              {!otpSent ? (
+                <form onSubmit={requestAdminOtp} className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2" htmlFor="admin-email">
+                      Admin Email
+                    </label>
+                    <div className="relative">
+                      <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                      <input
+                        id="admin-email"
+                        type="email"
+                        value={adminEmail}
+                        onChange={(e) => setAdminEmail(e.target.value)}
+                        placeholder="you@flashfirehq.com"
+                        className="w-full pl-11 pr-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all bg-white"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={authLoading}
+                    className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-bold hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {authLoading ? 'Sending code…' : 'Send code'}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={verifyAdminOtp} className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2" htmlFor="admin-otp">
+                      Verification code
+                    </label>
                     <input
-                      id="admin-password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter password"
-                      className="w-full pl-11 pr-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all bg-white"
+                      id="admin-otp"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                      placeholder="Enter 6-digit code"
+                      className="w-full text-center tracking-[0.4em] text-lg font-semibold px-4 py-3.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all bg-white"
                       required
                       autoFocus
                     />
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">
-                    This is the same password you mentioned: <span className="font-semibold">flashfire@2025</span>
-                  </p>
-                </div>
 
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-bold hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {authLoading ? 'Signing in…' : 'Access Admin Dashboard'}
-                </button>
-              </form>
+                  <button
+                    type="submit"
+                    disabled={authLoading || otp.length < 6}
+                    className="w-full py-3.5 px-6 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl font-bold hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg shadow-orange-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {authLoading ? 'Verifying…' : 'Access Admin Dashboard'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => { setOtpSent(false); setOtp(''); setAuthError(null); setAuthInfo(null); }}
+                    className="w-full text-sm text-slate-500 hover:text-slate-700"
+                  >
+                    Use a different email
+                  </button>
+                </form>
+              )}
             </div>
           </div>
         </div>
@@ -392,6 +466,20 @@ export default function AdminDashboardPage() {
                   </label>
                 </div>
 
+                <div className="flex items-center gap-3">
+                  <input
+                    id="u-admin"
+                    type="checkbox"
+                    checked={editorIsAdmin}
+                    onChange={(e) => setEditorIsAdmin(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <label htmlFor="u-admin" className="text-sm font-semibold text-slate-700">
+                    Admin access
+                    <span className="block text-xs font-normal text-slate-500">Can sign into this Admin Dashboard via emailed OTP.</span>
+                  </label>
+                </div>
+
                 <div>
                   <div className="text-sm font-extrabold text-slate-900">Module Access</div>
                   <p className="text-xs text-slate-500 mt-1">
@@ -489,6 +577,11 @@ export default function AdminDashboardPage() {
                               ) : (
                                 <span className="text-xs font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200">
                                   Disabled
+                                </span>
+                              )}
+                              {u.isAdmin && (
+                                <span className="text-xs font-bold px-2 py-1 rounded-lg bg-orange-50 text-orange-700 border border-orange-200">
+                                  Admin
                                 </span>
                               )}
                             </div>
