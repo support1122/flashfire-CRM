@@ -174,7 +174,7 @@ export default function LeadsView({
   hideSourceFilter = false,
   dateRangeOnBookingCreatedAt = false,
 }: LeadsViewProps) {
-  const { token, canEdit } = useCrmAuth();
+  const { token, canEdit, user } = useCrmAuth();
   const editable = canEdit('leads');
   const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -1574,9 +1574,11 @@ export default function LeadsView({
                 className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 min-w-[130px] focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
               >
                 <option value="all">All statuses</option>
-                {(['not-scheduled', 'scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[]).map((status) => (
-                  <option key={status} value={status}>{statusLabels[status]}</option>
-                ))}
+                {(['not-scheduled', 'scheduled', 'completed', 'rescheduled', 'no-show', 'canceled', 'ignored', 'paid'] as BookingStatus[])
+                  .filter((status) => !(status === 'paid' && user?.role === 'bda'))
+                  .map((status) => (
+                    <option key={status} value={status}>{statusLabels[status]}</option>
+                  ))}
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
