@@ -160,6 +160,68 @@ const Empty = ({ msg }: { msg: string }) => (
   <div className="h-40 flex items-center justify-center text-slate-400 text-sm">{msg}</div>
 );
 
+// ── Status legend table ────────────────────────────────────────────
+// Shows exactly which DB statuses / fields feed each number in the chart.
+type StatusRow = {
+  metric: string;       // label shown in chart (bar / KPI name)
+  color: string;        // dot colour matching the chart
+  included: string[];   // bookingStatus values that are counted
+  excluded?: string[];  // bookingStatus values explicitly NOT counted
+  field?: string;       // if the filter is a field (not bookingStatus)
+};
+
+const StatusLegendTable = memo(({ rows }: { rows: StatusRow[] }) => (
+  <div className="mt-4 border-t border-slate-100 pt-4">
+    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">
+      What's included in each number
+    </p>
+    <div className="overflow-x-auto">
+      <table className="w-full text-[11px]">
+        <thead>
+          <tr className="border-b border-slate-100">
+            <th className="text-left py-1.5 pr-4 font-semibold text-slate-500 whitespace-nowrap">Chart metric</th>
+            <th className="text-left py-1.5 pr-4 font-semibold text-slate-500 whitespace-nowrap">Statuses / fields INCLUDED</th>
+            <th className="text-left py-1.5 font-semibold text-slate-500 whitespace-nowrap">Statuses EXCLUDED</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.metric} className="border-b border-slate-50 hover:bg-slate-50">
+              <td className="py-1.5 pr-4 whitespace-nowrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: r.color }} />
+                  <span className="font-bold text-slate-800">{r.metric}</span>
+                </div>
+              </td>
+              <td className="py-1.5 pr-4">
+                <div className="flex flex-wrap gap-1">
+                  {r.field
+                    ? <span className="bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 font-mono">{r.field}</span>
+                    : r.included.map(s => (
+                      <span key={s} className="bg-green-50 text-green-700 border border-green-200 rounded px-1.5 py-0.5 font-mono">{s}</span>
+                    ))
+                  }
+                </div>
+              </td>
+              <td className="py-1.5">
+                <div className="flex flex-wrap gap-1">
+                  {r.excluded?.length
+                    ? r.excluded.map(s => (
+                      <span key={s} className="bg-red-50 text-red-600 border border-red-200 rounded px-1.5 py-0.5 font-mono line-through opacity-70">{s}</span>
+                    ))
+                    : <span className="text-slate-300 italic">none</span>
+                  }
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+));
+StatusLegendTable.displayName = 'StatusLegendTable';
+
 // ── Main ───────────────────────────────────────────────────────────
 export default function GraphsView02() {
   const { token } = useCrmAuth();
@@ -416,13 +478,13 @@ export default function GraphsView02() {
           )
         }
 
-        <div className="mt-4 border-t border-slate-100 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1 text-[11px] text-slate-500">
-          <p><span className="font-semibold text-green-700">Completed</span> — meeting took place, BDA marked it done.</p>
-          <p><span className="font-semibold text-indigo-600">Paid</span> — meeting happened AND lead purchased a plan.</p>
-          <p><span className="font-semibold text-rose-500">No-Show</span> — lead did not join the scheduled meeting.</p>
-          <p><span className="font-semibold text-red-600">Cancelled</span> — meeting was cancelled before it occurred.</p>
-          <p><span className="font-semibold text-blue-500">Rescheduled</span> — meeting moved to a new slot.</p>
-        </div>
+        <StatusLegendTable rows={[
+          { metric: 'Completed',   color: COLORS.completed,   included: ['completed'],  excluded: ['scheduled','not-scheduled','no-show','canceled','rescheduled','paid'] },
+          { metric: 'Paid',        color: COLORS.paid,        included: ['paid'],       excluded: ['scheduled','not-scheduled','no-show','canceled','rescheduled','completed'] },
+          { metric: 'No-Show',     color: COLORS.noShow,      included: ['no-show'],    excluded: ['scheduled','not-scheduled','completed','canceled','rescheduled','paid'] },
+          { metric: 'Cancelled',   color: COLORS.cancelled,   included: ['canceled'],   excluded: ['scheduled','not-scheduled','completed','no-show','rescheduled','paid'] },
+          { metric: 'Rescheduled', color: COLORS.rescheduled, included: ['rescheduled'],excluded: ['scheduled','not-scheduled','completed','no-show','canceled','paid'] },
+        ]} />
       </Card>
 
       {/* ── 2. Completed → Paid Conversion Rate ───────────────────── */}
@@ -475,9 +537,12 @@ export default function GraphsView02() {
           )
         }
 
-        <div className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500">
-          A rising orange line = sales closing better after calls. The drop in recent months typically reflects leads still in the pipeline (scheduled but not yet updated to Paid).
-        </div>
+        <StatusLegendTable rows={[
+          { metric: 'Meetings Done',   color: COLORS.completed, included: ['completed', 'paid'],  excluded: ['scheduled','not-scheduled','no-show','canceled','rescheduled'] },
+          { metric: 'Paid',            color: COLORS.paid,      included: ['paid'],               excluded: ['scheduled','not-scheduled','no-show','canceled','rescheduled','completed'] },
+          { metric: 'Conversion %',    color: COLORS.rate,      included: ['paid ÷ (completed + paid) × 100'], excluded: [] },
+        ]} />
+        <p className="mt-2 text-[11px] text-slate-400">A rising orange line = sales closing better after calls. Drop in recent months = leads still scheduled, not yet updated to Paid.</p>
       </Card>
 
       {/* ── 3. Meta Leads vs Booked ─────────────────────────────────── */}
@@ -531,9 +596,13 @@ export default function GraphsView02() {
           )
         }
 
-        <div className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500">
-          Meta lead ads started at significant scale from <strong className="text-slate-700">Feb 2026</strong> onward. Booking rate ~45–55% means roughly half of Meta leads are booking a discovery call.
-        </div>
+        <StatusLegendTable rows={[
+          { metric: 'Meta Leads',    color: COLORS.meta,      included: [],  field: 'leadSource = "meta_lead_ad"' },
+          { metric: 'Booked',        color: COLORS.completed, included: ['completed','paid','scheduled','no-show','canceled','rescheduled'], excluded: ['not-scheduled'] },
+          { metric: 'Not Booked',    color: COLORS.metaNot,   included: ['not-scheduled'], excluded: ['completed','paid','scheduled','no-show','canceled','rescheduled'] },
+          { metric: 'Booking Rate %',color: COLORS.rate,      included: ['booked ÷ total meta leads × 100'], excluded: [] },
+        ]} />
+        <p className="mt-2 text-[11px] text-slate-400">Meta ads started at scale from Feb 2026. Booking rate ~45–55% = roughly half of Meta leads book a discovery call.</p>
       </Card>
 
       {/* ── 4. Monthly Leads by UTM Medium ──────────────────────────── */}
@@ -590,11 +659,13 @@ export default function GraphsView02() {
           )
         }
 
-        <div className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-500">
-          <strong className="text-slate-700">paid</strong> = Meta / Facebook paid ads (utmMedium="paid"). &nbsp;
-          <strong className="text-slate-700">mailc / email</strong> = email campaign outreach. &nbsp;
-          <strong className="text-slate-700">Hero_Section / Website_*</strong> = organic website CTA clicks.
-        </div>
+        <StatusLegendTable rows={[
+          { metric: 'Each bar segment', color: '#94A3B8', included: [], field: 'ALL statuses — no status filter applied' },
+          { metric: 'paid (medium)',     color: UTM_PALETTE[0], included: [], field: 'utmMedium = "paid" → Meta/Facebook ad leads' },
+          { metric: 'mailc / email',     color: UTM_PALETTE[1], included: [], field: 'utmMedium = "mailc" or "email" → email outreach' },
+          { metric: 'Hero_Section / Website_*', color: UTM_PALETTE[2], included: [], field: 'utmMedium = website CTA buttons → organic visits' },
+          { metric: 'direct',            color: UTM_PALETTE[3], included: [], field: 'utmMedium = "direct" → typed URL / no referrer' },
+        ]} />
       </Card>
 
       {/* ── 5. Paid vs Organic Leads Monthly ────────────────────────── */}
@@ -648,14 +719,11 @@ export default function GraphsView02() {
                 </ResponsiveContainer>
               </div>
 
-              <div className="mt-4 border-t border-slate-100 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
-                <div className="rounded-lg bg-orange-50 border border-orange-200 p-2.5">
-                  <span className="font-bold text-orange-700">Paid Ads</span> — utmMedium = <code className="bg-white px-1 rounded">paid</code>, <code className="bg-white px-1 rounded">cpc</code>, <code className="bg-white px-1 rounded">ppc</code>, <code className="bg-white px-1 rounded">paid_social</code>. Mostly Meta / Facebook ad campaigns which started Feb 2026.
-                </div>
-                <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-2.5">
-                  <span className="font-bold text-emerald-700">Organic</span> — email campaigns (mailc/email), direct website visits (Hero_Section, Website_*, direct), manual entries, CSV imports. The dominant channel pre-Feb 2026.
-                </div>
-              </div>
+              <StatusLegendTable rows={[
+                { metric: 'Paid Ads',  color: COLORS.adPaid,  included: [], field: 'utmMedium = "paid" / "cpc" / "ppc" / "paid_social" — ALL statuses counted' },
+                { metric: 'Organic',   color: COLORS.organic, included: [], field: 'everything else: mailc, email, direct, Hero_Section, Website_*, manual, CSV — ALL statuses counted' },
+                { metric: 'Ad Share %',color: COLORS.slate,   included: [], field: 'paid ads ÷ total leads × 100 — no status filter' },
+              ]} />
             </>
           )
         }
