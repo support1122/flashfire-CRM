@@ -47,6 +47,7 @@ type CrmUserRow = {
   permissions: CrmPermission[];
   isActive: boolean;
   isAdmin?: boolean;
+  role?: 'admin' | 'bda';
   createdAt?: string;
 };
 
@@ -91,6 +92,7 @@ export default function AdminDashboardPage() {
   const [editorPermissions, setEditorPermissions] = useState<CrmPermission[]>([]);
   const [editorIsActive, setEditorIsActive] = useState(true);
   const [editorIsAdmin, setEditorIsAdmin] = useState(false);
+  const [editorRole, setEditorRole] = useState<'admin' | 'bda'>('bda');
   const [saving, setSaving] = useState(false);
 
   const sortedUsers = useMemo(() => {
@@ -207,6 +209,7 @@ export default function AdminDashboardPage() {
     setEditorPermissions([]);
     setEditorIsActive(true);
     setEditorIsAdmin(false);
+    setEditorRole('bda');
   };
 
   const onSaveUser = async (e: React.FormEvent) => {
@@ -227,6 +230,7 @@ export default function AdminDashboardPage() {
           permissions: editorPermissions,
           isActive: editorIsActive,
           isAdmin: editorIsAdmin,
+          role: editorRole,
         }),
       });
       const body = await safeJson(res);
@@ -264,6 +268,7 @@ export default function AdminDashboardPage() {
     setEditorPermissions(u.permissions || []);
     setEditorIsActive(u.isActive !== false);
     setEditorIsAdmin(u.isAdmin === true);
+    setEditorRole(u.role ?? 'bda');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -453,6 +458,36 @@ export default function AdminDashboardPage() {
                   />
                 </div>
 
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Role</label>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setEditorRole('admin')}
+                      className={`flex-1 py-2.5 px-4 rounded-xl border-2 text-sm font-bold transition-all ${
+                        editorRole === 'admin'
+                          ? 'border-orange-500 bg-orange-50 text-orange-700'
+                          : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                      }`}
+                    >
+                      Admin
+                      <span className="block text-[10px] font-normal mt-0.5">Full CRM access</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditorRole('bda')}
+                      className={`flex-1 py-2.5 px-4 rounded-xl border-2 text-sm font-bold transition-all ${
+                        editorRole === 'bda'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                      }`}
+                    >
+                      BDA
+                      <span className="block text-[10px] font-normal mt-0.5">Tab-level permissions</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="flex items-center gap-3">
                   <input
                     id="u-active"
@@ -579,9 +614,13 @@ export default function AdminDashboardPage() {
                                   Disabled
                                 </span>
                               )}
-                              {u.isAdmin && (
+                              {u.role === 'admin' || u.isAdmin ? (
                                 <span className="text-xs font-bold px-2 py-1 rounded-lg bg-orange-50 text-orange-700 border border-orange-200">
                                   Admin
+                                </span>
+                              ) : (
+                                <span className="text-xs font-bold px-2 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                                  BDA
                                 </span>
                               )}
                             </div>
