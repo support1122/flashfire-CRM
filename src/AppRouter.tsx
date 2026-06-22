@@ -49,11 +49,39 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Prevents the main CRM login page from being shown when already authenticated
+function RedirectIfAuthenticated({ children }: { children: React.ReactNode }) {
+  const { status } = useCrmAuth();
+  if (status === 'loading') return <LoadingSpinner />;
+  if (status === 'authenticated') return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 export default function AppRouter() {
   return (
     <Suspense fallback={<LoadingSpinner />}>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        {/* Main CRM login — goes to /login, redirects to / after success */}
+        <Route
+          path="/login"
+          element={
+            <RedirectIfAuthenticated>
+              <LoginPage />
+            </RedirectIfAuthenticated>
+          }
+        />
+
+        {/* Main CRM dashboard — requires user auth, else → /login */}
+        <Route
+          path="/"
+          element={
+            <RequireUser>
+              <CrmDashboardPage />
+            </RequireUser>
+          }
+        />
+
+        {/* Admin panel — completely separate, has its own OTP login built-in */}
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route
           path="/admin/analysis"
@@ -63,15 +91,9 @@ export default function AppRouter() {
             </RequireAdmin>
           }
         />
-        <Route
-          path="/"
-          element={
-            <RequireUser>
-              <CrmDashboardPage />
-            </RequireUser>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
+
+        {/* Any unknown URL → main CRM login */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Suspense>
   );
