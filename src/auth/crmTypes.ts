@@ -24,4 +24,5 @@ export interface CrmUser {
   email: string;
   name: string;
   permissions: CrmPermission[];
+  role?: 'admin' | 'bda';
 }
