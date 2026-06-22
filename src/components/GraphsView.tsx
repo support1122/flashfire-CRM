@@ -34,24 +34,16 @@ interface PaidClientsData {
   byPlan: Array<{ plan: string; count: number }>;
 }
 
-// Per-month current-status breakdown for ALL leads (deduped by client) from /api/leads/analytics.
-interface StatusMonthRow {
+// Per form-fill month, deduped by client. "booked" = a real meeting exists
+// (scheduledEventStartTime), not just status. From /api/leads/analytics.
+interface LeadsBookedRow {
   month: string;
-  total: number;
-  completed: number;
-  noShow: number;
-  cancelled: number;
-  rescheduled: number;
-  paid: number;
-  scheduled: number;
-  notScheduled: number;
-}
-// Per-month booked-vs-not for META leads only.
-interface MetaMonthRow {
-  month: string;
-  total: number;
+  leads: number;
   booked: number;
-  notBooked: number;
+  metaLeads: number;
+  metaBooked: number;
+  completed: number;
+  paid: number;
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -77,8 +69,7 @@ export default function GraphsView() {
   const [convLoading, setConvLoading] = useState(false);
 
   // Lead → Meeting-booked data (same /api/leads/analytics call).
-  const [statusMonthly, setStatusMonthly] = useState<StatusMonthRow[]>([]);
-  const [metaMonthly, setMetaMonthly] = useState<MetaMonthRow[]>([]);
+  const [leadsBooked, setLeadsBooked] = useState<LeadsBookedRow[]>([]);
   const [bookingSource, setBookingSource] = useState<'all' | 'meta'>('all');
 
   const fetchConversion = useCallback(async () => {
@@ -95,8 +86,7 @@ export default function GraphsView() {
         completed: r.completed || 0,
         paid: r.paid || 0,
       })));
-      setStatusMonthly((json.data?.monthlyStatus || []) as StatusMonthRow[]);
-      setMetaMonthly((json.data?.metaLeadsMonthly || []) as MetaMonthRow[]);
+      setLeadsBooked((json.data?.leadsVsBooked || []) as LeadsBookedRow[]);
     } catch {
       /* ignore */
     } finally {
@@ -110,19 +100,20 @@ export default function GraphsView() {
   // "Lead filled" = a lead record exists for that month. "Booked" = current status
   // is anything other than not-scheduled (i.e. they got onto the calendar at least once).
   const bookingChart = useMemo(() => {
-    const rows = bookingSource === 'meta'
-      ? metaMonthly.map((r) => ({ month: r.month, leads: r.total, booked: r.booked }))
-      : statusMonthly.map((r) => ({ month: r.month, leads: r.total, booked: r.total - r.notScheduled }));
-    return rows
+    return leadsBooked
       .filter((r) => r.month && r.month <= currentYM)
       .sort((a, b) => a.month.localeCompare(b.month))
-      .map((r) => ({
-        monthLabel: fmtMonth(r.month),
-        Leads: r.leads,
-        Booked: r.booked,
-        rate: r.leads > 0 ? Math.round((r.booked / r.leads) * 1000) / 10 : 0,
-      }));
-  }, [bookingSource, statusMonthly, metaMonthly]);
+      .map((r) => {
+        const leads = bookingSource === 'meta' ? r.metaLeads : r.leads;
+        const booked = bookingSource === 'meta' ? r.metaBooked : r.booked;
+        return {
+          monthLabel: fmtMonth(r.month),
+          Leads: leads,
+          Booked: booked,
+          rate: leads > 0 ? Math.round((booked / leads) * 1000) / 10 : 0,
+        };
+      });
+  }, [bookingSource, leadsBooked]);
 
   const bookingTotals = useMemo(() => {
     const leads = bookingChart.reduce((s, r) => s + r.Leads, 0);
@@ -135,10 +126,10 @@ export default function GraphsView() {
   // Completed counts meetings that actually happened (status completed OR paid, since
   // a paid client necessarily had their meeting). Built from the same status rollup.
   const funnel = useMemo(() => {
-    const sum = (k: keyof StatusMonthRow) => statusMonthly.reduce((s, r) => s + (Number(r[k]) || 0), 0);
-    const leads = sum('total');
-    const booked = leads - sum('notScheduled');
-    const completed = sum('completed') + sum('paid');
+    const sum = (k: keyof LeadsBookedRow) => leadsBooked.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+    const leads = sum('leads');
+    const booked = sum('booked');
+    const completed = sum('completed');
     const paid = sum('paid');
     const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 1000) / 10 : 0);
     return [
@@ -147,7 +138,7 @@ export default function GraphsView() {
       { label: 'Meeting Completed', value: completed, color: '#22C55E', step: pct(completed, booked) },
       { label: 'Paid', value: paid, color: '#6366F1', step: pct(paid, completed) },
     ];
-  }, [statusMonthly]);
+  }, [leadsBooked]);
 
   const conversionChart = useMemo(() => {
     const cap = (() => {
