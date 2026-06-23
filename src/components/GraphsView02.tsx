@@ -862,17 +862,17 @@ export default function GraphsView02() {
             <>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={weeklyData} margin={{ top:10, right:20, left:0, bottom:6 }}>
+                  <BarChart data={weeklyData} margin={{ top:10, right:20, left:0, bottom:6 }} barCategoryGap={granularity === 'daily' ? '5%' : '20%'}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                    <XAxis dataKey="weekLabel" tick={{ fontSize:10 }} tickLine={false} axisLine={{ stroke:'#E2E8F0' }} interval={granularity === 'daily' ? 6 : granularity === 'weekly' ? 1 : 0} />
+                    <XAxis dataKey="weekLabel" tick={{ fontSize:10 }} tickLine={false} axisLine={{ stroke:'#E2E8F0' }} interval={granularity === 'daily' ? 6 : 0} />
                     <YAxis tick={{ fontSize:11 }} tickLine={false} axisLine={false} allowDecimals={false} width={30} />
-                    <Tooltip cursor={CS} contentStyle={TS} />
-                    <Legend wrapperStyle={{ fontSize:11 }} iconType="circle" iconSize={8} />
-                    <Line type="monotone" dataKey="Completed"   stroke={COLORS.completed}   strokeWidth={2} dot={{ r:2, strokeWidth:0, fill:COLORS.completed }}   activeDot={{ r:4 }} />
-                    <Line type="monotone" dataKey="No-Show"     stroke={COLORS.noShow}      strokeWidth={2} dot={{ r:2, strokeWidth:0, fill:COLORS.noShow }}       activeDot={{ r:4 }} />
-                    <Line type="monotone" dataKey="Canceled"    stroke={COLORS.cancelled}   strokeWidth={2} dot={{ r:2, strokeWidth:0, fill:COLORS.cancelled }}    activeDot={{ r:4 }} />
-                    <Line type="monotone" dataKey="Rescheduled" stroke={COLORS.rescheduled} strokeWidth={2} dot={{ r:2, strokeWidth:0, fill:COLORS.rescheduled }}  activeDot={{ r:4 }} />
-                  </ComposedChart>
+                    <Tooltip cursor={{ fill:'rgba(15,23,42,0.03)' }} contentStyle={TS} />
+                    <Legend wrapperStyle={{ fontSize:11 }} iconType="square" iconSize={10} />
+                    <Bar dataKey="Completed"   stackId="o" fill={COLORS.completed}   />
+                    <Bar dataKey="No-Show"     stackId="o" fill={COLORS.noShow}      />
+                    <Bar dataKey="Canceled"    stackId="o" fill={COLORS.cancelled}   />
+                    <Bar dataKey="Rescheduled" stackId="o" fill={COLORS.rescheduled} radius={[4,4,0,0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
 
