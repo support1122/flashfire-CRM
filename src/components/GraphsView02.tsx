@@ -75,11 +75,27 @@ interface MetaMonthly   { month: string; total: number; booked: number; notBooke
 interface UtmMedRow     { month: string; medium: string; count: number }
 interface SrcTypeRow    { month: string; total: number; paid: number; organic: number }
 
+interface UtmStatusRow {
+  month: string; source: string;
+  total: number; booked?: number; notBooked?: number;
+  completed: number; paid: number; noShow: number;
+  cancelled: number; rescheduled: number; scheduled: number; notScheduled: number;
+}
+
+interface WeeklyOutcome {
+  week: string;
+  completed: number; noShow: number; canceled: number; rescheduled: number;
+  metaCompleted: number; metaNoShow: number; metaCanceled: number; metaRescheduled: number;
+}
+
 interface AnalyticsPayload {
   monthlyStatus       : MonthlyStatus[];
   metaLeadsMonthly    : MetaMonthly[];
   utmMediumMonthly    : UtmMedRow[];
+  utmSourceMonthly    : Array<{ month: string; source: string; count: number }>;
+  utmSourceStatus     : UtmStatusRow[];
   monthlySourceType   : SrcTypeRow[];
+  weeklyOutcomes      : WeeklyOutcome[];
 }
 
 // ── Card wrapper ───────────────────────────────────────────────────
@@ -313,27 +329,28 @@ export default function GraphsView02() {
 
   // ──────────────────────────────────────────────────────────────────
   // CHART 3 — Meta leads vs booked meetings monthly
-  // Meta = leadSource = 'meta_lead_ad' (the reliable field from the API).
-  // "Booked" = any status other than 'not-scheduled'.
+  // Uses metaLeadsMonthly (leadSource='meta_lead_ad' OR metaLeadId exists).
+  // Booked = completed + paid + scheduled + no-show + canceled + rescheduled
+  //        = everything except not-scheduled.
   // ──────────────────────────────────────────────────────────────────
   const metaData = useMemo(() => {
     if (!data?.metaLeadsMonthly) return [];
     return data.metaLeadsMonthly
       .filter(r => r.month && r.month <= currentYM)
-      .sort((a,b) => a.month.localeCompare(b.month))
+      .sort((a, b) => a.month.localeCompare(b.month))
       .map(r => ({
-        monthLabel     : fmtMonth(r.month),
-        'Meta Leads'   : r.total,
+        monthLabel      : fmtMonth(r.month),
+        'Meta Leads'    : r.total,
         'Booked Meeting': r.booked,
-        'Not Booked'   : r.notBooked,
-        rate           : r.total > 0 ? Math.round((r.booked/r.total)*1000)/10 : 0,
+        'Not Booked'    : r.notBooked,
+        rate            : r.total > 0 ? Math.round((r.booked / r.total) * 1000) / 10 : 0,
       }));
   }, [data]);
 
   const metaTotals = useMemo(() => {
-    const total  = metaData.reduce((s,r) => s + r['Meta Leads'],    0);
-    const booked = metaData.reduce((s,r) => s + r['Booked Meeting'], 0);
-    return { total, booked, rate: total > 0 ? Math.round((booked/total)*1000)/10 : 0 };
+    const total  = metaData.reduce((s, r) => s + r['Meta Leads'],    0);
+    const booked = metaData.reduce((s, r) => s + r['Booked Meeting'], 0);
+    return { total, booked, rate: total > 0 ? Math.round((booked / total) * 1000) / 10 : 0 };
   }, [metaData]);
 
   // ──────────────────────────────────────────────────────────────────
@@ -394,6 +411,36 @@ export default function GraphsView02() {
     const total   = paid + organic;
     return { paid, organic, total, paidPct: total > 0 ? Math.round((paid/total)*1000)/10 : 0 };
   }, [paidOrganicData]);
+
+  // ──────────────────────────────────────────────────────────────────
+  // CHART 6 — Weekly meeting outcomes (All leads vs Meta leads)
+  // Bucketed by scheduledEventStartTime week. Only from 2026 onwards
+  // (Oct/Nov 2025 had bulk-canceled data spikes that skew the chart).
+  // ──────────────────────────────────────────────────────────────────
+  const [weeklyView, setWeeklyView] = useState<'all' | 'meta'>('all');
+
+  const weeklyData = useMemo(() => {
+    if (!data?.weeklyOutcomes) return [];
+    return data.weeklyOutcomes
+      .filter(r => r.week && r.week >= '2026')
+      .map(r => {
+        const [yr, wk] = r.week.split('-W');
+        const label = `W${wk} '${yr?.slice(2)}`;
+        return weeklyView === 'meta'
+          ? { weekLabel: label, Completed: r.metaCompleted, 'No-Show': r.metaNoShow, Canceled: r.metaCanceled, Rescheduled: r.metaRescheduled }
+          : { weekLabel: label, Completed: r.completed,     'No-Show': r.noShow,      Canceled: r.canceled,      Rescheduled: r.rescheduled };
+      });
+  }, [data, weeklyView]);
+
+  const weeklyTotals = useMemo(() => weeklyData.reduce(
+    (a, r) => ({
+      completed : a.completed  + r.Completed,
+      noShow    : a.noShow     + r['No-Show'],
+      canceled  : a.canceled   + r.Canceled,
+      rescheduled:a.rescheduled+ r.Rescheduled,
+    }),
+    { completed: 0, noShow: 0, canceled: 0, rescheduled: 0 }
+  ), [weeklyData]);
 
   // ── Refresh button ─────────────────────────────────────────────
   const RefreshBtn = (
@@ -548,7 +595,7 @@ export default function GraphsView02() {
       {/* ── 3. Meta Leads vs Booked ─────────────────────────────────── */}
       <Card
         title="Meta Leads vs Booked Meetings"
-        subtitle="Facebook / Instagram lead-ad leads only (leadSource = meta_lead_ad). Booked = any status except not-scheduled."
+        subtitle="Same filter as the Meta Leads tab — leadSource = meta_lead_ad. Booked = completed + paid + scheduled + no-show + canceled + rescheduled."
         icon={Facebook}
         iconColor="text-blue-600"
         badge={RefreshBtn}
@@ -597,12 +644,12 @@ export default function GraphsView02() {
         }
 
         <StatusLegendTable rows={[
-          { metric: 'Meta Leads',    color: COLORS.meta,      included: [],  field: 'leadSource = "meta_lead_ad"' },
+          { metric: 'Meta Leads',    color: COLORS.meta,      included: [],  field: 'leadSource = "meta_lead_ad" — exact same filter as Meta Leads tab' },
           { metric: 'Booked',        color: COLORS.completed, included: ['completed','paid','scheduled','no-show','canceled','rescheduled'], excluded: ['not-scheduled'] },
           { metric: 'Not Booked',    color: COLORS.metaNot,   included: ['not-scheduled'], excluded: ['completed','paid','scheduled','no-show','canceled','rescheduled'] },
           { metric: 'Booking Rate %',color: COLORS.rate,      included: ['booked ÷ total meta leads × 100'], excluded: [] },
         ]} />
-        <p className="mt-2 text-[11px] text-slate-400">Meta ads started at scale from Feb 2026. Booking rate ~45–55% = roughly half of Meta leads book a discovery call.</p>
+        <p className="mt-2 text-[11px] text-slate-400">Filtered to leadSource = meta_lead_ad — matches the Meta Leads tab count per month.</p>
       </Card>
 
       {/* ── 4. Monthly Leads by UTM Medium ──────────────────────────── */}
@@ -723,6 +770,71 @@ export default function GraphsView02() {
                 { metric: 'Paid Ads',  color: COLORS.adPaid,  included: [], field: 'utmMedium = "paid" / "cpc" / "ppc" / "paid_social" — ALL statuses counted' },
                 { metric: 'Organic',   color: COLORS.organic, included: [], field: 'everything else: mailc, email, direct, Hero_Section, Website_*, manual, CSV — ALL statuses counted' },
                 { metric: 'Ad Share %',color: COLORS.slate,   included: [], field: 'paid ads ÷ total leads × 100 — no status filter' },
+              ]} />
+            </>
+          )
+        }
+      </Card>
+
+      {/* ── CHART 6 — Weekly Meeting Outcomes ──────────────────────── */}
+      <Card
+        title="Weekly Meeting Outcomes"
+        subtitle="Bucketed by scheduled meeting date (2026 onwards). Completed = completed + paid."
+        icon={Activity}
+        iconColor="text-green-500"
+        badge={
+          <div className="flex gap-1">
+            <button
+              onClick={() => setWeeklyView('all')}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                weeklyView === 'all'
+                  ? 'bg-slate-700 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >All Leads</button>
+            <button
+              onClick={() => setWeeklyView('meta')}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                weeklyView === 'meta'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >Meta Only</button>
+          </div>
+        }
+      >
+        <KpiStrip items={[
+          { label: 'Completed',   value: weeklyTotals.completed.toLocaleString(),    color: COLORS.completed },
+          { label: 'No-Show',     value: weeklyTotals.noShow.toLocaleString(),       color: COLORS.noShow },
+          { label: 'Canceled',    value: weeklyTotals.canceled.toLocaleString(),     color: COLORS.cancelled },
+          { label: 'Rescheduled', value: weeklyTotals.rescheduled.toLocaleString(),  color: COLORS.rescheduled },
+        ]} />
+
+        {weeklyData.length === 0
+          ? <Empty msg="No weekly outcome data" />
+          : (
+            <>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={weeklyData} margin={{ top:10, right:20, left:0, bottom:6 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                    <XAxis dataKey="weekLabel" tick={{ fontSize:10 }} tickLine={false} axisLine={{ stroke:'#E2E8F0' }} interval={1} />
+                    <YAxis tick={{ fontSize:11 }} tickLine={false} axisLine={false} allowDecimals={false} width={30} />
+                    <Tooltip cursor={CS} contentStyle={TS} />
+                    <Legend wrapperStyle={{ fontSize:11 }} iconType="circle" iconSize={8} />
+                    <Line type="monotone" dataKey="Completed"   stroke={COLORS.completed}   strokeWidth={2} dot={{ r:2, strokeWidth:0, fill:COLORS.completed }}   activeDot={{ r:4 }} />
+                    <Line type="monotone" dataKey="No-Show"     stroke={COLORS.noShow}      strokeWidth={2} dot={{ r:2, strokeWidth:0, fill:COLORS.noShow }}       activeDot={{ r:4 }} />
+                    <Line type="monotone" dataKey="Canceled"    stroke={COLORS.cancelled}   strokeWidth={2} dot={{ r:2, strokeWidth:0, fill:COLORS.cancelled }}    activeDot={{ r:4 }} />
+                    <Line type="monotone" dataKey="Rescheduled" stroke={COLORS.rescheduled} strokeWidth={2} dot={{ r:2, strokeWidth:0, fill:COLORS.rescheduled }}  activeDot={{ r:4 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+
+              <StatusLegendTable rows={[
+                { metric: 'Completed',   color: COLORS.completed,   included: ['completed','paid'],  field: 'bookingStatus = "completed" or "paid"' },
+                { metric: 'No-Show',     color: COLORS.noShow,      included: ['no-show'],           field: 'bookingStatus = "no-show"' },
+                { metric: 'Canceled',    color: COLORS.cancelled,   included: ['canceled'],          field: 'bookingStatus = "canceled"' },
+                { metric: 'Rescheduled', color: COLORS.rescheduled, included: ['rescheduled'],       field: 'bookingStatus = "rescheduled"' },
               ]} />
             </>
           )
