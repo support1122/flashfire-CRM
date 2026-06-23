@@ -412,11 +412,7 @@ export default function GraphsView02() {
     return { paid, organic, total, paidPct: total > 0 ? Math.round((paid/total)*1000)/10 : 0 };
   }, [paidOrganicData]);
 
-  // ──────────────────────────────────────────────────────────────────
-  // CHART 6 — Weekly meeting outcomes (All leads vs Meta leads)
-  // Bucketed by scheduledEventStartTime week. Only from 2026 onwards
-  // (Oct/Nov 2025 had bulk-canceled data spikes that skew the chart).
-  // ──────────────────────────────────────────────────────────────────
+  // ── Chart 6 — Weekly meeting outcomes ─────────────────────────
   const [weeklyView, setWeeklyView] = useState<'all' | 'meta'>('all');
 
   const weeklyData = useMemo(() => {
@@ -434,10 +430,10 @@ export default function GraphsView02() {
 
   const weeklyTotals = useMemo(() => weeklyData.reduce(
     (a, r) => ({
-      completed : a.completed  + r.Completed,
-      noShow    : a.noShow     + r['No-Show'],
-      canceled  : a.canceled   + r.Canceled,
-      rescheduled:a.rescheduled+ r.Rescheduled,
+      completed  : a.completed   + r.Completed,
+      noShow     : a.noShow      + r['No-Show'],
+      canceled   : a.canceled    + r.Canceled,
+      rescheduled: a.rescheduled + r.Rescheduled,
     }),
     { completed: 0, noShow: 0, canceled: 0, rescheduled: 0 }
   ), [weeklyData]);
@@ -776,7 +772,7 @@ export default function GraphsView02() {
         }
       </Card>
 
-      {/* ── CHART 6 — Weekly Meeting Outcomes ──────────────────────── */}
+      {/* ── CHART 6 — Weekly Meeting Outcomes ── */}
       <Card
         title="Weekly Meeting Outcomes"
         subtitle="Bucketed by scheduled meeting date (2026 onwards). Completed = completed + paid."
@@ -831,10 +827,10 @@ export default function GraphsView02() {
               </div>
 
               <StatusLegendTable rows={[
-                { metric: 'Completed',   color: COLORS.completed,   included: ['completed','paid'],  field: 'bookingStatus = "completed" or "paid"' },
-                { metric: 'No-Show',     color: COLORS.noShow,      included: ['no-show'],           field: 'bookingStatus = "no-show"' },
-                { metric: 'Canceled',    color: COLORS.cancelled,   included: ['canceled'],          field: 'bookingStatus = "canceled"' },
-                { metric: 'Rescheduled', color: COLORS.rescheduled, included: ['rescheduled'],       field: 'bookingStatus = "rescheduled"' },
+                { metric: 'Completed',   color: COLORS.completed,   included: ['completed','paid'], field: 'bookingStatus = "completed" or "paid"' },
+                { metric: 'No-Show',     color: COLORS.noShow,      included: ['no-show'],          field: 'bookingStatus = "no-show"' },
+                { metric: 'Canceled',    color: COLORS.cancelled,   included: ['canceled'],         field: 'bookingStatus = "canceled"' },
+                { metric: 'Rescheduled', color: COLORS.rescheduled, included: ['rescheduled'],      field: 'bookingStatus = "rescheduled"' },
               ]} />
             </>
           )
