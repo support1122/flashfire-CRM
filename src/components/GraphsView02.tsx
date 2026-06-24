@@ -917,7 +917,29 @@ export default function GraphsView02() {
                   <XAxis dataKey="label" tick={{ fontSize:11 }} tickLine={false} axisLine={{ stroke:'#E2E8F0' }} />
                   <YAxis tick={{ fontSize:11 }} tickLine={false} axisLine={false} allowDecimals={false} width={34} />
                   <Tooltip cursor={{ fill:'rgba(15,23,42,0.03)' }} contentStyle={TS}
-                    formatter={(v: number, name: string) => [v.toLocaleString(), name]}
+                    content={({ active, payload, label }: any) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0]?.payload || {};
+                      return (
+                        <div style={TS} className="border p-3 min-w-[150px]">
+                          <p className="font-bold text-slate-800 mb-2 text-xs">{label}</p>
+                          <div className="space-y-1 text-xs">
+                            <div className="flex justify-between gap-4">
+                              <span className="text-slate-500">Total No-Shows</span>
+                              <span className="font-bold text-slate-900">{(d.total || 0)}</span>
+                            </div>
+                            <div className="flex justify-between gap-4">
+                              <span style={{ color: COLORS.completed }} className="font-medium">Called</span>
+                              <span className="font-bold">{d['Called'] || 0}</span>
+                            </div>
+                            <div className="flex justify-between gap-4">
+                              <span style={{ color: COLORS.cancelled }} className="font-medium">Not Called</span>
+                              <span className="font-bold">{d['Not Called'] || 0}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }}
                   />
                   <Legend wrapperStyle={{ fontSize:11 }} iconType="square" iconSize={10} />
                   <Bar dataKey="Called"    stackId="s" fill={COLORS.completed} />
