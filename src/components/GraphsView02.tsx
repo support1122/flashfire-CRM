@@ -846,8 +846,8 @@ export default function GraphsView02() {
 
       {/* ── Row 4: Chart 7 — No-Show Trend ── */}
       <Card
-        title="No-Show Trend"
-        subtitle="Meetings where the lead didn't attend — bucketed by scheduled meeting date. Rate = no-shows ÷ total meetings that month/day."
+        title="No-Show Rate — Monthly / Daily"
+        subtitle="Meetings where the lead didn't attend. Rate = no-shows ÷ total meetings. Toggle between monthly overview and daily detail."
         icon={CalendarCheck}
         iconColor="text-pink-500"
         badge={
@@ -900,8 +900,8 @@ export default function GraphsView02() {
 
       {/* ── Chart 8 — No-Show vs Calls Made ── */}
       <Card
-        title="No-Show vs Calls Made"
-        subtitle="Daily view from May 2026 — how many no-shows were followed up with a call vs left uncalled. Data from Zoom call logs."
+        title="No-Show Follow-Up Calls"
+        subtitle="Per day from May 2026: no-shows that received a follow-up call vs those left uncalled. Source: Zoom call logs."
         icon={CalendarCheck}
         iconColor="text-red-500"
         badge={RefreshBtn}
