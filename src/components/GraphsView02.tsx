@@ -90,6 +90,8 @@ interface DailyOutcome   extends OutcomeRow { day:   string }
 interface WeeklyOutcome  extends OutcomeRow { week:  string }
 interface MonthlyOutcome extends OutcomeRow { month: string }
 
+interface NoShowRow { period: string; noShow: number; total: number; rate: number }
+
 interface AnalyticsPayload {
   monthlyStatus       : MonthlyStatus[];
   metaLeadsMonthly    : MetaMonthly[];
@@ -100,6 +102,8 @@ interface AnalyticsPayload {
   weeklyOutcomes      : WeeklyOutcome[];
   dailyOutcomes       : DailyOutcome[];
   monthlyOutcomes     : MonthlyOutcome[];
+  noShowMonthly       : NoShowRow[];
+  noShowDaily         : NoShowRow[];
 }
 
 // ── Card wrapper ───────────────────────────────────────────────────
@@ -477,6 +481,27 @@ export default function GraphsView02() {
     { completed: 0, noShow: 0, canceled: 0, rescheduled: 0 }
   ), [weeklyData]);
 
+  // ── Chart 7 — No-Show Trend ────────────────────────────────────
+  const [noShowGran, setNoShowGran] = useState<'daily' | 'monthly'>('monthly');
+
+  const noShowChartData = useMemo(() => {
+    if (noShowGran === 'daily') {
+      return (data?.noShowDaily ?? []).map(r => {
+        const d = new Date(r.period);
+        const label = `${d.toLocaleString('en', { month: 'short' })} ${d.getDate()}`;
+        return { label, 'No-Show': r.noShow, Total: r.total, rate: r.rate };
+      });
+    }
+    return (data?.noShowMonthly ?? []).map(r => ({
+      label: fmtMonth(r.period), 'No-Show': r.noShow, Total: r.total, rate: r.rate,
+    }));
+  }, [data, noShowGran]);
+
+  const noShowTotals = useMemo(() => noShowChartData.reduce(
+    (a, r) => ({ noShow: a.noShow + r['No-Show'], total: a.total + r.Total }),
+    { noShow: 0, total: 0 }
+  ), [noShowChartData]);
+
   // ── Refresh button ─────────────────────────────────────────────
   const RefreshBtn = (
     <button
@@ -796,6 +821,60 @@ export default function GraphsView02() {
           }
         </Card>
       </div>
+
+      {/* ── Row 4: Chart 7 — No-Show Trend ── */}
+      <Card
+        title="No-Show Trend"
+        subtitle="Meetings where the lead didn't attend — bucketed by scheduled meeting date. Rate = no-shows ÷ total meetings that month/day."
+        icon={CalendarCheck}
+        iconColor="text-pink-500"
+        badge={
+          <div className="flex gap-1">
+            <button onClick={() => setNoShowGran('monthly')}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${noShowGran === 'monthly' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >Monthly</button>
+            <button onClick={() => setNoShowGran('daily')}
+              className={`px-2 py-1 rounded text-xs font-medium transition-colors ${noShowGran === 'daily' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+            >Daily</button>
+          </div>
+        }
+      >
+        <KpiStrip items={[
+          { label: 'No-Shows',   value: noShowTotals.noShow.toLocaleString(), color: COLORS.noShow },
+          { label: 'Total Mtgs', value: noShowTotals.total.toLocaleString(),  color: COLORS.slate },
+          { label: 'Avg Rate',   value: noShowTotals.total > 0 ? `${Math.round(noShowTotals.noShow / noShowTotals.total * 1000) / 10}%` : '—', color: COLORS.rate },
+        ]} />
+
+        {noShowChartData.length === 0
+          ? <Empty msg="No no-show data" />
+          : (
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={noShowChartData} margin={{ top:10, right:50, left:0, bottom:6 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize:10 }} tickLine={false} axisLine={{ stroke:'#E2E8F0' }}
+                    interval={noShowGran === 'daily' ? 6 : 0}
+                  />
+                  <YAxis yAxisId="left"  tick={{ fontSize:11 }} tickLine={false} axisLine={false} allowDecimals={false} width={34} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize:11 }} tickLine={false} axisLine={false} unit="%" width={44} domain={[0, 100]} />
+                  <Tooltip cursor={CS} contentStyle={TS}
+                    formatter={(v: number, name: string) =>
+                      name === 'rate' ? [`${v}%`, 'No-Show Rate'] : [v.toLocaleString(), name]
+                    }
+                  />
+                  <Legend wrapperStyle={{ fontSize:11 }} iconType="circle" iconSize={8} />
+                  <Bar yAxisId="left" dataKey="Total"   fill="#E2E8F0" radius={[4,4,0,0]} name="Total Meetings" />
+                  <Bar yAxisId="left" dataKey="No-Show" fill={COLORS.noShow} radius={[4,4,0,0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="rate" name="No-Show Rate %"
+                    stroke={COLORS.rate} strokeWidth={2.5}
+                    dot={{ r:3, fill:COLORS.rate, strokeWidth:0 }} activeDot={{ r:5 }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )
+        }
+      </Card>
 
     </div>
   );
