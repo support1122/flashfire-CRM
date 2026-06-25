@@ -132,6 +132,10 @@ type LogStatus = 'scheduled' | 'executed' | 'failed' | 'all';
 
 // Template variable mapping - maps template names to their available variables
 const TEMPLATE_VARIABLES: Record<string, { variables: string[]; exampleContent?: string }> = {
+  'plan_followup_123': {
+    variables: ['{{1}}'],
+    exampleContent: 'Hi {{1}},\n\nThank you for speaking with our team.\n\nWe are following up regarding the consultation conducted recently. If you need any assistance related to the plan discussed or would like the payment link to be shared again, please let us know.'
+  },
   'plan_followup_utility_01dd': {
     variables: ['{{1}}', '{{2}}'],
     exampleContent: 'Hi {{1}},\n\nThis is a reminder regarding your recent plan with Flashfire. The payment of {{2}} is still pending.\n\nPlease let us know if you\'d like us to resend the payment link or if you need assistance.\n\nNeed help ?'
