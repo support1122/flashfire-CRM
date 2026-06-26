@@ -655,7 +655,8 @@ export default function GraphsView02() {
         {RefreshBtn}
       </div>
 
-      {/* ── 5 Individual Status Graphs ── */}
+      {/* ── 5 Individual Status Graphs — 2 per row ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {([
         {
           key: 'completed', label: 'Completed', color: COLORS.completed,
@@ -734,6 +735,7 @@ export default function GraphsView02() {
           </div>
         );
       })}
+      </div>
 
       {/* ── Row 1: Charts 1 & 2 ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
