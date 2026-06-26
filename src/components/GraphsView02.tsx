@@ -365,7 +365,9 @@ export default function GraphsView02() {
       .sort((a, b) => a.month.localeCompare(b.month))
       .map(r => {
         const resolved = r.completed + r.paid + r.noShow + r.cancelled;
+        const resolvedWithRescheduled = resolved + r.rescheduled;
         const pct = (val: number) => resolved > 0 ? Math.round((val / resolved) * 1000) / 10 : 0;
+        const pctR = (val: number) => resolvedWithRescheduled > 0 ? Math.round((val / resolvedWithRescheduled) * 1000) / 10 : 0;
         return {
           monthLabel  : fmtMonth(r.month),
           completed   : r.completed,
@@ -378,7 +380,7 @@ export default function GraphsView02() {
           paidPct        : pct(r.paid),
           noShowPct      : pct(r.noShow),
           cancelledPct   : pct(r.cancelled),
-          rescheduledPct : pct(r.rescheduled),
+          rescheduledPct : pctR(r.rescheduled),
         };
       });
   }, [data]);
@@ -395,8 +397,9 @@ export default function GraphsView02() {
       }),
       { completed: 0, paid: 0, noShow: 0, cancelled: 0, rescheduled: 0, resolved: 0 }
     );
-    const pct = (v: number) => tot.resolved > 0 ? Math.round((v / tot.resolved) * 1000) / 10 : 0;
-    return { ...tot, completedPct: pct(tot.completed), paidPct: pct(tot.paid), noShowPct: pct(tot.noShow), cancelledPct: pct(tot.cancelled), rescheduledPct: pct(tot.rescheduled) };
+    const pct  = (v: number) => tot.resolved > 0 ? Math.round((v / tot.resolved) * 1000) / 10 : 0;
+    const pctR = (v: number) => (tot.resolved + tot.rescheduled) > 0 ? Math.round((v / (tot.resolved + tot.rescheduled)) * 1000) / 10 : 0;
+    return { ...tot, completedPct: pct(tot.completed), paidPct: pct(tot.paid), noShowPct: pct(tot.noShow), cancelledPct: pct(tot.cancelled), rescheduledPct: pctR(tot.rescheduled) };
   }, [tabbedChartData]);
 
   const activeTabbedData = useMemo(() => {
