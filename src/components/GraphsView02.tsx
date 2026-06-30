@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import {
   Loader2, RefreshCcw, CalendarCheck, TrendingUp,
-  Facebook, BarChart2, Activity, Users,
+  Facebook, BarChart2, Activity,
 } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 
