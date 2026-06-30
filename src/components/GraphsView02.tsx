@@ -396,8 +396,13 @@ export default function GraphsView02() {
   const fetchBdaPerformance = useCallback(async () => {
     try {
       setBdaLoading(true);
+      // BDA analysis endpoints require crm_admin role — read admin token directly
+      const adminToken =
+        localStorage.getItem('flashfire_crm_admin_token') ||
+        sessionStorage.getItem('flashfire_crm_admin_token') ||
+        token;
       const headers: HeadersInit = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
+      if (adminToken) headers.Authorization = `Bearer ${adminToken}`;
 
       // /api/bda/leads/:email returns all paid bookings (with bdaApprovalStatus per lead)
       // /api/bda/analysis gives overall statusBreakdown (paid/completed counts across all bookings)
