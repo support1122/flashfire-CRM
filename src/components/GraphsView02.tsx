@@ -1392,7 +1392,6 @@ export default function GraphsView02() {
                   { label: 'Approved (Paid)',   value: bdaData.totalApproved,                        color: '#22C55E' },
                   { label: 'Pending',           value: bdaData.totalPending,                         color: '#F97316' },
                   { label: 'Denied',            value: bdaData.totalDenied,                          color: '#EF4444' },
-                  { label: 'Revenue',           value: `$${bdaData.totalRevenue.toLocaleString()}`,  color: '#22C55E' },
                   { label: 'Conversion %',      value: `${bdaData.conversionRate}%`,                 color: '#F97316' },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="flex flex-col rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 min-w-[80px]">
@@ -1483,64 +1482,79 @@ export default function GraphsView02() {
                 <div className="flex flex-col sm:flex-row gap-4 h-64">
 
                   {/* Donut — plan breakdown */}
-                  <div className="flex-1 flex flex-col items-center justify-center">
+                  <div className="flex-1 flex flex-col items-center">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">By Plan (all-time)</p>
                     {bdaData.planBreakdown.length === 0 ? (
-                      <div className="text-slate-400 text-sm">No data</div>
+                      <div className="text-slate-400 text-sm mt-8">No data</div>
                     ) : (
-                      <ResponsiveContainer width="100%" height={180}>
-                        <PieChart>
-                          <Pie
-                            data={bdaData.planBreakdown}
-                            cx="50%" cy="50%"
-                            innerRadius={45} outerRadius={72}
-                            dataKey="count"
-                            nameKey="plan"
-                            paddingAngle={3}
-                            label={({ plan, percent }) => `${plan} ${(percent * 100).toFixed(0)}%`}
-                            labelLine={false}
-                          >
-                            {bdaData.planBreakdown.map((_, i) => (
-                              <Cell key={i} fill={['#6366F1','#22C55E','#F97316','#EF4444'][i % 4]} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(v: number, name: string) => [v, name]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-
-                  {/* Donut — June outcomes */}
-                  <div className="flex-1 flex flex-col items-center justify-center">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">June Outcomes</p>
-                    {bdaData.juneStats.meetings === 0 ? (
-                      <div className="text-slate-400 text-sm">No June data</div>
-                    ) : (() => {
-                      const juneOutcomes = [
-                        { name: 'Paid',      value: bdaData.juneStats.paid,      fill: '#6366F1' },
-                        { name: 'Completed', value: bdaData.juneStats.completed,  fill: '#14B8A6' },
-                        { name: 'No-Show',   value: 46,                           fill: '#FB7185' },
-                        { name: 'Scheduled', value: 48,                           fill: '#3B82F6' },
-                        { name: 'Other',     value: Math.max(0, bdaData.juneStats.meetings - bdaData.juneStats.paid - bdaData.juneStats.completed - 46 - 48), fill: '#94A3B8' },
-                      ].filter(d => d.value > 0);
-                      return (
-                        <ResponsiveContainer width="100%" height={180}>
+                      <>
+                        <ResponsiveContainer width="100%" height={130}>
                           <PieChart>
                             <Pie
-                              data={juneOutcomes}
+                              data={bdaData.planBreakdown}
                               cx="50%" cy="50%"
-                              innerRadius={45} outerRadius={72}
-                              dataKey="value"
-                              nameKey="name"
+                              innerRadius={38} outerRadius={58}
+                              dataKey="count"
+                              nameKey="plan"
                               paddingAngle={3}
-                              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                              labelLine={false}
+                              label={false}
                             >
-                              {juneOutcomes.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                              {bdaData.planBreakdown.map((_, i) => (
+                                <Cell key={i} fill={['#6366F1','#22C55E','#F97316','#EF4444'][i % 4]} />
+                              ))}
                             </Pie>
                             <Tooltip formatter={(v: number, name: string) => [v, name]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
                           </PieChart>
                         </ResponsiveContainer>
+                        <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1">
+                          {bdaData.planBreakdown.map((d, i) => (
+                            <div key={d.plan} className="flex items-center gap-1 text-[10px] text-slate-600">
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: ['#6366F1','#22C55E','#F97316','#EF4444'][i % 4] }} />
+                              {d.plan} ({d.count})
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Donut — June outcomes */}
+                  <div className="flex-1 flex flex-col items-center">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">June Outcomes</p>
+                    {bdaData.juneStats.meetings === 0 ? (
+                      <div className="text-slate-400 text-sm mt-8">No June data</div>
+                    ) : (() => {
+                      const juneOutcomes = [
+                        { name: 'Approved',  value: bdaData.juneStats.paid,      fill: '#6366F1' },
+                        { name: 'Pending',   value: bdaData.juneStats.completed,  fill: '#14B8A6' },
+                      ].filter(d => d.value > 0);
+                      return (
+                        <>
+                          <ResponsiveContainer width="100%" height={130}>
+                            <PieChart>
+                              <Pie
+                                data={juneOutcomes}
+                                cx="50%" cy="50%"
+                                innerRadius={38} outerRadius={58}
+                                dataKey="value"
+                                nameKey="name"
+                                paddingAngle={3}
+                                label={false}
+                              >
+                                {juneOutcomes.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                              </Pie>
+                              <Tooltip formatter={(v: number, name: string) => [v, name]} contentStyle={{ borderRadius: 10, fontSize: 12 }} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 mt-1">
+                            {juneOutcomes.map(d => (
+                              <div key={d.name} className="flex items-center gap-1 text-[10px] text-slate-600">
+                                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: d.fill }} />
+                                {d.name} ({d.value})
+                              </div>
+                            ))}
+                          </div>
+                        </>
                       );
                     })()}
                   </div>
