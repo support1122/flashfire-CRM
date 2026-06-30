@@ -69,6 +69,7 @@ const COLORS = {
   noShow    : '#FB7185',
   cancelled : '#EF4444',
   rescheduled:'#3B82F6',
+  scheduled : '#A78BFA',
   rate      : '#F97316',
   meta      : '#1877F2',
   metaNot   : '#BFDBFE',
@@ -107,8 +108,8 @@ interface UtmStatusRow {
 }
 
 interface OutcomeRow {
-  completed: number; noShow: number; canceled: number; rescheduled: number;
-  metaCompleted: number; metaNoShow: number; metaCanceled: number; metaRescheduled: number;
+  completed: number; noShow: number; canceled: number; rescheduled: number; scheduled: number;
+  metaCompleted: number; metaNoShow: number; metaCanceled: number; metaRescheduled: number; metaScheduled: number;
 }
 interface DailyOutcome   extends OutcomeRow { day:   string }
 interface WeeklyOutcome  extends OutcomeRow { week:  string }
@@ -626,6 +627,7 @@ export default function GraphsView02() {
             'No-Show': isMeta ? r.metaNoShow    : r.noShow,
             Canceled:  isMeta ? r.metaCanceled  : r.canceled,
             Rescheduled: isMeta ? r.metaRescheduled : r.rescheduled,
+            Scheduled: isMeta ? r.metaScheduled : r.scheduled,
           };
         });
     }
@@ -639,6 +641,7 @@ export default function GraphsView02() {
             'No-Show': isMeta ? r.metaNoShow    : r.noShow,
             Canceled:  isMeta ? r.metaCanceled  : r.canceled,
             Rescheduled: isMeta ? r.metaRescheduled : r.rescheduled,
+            Scheduled: isMeta ? r.metaScheduled : r.scheduled,
           };
         });
     }
@@ -654,6 +657,7 @@ export default function GraphsView02() {
           'No-Show': isMeta ? r.metaNoShow    : r.noShow,
           Canceled:  isMeta ? r.metaCanceled  : r.canceled,
           Rescheduled: isMeta ? r.metaRescheduled : r.rescheduled,
+          Scheduled: isMeta ? r.metaScheduled : r.scheduled,
         };
       });
   }, [data, weeklyView, granularity]);
@@ -664,8 +668,9 @@ export default function GraphsView02() {
       noShow     : a.noShow      + r['No-Show'],
       canceled   : a.canceled    + r.Canceled,
       rescheduled: a.rescheduled + r.Rescheduled,
+      scheduled  : a.scheduled   + r.Scheduled,
     }),
-    { completed: 0, noShow: 0, canceled: 0, rescheduled: 0 }
+    { completed: 0, noShow: 0, canceled: 0, rescheduled: 0, scheduled: 0 }
   ), [weeklyData]);
 
   // ── Chart 8 — No-Show vs Calls ────────────────────────────────
@@ -1112,6 +1117,7 @@ export default function GraphsView02() {
             { label: 'No-Show',     value: weeklyTotals.noShow.toLocaleString(),      color: COLORS.noShow },
             { label: 'Canceled',    value: weeklyTotals.canceled.toLocaleString(),    color: COLORS.cancelled },
             { label: 'Rescheduled', value: weeklyTotals.rescheduled.toLocaleString(), color: COLORS.rescheduled },
+            { label: 'Scheduled',   value: weeklyTotals.scheduled.toLocaleString(),   color: COLORS.scheduled },
           ]} />
           {weeklyData.length === 0
             ? <Empty msg="No outcome data" />
@@ -1127,7 +1133,8 @@ export default function GraphsView02() {
                     <Bar dataKey="Completed"   stackId="o" fill={COLORS.completed}   />
                     <Bar dataKey="No-Show"     stackId="o" fill={COLORS.noShow}      />
                     <Bar dataKey="Canceled"    stackId="o" fill={COLORS.cancelled}   />
-                    <Bar dataKey="Rescheduled" stackId="o" fill={COLORS.rescheduled} radius={[4,4,0,0]} />
+                    <Bar dataKey="Rescheduled" stackId="o" fill={COLORS.rescheduled} />
+                    <Bar dataKey="Scheduled"   stackId="o" fill={COLORS.scheduled}   radius={[4,4,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
