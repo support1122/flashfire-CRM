@@ -977,11 +977,40 @@ export default function GraphsView02() {
                     <XAxis dataKey="monthLabel" tick={{ fontSize:11 }} tickLine={false} axisLine={{ stroke:'#E2E8F0' }} />
                     <YAxis yAxisId="left"  tick={{ fontSize:11 }} tickLine={false} axisLine={false} allowDecimals={false} width={34} />
                     <YAxis yAxisId="right" orientation="right" tick={{ fontSize:11 }} tickLine={false} axisLine={false} unit="%" width={44} domain={[0,100]} />
-                    <Tooltip cursor={CS} contentStyle={TS}
-                      formatter={(v:number, name:string) =>
-                        name === 'rate' ? [`${v}%`, 'Booking Rate %'] : [v.toLocaleString(), name]
-                      }
-                    />
+                    <Tooltip cursor={CS} content={({ active, payload, label }: any) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0]?.payload || {};
+                      const total = (d['Not Booked'] || 0) + (d['Booked Meeting'] || 0);
+                      return (
+                        <div style={TS} className="border p-3 min-w-[180px]">
+                          <p className="font-bold text-slate-800 mb-2 text-xs">{label}</p>
+                          <div className="space-y-1 text-xs">
+                            <div className="flex justify-between gap-6">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full" style={{ background: COLORS.metaNot }} />
+                                <span className="text-slate-500">Not Booked</span>
+                              </div>
+                              <span className="font-bold text-slate-900">{(d['Not Booked'] || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between gap-6">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full" style={{ background: COLORS.meta }} />
+                                <span className="text-slate-500">Booked Meeting</span>
+                              </div>
+                              <span className="font-bold text-slate-900">{(d['Booked Meeting'] || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between gap-6">
+                              <span className="text-slate-500" style={{ color: COLORS.rate }}>Booking Rate %</span>
+                              <span className="font-bold" style={{ color: COLORS.rate }}>{d.rate ?? 0}%</span>
+                            </div>
+                            <div className="border-t border-slate-100 pt-1 flex justify-between">
+                              <span className="font-semibold text-slate-600">Total Meta Leads</span>
+                              <span className="font-bold text-slate-900">{total.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }} />
                     <Legend wrapperStyle={{ fontSize:11 }} iconType="circle" iconSize={8} />
                     <Bar yAxisId="left" dataKey="Not Booked"     stackId="m" fill={COLORS.metaNot} />
                     <Bar yAxisId="left" dataKey="Booked Meeting" stackId="m" fill={COLORS.meta} radius={[5,5,0,0]} />
