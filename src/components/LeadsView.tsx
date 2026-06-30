@@ -24,7 +24,6 @@ import {
   Info,
   Trash2,
   FileText,
-  Phone,
   Workflow,
   Plus,
   SlidersHorizontal,
@@ -2195,9 +2194,12 @@ export default function LeadsView({
                           <a
                             href={`zoomphonecall://${row.phone.replace(/[^\d+]/g, '')}`}
                             title={`Call ${row.phone} via Zoom Phone`}
-                            className="inline-flex items-center justify-center p-0.5 rounded bg-blue-500 text-white hover:bg-blue-600 transition flex-shrink-0"
+                            className="inline-flex items-center justify-center p-0.5 rounded border border-slate-200 bg-white text-[#2D8CFF] hover:bg-blue-50 transition flex-shrink-0"
                           >
-                            <Phone size={9} />
+                            {/* Zoom video-camera mark */}
+                            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
+                              <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h7A2.5 2.5 0 0 1 15 7.5v9A2.5 2.5 0 0 1 12.5 19h-7A2.5 2.5 0 0 1 3 16.5v-9Zm14 2.1 3.3-2.4c.6-.4 1.7-.1 1.7.8v8c0 .9-1.1 1.2-1.7.8L17 14.4V9.6Z" />
+                            </svg>
                           </a>
                         )}
                       </div>
