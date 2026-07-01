@@ -430,13 +430,19 @@ export default function GraphsView02() {
   // ──────────────────────────────────────────────────────────────────
   const statusChartData = useMemo(() => {
     if (!data?.monthlyStatus) return [];
+    // Paid = users created that month in the Dashboard DB (actual joined users),
+    // same source as the conversion chart below. grandTotal/noShowBase keep leads
+    // paid so the other status cards stay unchanged.
+    const dashMap: Record<string, number> = {};
+    (paidClients?.monthly ?? []).forEach(m => { dashMap[m.month] = m.total; });
     return data.monthlyStatus
       .filter(r => r.month && r.month >= '2025-10' && r.month <= currentYM)
       .sort((a, b) => a.month.localeCompare(b.month))
       .map(r => {
         const ign = r.ignored ?? 0;
+        const dashPaid    = dashMap[r.month] ?? r.paid;
         const grandTotal  = r.completed + r.paid + r.noShow + r.cancelled + r.rescheduled + ign;
-        const paidBase    = r.completed + r.paid;
+        const paidBase    = r.completed + dashPaid;
         const noShowBase  = r.completed + r.paid + r.noShow;
         const pct = (val: number, base: number) => base > 0 ? Math.round((val / base) * 1000) / 10 : 0;
         const workingDays = workingDaysInMonth(r.month);
@@ -447,7 +453,7 @@ export default function GraphsView02() {
           workingDays,
           completedAvg,
           completed       : r.completed,
-          paid            : r.paid,
+          paid            : dashPaid,
           noShow          : r.noShow,
           cancelled       : r.cancelled,
           rescheduled     : r.rescheduled,
@@ -456,13 +462,13 @@ export default function GraphsView02() {
           paidBase,
           noShowBase,
           completedPct    : pct(r.completed + ign, grandTotal),
-          paidPct         : pct(r.paid, paidBase),
+          paidPct         : pct(dashPaid, paidBase),
           noShowPct       : pct(r.noShow, noShowBase),
           cancelledPct    : pct(r.cancelled, grandTotal),
           rescheduledPct  : pct(r.rescheduled, grandTotal),
         };
       });
-  }, [data]);
+  }, [data, paidClients]);
 
   const statusTotals = useMemo(() => {
     const tot = statusChartData.reduce(
