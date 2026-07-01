@@ -69,6 +69,7 @@ const COLORS = {
   noShow    : '#FB7185',
   cancelled : '#EF4444',
   rescheduled:'#3B82F6',
+  scheduled : '#A78BFA',
   rate      : '#F97316',
   meta      : '#1877F2',
   metaNot   : '#BFDBFE',
@@ -107,8 +108,8 @@ interface UtmStatusRow {
 }
 
 interface OutcomeRow {
-  completed: number; noShow: number; canceled: number; rescheduled: number;
-  metaCompleted: number; metaNoShow: number; metaCanceled: number; metaRescheduled: number;
+  completed: number; noShow: number; canceled: number; rescheduled: number; scheduled: number;
+  metaCompleted: number; metaNoShow: number; metaCanceled: number; metaRescheduled: number; metaScheduled: number;
 }
 interface DailyOutcome   extends OutcomeRow { day:   string }
 interface WeeklyOutcome  extends OutcomeRow { week:  string }
@@ -421,7 +422,7 @@ export default function GraphsView02() {
   // ──────────────────────────────────────────────────────────────────
   // CHARTS — 5 individual status graphs, each with count + % per month
   // Formulas:
-  //   Completed %  : completed ÷ (completed+paid+noShow+cancelled+rescheduled+ignored)
+  //   Completed %  : (completed+ignored) ÷ (completed+paid+noShow+cancelled+rescheduled+ignored)
   //   Paid %       : paid ÷ (completed+paid)
   //   No-Show %    : noShow ÷ (completed+paid+noShow)
   //   Cancelled %  : cancelled ÷ (completed+paid+noShow+cancelled+rescheduled+ignored)
@@ -429,20 +430,13 @@ export default function GraphsView02() {
   // ──────────────────────────────────────────────────────────────────
   const statusChartData = useMemo(() => {
     if (!data?.monthlyStatus) return [];
-    // Paid series = users created that month in the Dashboard DB (actual joined
-    // users), same source as the Conversion chart. Falls back to leads paid only
-    // when the dashboard month is missing. grandTotal/noShowBase keep leads paid
-    // so the other status cards are unchanged.
-    const dashMap: Record<string, number> = {};
-    (paidClients?.monthly ?? []).forEach(m => { dashMap[m.month] = m.total; });
     return data.monthlyStatus
       .filter(r => r.month && r.month >= '2025-10' && r.month <= currentYM)
       .sort((a, b) => a.month.localeCompare(b.month))
       .map(r => {
         const ign = r.ignored ?? 0;
-        const dashPaid    = dashMap[r.month] ?? r.paid;
         const grandTotal  = r.completed + r.paid + r.noShow + r.cancelled + r.rescheduled + ign;
-        const paidBase    = r.completed + dashPaid;
+        const paidBase    = r.completed + r.paid;
         const noShowBase  = r.completed + r.paid + r.noShow;
         const pct = (val: number, base: number) => base > 0 ? Math.round((val / base) * 1000) / 10 : 0;
         const workingDays = workingDaysInMonth(r.month);
@@ -453,7 +447,7 @@ export default function GraphsView02() {
           workingDays,
           completedAvg,
           completed       : r.completed,
-          paid            : dashPaid,
+          paid            : r.paid,
           noShow          : r.noShow,
           cancelled       : r.cancelled,
           rescheduled     : r.rescheduled,
@@ -461,14 +455,14 @@ export default function GraphsView02() {
           grandTotal,
           paidBase,
           noShowBase,
-          completedPct    : pct(r.completed, grandTotal),
-          paidPct         : pct(dashPaid, paidBase),
+          completedPct    : pct(r.completed + ign, grandTotal),
+          paidPct         : pct(r.paid, paidBase),
           noShowPct       : pct(r.noShow, noShowBase),
           cancelledPct    : pct(r.cancelled, grandTotal),
           rescheduledPct  : pct(r.rescheduled, grandTotal),
         };
       });
-  }, [data, paidClients]);
+  }, [data]);
 
   const statusTotals = useMemo(() => {
     const tot = statusChartData.reduce(
@@ -488,7 +482,7 @@ export default function GraphsView02() {
     const pct = (v: number, base: number) => base > 0 ? Math.round((v / base) * 1000) / 10 : 0;
     return {
       ...tot,
-      completedPct   : pct(tot.completed,   tot.grandTotal),
+      completedPct   : pct(tot.completed + tot.ignored, tot.grandTotal),
       paidPct        : pct(tot.paid,         tot.paidBase),
       noShowPct      : pct(tot.noShow,       tot.noShowBase),
       cancelledPct   : pct(tot.cancelled,    tot.grandTotal),
@@ -633,6 +627,7 @@ export default function GraphsView02() {
             'No-Show': isMeta ? r.metaNoShow    : r.noShow,
             Canceled:  isMeta ? r.metaCanceled  : r.canceled,
             Rescheduled: isMeta ? r.metaRescheduled : r.rescheduled,
+            Scheduled: isMeta ? r.metaScheduled : r.scheduled,
           };
         });
     }
@@ -646,6 +641,7 @@ export default function GraphsView02() {
             'No-Show': isMeta ? r.metaNoShow    : r.noShow,
             Canceled:  isMeta ? r.metaCanceled  : r.canceled,
             Rescheduled: isMeta ? r.metaRescheduled : r.rescheduled,
+            Scheduled: isMeta ? r.metaScheduled : r.scheduled,
           };
         });
     }
@@ -661,6 +657,7 @@ export default function GraphsView02() {
           'No-Show': isMeta ? r.metaNoShow    : r.noShow,
           Canceled:  isMeta ? r.metaCanceled  : r.canceled,
           Rescheduled: isMeta ? r.metaRescheduled : r.rescheduled,
+          Scheduled: isMeta ? r.metaScheduled : r.scheduled,
         };
       });
   }, [data, weeklyView, granularity]);
@@ -671,8 +668,9 @@ export default function GraphsView02() {
       noShow     : a.noShow      + r['No-Show'],
       canceled   : a.canceled    + r.Canceled,
       rescheduled: a.rescheduled + r.Rescheduled,
+      scheduled  : a.scheduled   + r.Scheduled,
     }),
-    { completed: 0, noShow: 0, canceled: 0, rescheduled: 0 }
+    { completed: 0, noShow: 0, canceled: 0, rescheduled: 0, scheduled: 0 }
   ), [weeklyData]);
 
   // ── Chart 8 — No-Show vs Calls ────────────────────────────────
@@ -802,7 +800,9 @@ export default function GraphsView02() {
                   <p className="text-[11px] text-slate-500 mt-0.5">
                     {isCompletedAvg
                       ? 'Avg/day = completed ÷ working days (excludes Sundays · current month uses elapsed days only)'
-                      : `% = ${label} ÷ (${subtitle})`}
+                      : key === 'completed'
+                        ? `% = (Completed + Ignored) ÷ (${subtitle})`
+                        : `% = ${label} ÷ (${subtitle})`}
                   </p>
                 </div>
               </div>
@@ -977,11 +977,40 @@ export default function GraphsView02() {
                     <XAxis dataKey="monthLabel" tick={{ fontSize:11 }} tickLine={false} axisLine={{ stroke:'#E2E8F0' }} />
                     <YAxis yAxisId="left"  tick={{ fontSize:11 }} tickLine={false} axisLine={false} allowDecimals={false} width={34} />
                     <YAxis yAxisId="right" orientation="right" tick={{ fontSize:11 }} tickLine={false} axisLine={false} unit="%" width={44} domain={[0,100]} />
-                    <Tooltip cursor={CS} contentStyle={TS}
-                      formatter={(v:number, name:string) =>
-                        name === 'rate' ? [`${v}%`, 'Booking Rate %'] : [v.toLocaleString(), name]
-                      }
-                    />
+                    <Tooltip cursor={CS} content={({ active, payload, label }: any) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0]?.payload || {};
+                      const total = (d['Not Booked'] || 0) + (d['Booked Meeting'] || 0);
+                      return (
+                        <div style={TS} className="border p-3 min-w-[180px]">
+                          <p className="font-bold text-slate-800 mb-2 text-xs">{label}</p>
+                          <div className="space-y-1 text-xs">
+                            <div className="flex justify-between gap-6">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full" style={{ background: COLORS.metaNot }} />
+                                <span className="text-slate-500">Not Booked</span>
+                              </div>
+                              <span className="font-bold text-slate-900">{(d['Not Booked'] || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between gap-6">
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full" style={{ background: COLORS.meta }} />
+                                <span className="text-slate-500">Booked Meeting</span>
+                              </div>
+                              <span className="font-bold text-slate-900">{(d['Booked Meeting'] || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between gap-6">
+                              <span className="text-slate-500" style={{ color: COLORS.rate }}>Booking Rate %</span>
+                              <span className="font-bold" style={{ color: COLORS.rate }}>{d.rate ?? 0}%</span>
+                            </div>
+                            <div className="border-t border-slate-100 pt-1 flex justify-between">
+                              <span className="font-semibold text-slate-600">Total Meta Leads</span>
+                              <span className="font-bold text-slate-900">{total.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }} />
                     <Legend wrapperStyle={{ fontSize:11 }} iconType="circle" iconSize={8} />
                     <Bar yAxisId="left" dataKey="Not Booked"     stackId="m" fill={COLORS.metaNot} />
                     <Bar yAxisId="left" dataKey="Booked Meeting" stackId="m" fill={COLORS.meta} radius={[5,5,0,0]} />
@@ -1117,6 +1146,7 @@ export default function GraphsView02() {
             { label: 'No-Show',     value: weeklyTotals.noShow.toLocaleString(),      color: COLORS.noShow },
             { label: 'Canceled',    value: weeklyTotals.canceled.toLocaleString(),    color: COLORS.cancelled },
             { label: 'Rescheduled', value: weeklyTotals.rescheduled.toLocaleString(), color: COLORS.rescheduled },
+            { label: 'Scheduled',   value: weeklyTotals.scheduled.toLocaleString(),   color: COLORS.scheduled },
           ]} />
           {weeklyData.length === 0
             ? <Empty msg="No outcome data" />
@@ -1132,7 +1162,8 @@ export default function GraphsView02() {
                     <Bar dataKey="Completed"   stackId="o" fill={COLORS.completed}   />
                     <Bar dataKey="No-Show"     stackId="o" fill={COLORS.noShow}      />
                     <Bar dataKey="Canceled"    stackId="o" fill={COLORS.cancelled}   />
-                    <Bar dataKey="Rescheduled" stackId="o" fill={COLORS.rescheduled} radius={[4,4,0,0]} />
+                    <Bar dataKey="Rescheduled" stackId="o" fill={COLORS.rescheduled} />
+                    <Bar dataKey="Scheduled"   stackId="o" fill={COLORS.scheduled}   radius={[4,4,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
