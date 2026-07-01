@@ -424,7 +424,7 @@ export default function GraphsView02() {
   // Formulas:
   //   Completed %  : (completed+ignored) ÷ (completed+paid+noShow+cancelled+rescheduled+ignored)
   //   Paid %       : paid ÷ (completed+paid)
-  //   No-Show %    : noShow ÷ (completed+paid+noShow)
+  //   No-Show %    : noShow ÷ (completed+paid+noShow+ignored)
   //   Cancelled %  : cancelled ÷ (completed+paid+noShow+cancelled+rescheduled+ignored)
   //   Rescheduled %: rescheduled ÷ (completed+paid+noShow+cancelled+rescheduled+ignored)
   // ──────────────────────────────────────────────────────────────────
@@ -443,7 +443,7 @@ export default function GraphsView02() {
         const dashPaid    = dashMap[r.month] ?? r.paid;
         const grandTotal  = r.completed + r.paid + r.noShow + r.cancelled + r.rescheduled + ign;
         const paidBase    = r.completed + dashPaid;
-        const noShowBase  = r.completed + r.paid + r.noShow;
+        const noShowBase  = r.completed + r.paid + r.noShow + ign;
         const pct = (val: number, base: number) => base > 0 ? Math.round((val / base) * 1000) / 10 : 0;
         const workingDays = workingDaysInMonth(r.month);
         const completedAvg = workingDays > 0 ? Math.round((r.completed / workingDays) * 10) / 10 : 0;
@@ -767,7 +767,7 @@ export default function GraphsView02() {
         {
           key: 'noShow', label: 'No-Show', color: COLORS.noShow,
           countKey: 'noShow', pctKey: 'noShowPct', denomKey: 'noShowBase',
-          subtitle: 'completed + paid + no-show',
+          subtitle: 'completed + paid + no-show + ignored',
         },
         {
           key: 'cancelled', label: 'Cancelled', color: COLORS.cancelled,
