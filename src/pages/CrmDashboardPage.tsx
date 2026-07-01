@@ -20,6 +20,7 @@ import {
   Activity,
   Phone,
   FileText,
+  CreditCard,
 } from 'lucide-react';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
@@ -42,6 +43,7 @@ const MetaLeadsView = React.lazy(() => import('../components/MetaLeadsView'));
 const ActivityLogView = React.lazy(() => import('../components/ActivityLogView'));
 const GraphsView = React.lazy(() => import('../components/GraphsView'));
 const GraphsView02 = React.lazy(() => import('../components/GraphsView02'));
+const StripeDataView = React.lazy(() => import('../components/StripeDataView'));
 const PhoneCallsView = React.lazy(() => import('../components/PhoneCallsView'));
 const EmailTemplateBuilder = React.lazy(() => import('../components/EmailTemplateBuilder'));
 
@@ -56,7 +58,7 @@ function TabSpinner() {
 }
 
 
-type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs' | 'graphs02' | 'phone' | 'email_templates';
+type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs' | 'graphs02' | 'stripe_data' | 'phone' | 'email_templates';
 
 const TAB_CONFIG: Array<{
   tab: Tab;
@@ -78,6 +80,7 @@ const TAB_CONFIG: Array<{
   { tab: 'activity', permission: 'activity_logs', label: 'Activity Log', icon: Activity },
   { tab: 'graphs', permission: 'lead_analytics', label: 'Graphs', icon: BarChart3 },
   { tab: 'graphs02', permission: 'lead_analytics', label: 'Graphs 02', icon: BarChart3 },
+  { tab: 'stripe_data', permission: 'lead_analytics', label: 'Stripe Data', icon: CreditCard },
   { tab: 'phone', permission: 'phone_calls', label: 'Phone Calls', icon: Phone },
   { tab: 'email_templates', permission: 'email_campaign', label: 'Email Templates', icon: FileText },
 ];
@@ -453,6 +456,7 @@ export default function CrmDashboardPage() {
                 {activeTab === 'activity' && <ActivityLogView />}
                 {activeTab === 'graphs' && <GraphsView />}
                 {activeTab === 'graphs02' && <GraphsView02 />}
+                {activeTab === 'stripe_data' && <StripeDataView />}
                 {activeTab === 'phone' && <PhoneCallsView />}
                 {activeTab === 'email_templates' && <EmailTemplateBuilder />}
               </Suspense>
