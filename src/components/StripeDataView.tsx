@@ -41,6 +41,15 @@ function fmtMonthLabel(ym: string): string {
 
 type SortKey = 'date' | 'amount' | 'email' | 'planName';
 
+const PLAN_BUCKETS = [
+  { key: 'executive',    label: 'Executive',    match: (p: string) => p.toLowerCase().includes('executive') && !p.toLowerCase().includes('upgrade') },
+  { key: 'professional', label: 'Professional', match: (p: string) => p.toLowerCase().includes('professional') && !p.toLowerCase().includes('upgrade') },
+  { key: 'ignite',       label: 'Ignite',       match: (p: string) => p.toLowerCase().includes('ignite') && !p.toLowerCase().includes('upgrade') },
+  { key: 'prime',        label: 'Prime',        match: (p: string) => p.toLowerCase().includes('prime') && !p.toLowerCase().includes('upgrade') },
+  { key: 'addon',        label: 'Add-on',       match: (p: string) => p.toLowerCase().includes('add-on') || p.toLowerCase().includes('add on') },
+  { key: 'upgrade',      label: 'Upgrade',      match: (p: string) => p.toLowerCase().includes('upgrade') },
+] as const;
+
 export default function StripeDataView() {
   const { token } = useCrmAuth();
   const [month, setMonth] = useState<string>(currentYearMonth());
@@ -93,6 +102,16 @@ export default function StripeDataView() {
   };
 
   const isCurrentMonth = month === currentYearMonth();
+
+  const planBreakdown = useMemo(() => {
+    if (!data) return [];
+    return PLAN_BUCKETS.map((bucket) => {
+      const rows = data.rows.filter((r) => bucket.match(r.planName));
+      const usd = rows.filter((r) => r.currency === 'USD').reduce((s, r) => s + r.amount, 0);
+      const cad = rows.filter((r) => r.currency === 'CAD').reduce((s, r) => s + r.amount, 0);
+      return { ...bucket, count: rows.length, usd, cad };
+    }).filter((b) => b.count > 0);
+  }, [data]);
 
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
@@ -161,6 +180,30 @@ export default function StripeDataView() {
               <div className="text-lg font-extrabold text-slate-900">{data.count}</div>
             </div>
           </div>
+
+          {planBreakdown.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Plan Breakdown</p>
+              <div className="flex flex-wrap gap-3">
+                {planBreakdown.map((b) => (
+                  <div key={b.key} className="bg-white border border-slate-200 rounded-2xl px-5 py-3 shadow-sm min-w-[140px]">
+                    <div className="text-[11px] text-slate-500 uppercase tracking-wide mb-1">{b.label}</div>
+                    {b.usd > 0 && (
+                      <div className="text-sm font-bold text-slate-900">
+                        ${b.usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-normal text-slate-400">USD</span>
+                      </div>
+                    )}
+                    {b.cad > 0 && (
+                      <div className="text-sm font-bold text-slate-900">
+                        ${b.cad.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-xs font-normal text-slate-400">CAD</span>
+                      </div>
+                    )}
+                    <div className="text-xs text-slate-400 mt-1">{b.count} payment{b.count !== 1 ? 's' : ''}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             <table className="w-full text-sm">
