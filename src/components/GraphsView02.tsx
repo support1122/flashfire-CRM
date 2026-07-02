@@ -745,6 +745,10 @@ export default function GraphsView02() {
     );
   }, [data, callsGranularity]);
 
+  const stripeChartData = useMemo(() =>
+    stripeData.map((r: { month: string; usd: number; cad: number; count: number }) => ({ ...r, monthLabel: fmtMonth(r.month) }))
+  , [stripeData]);
+
   // ── Refresh button ─────────────────────────────────────────────
   const RefreshBtn = (
     <button
@@ -774,10 +778,6 @@ export default function GraphsView02() {
       </div>
     );
   }
-
-  const stripeChartData = useMemo(() =>
-    stripeData.map(r => ({ ...r, monthLabel: fmtMonth(r.month) }))
-  , [stripeData]);
 
   // ── Render ─────────────────────────────────────────────────────
   return (
