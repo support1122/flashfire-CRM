@@ -351,11 +351,47 @@ const AvgTip = ({ active, payload, label, color }: any) => {
   );
 };
 
+// ── Stripe Revenue tooltip ─────────────────────────────────────────
+const StripeRevTip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload || {};
+  return (
+    <div style={TS} className="border p-3 min-w-[170px]">
+      <p className="font-bold text-slate-800 mb-2 text-xs">{label}</p>
+      <div className="space-y-1 text-xs">
+        {d.usd > 0 && (
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#6366F1' }} />
+              <span className="text-slate-600 font-medium">USD</span>
+            </div>
+            <span className="font-bold text-slate-900">${d.usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        )}
+        {d.cad > 0 && (
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: '#F97316' }} />
+              <span className="text-slate-600 font-medium">CAD</span>
+            </div>
+            <span className="font-bold text-slate-900">${d.cad.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        )}
+        <div className="border-t border-slate-100 pt-1 flex justify-between">
+          <span className="text-slate-500 font-semibold">Payments</span>
+          <span className="font-bold text-slate-900">{d.count}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Main ───────────────────────────────────────────────────────────
 export default function GraphsView02() {
   const { token } = useCrmAuth();
   const [data,         setData]         = useState<AnalyticsPayload | null>(null);
   const [paidClients,  setPaidClients]  = useState<PaidClientsPayload | null>(null);
+  const [stripeData,   setStripeData]   = useState<{ month: string; usd: number; cad: number; count: number }[]>([]);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState<string | null>(null);
   const [completedView, setCompletedView] = useState<'total' | 'average'>('total');
@@ -366,15 +402,18 @@ export default function GraphsView02() {
       setError(null);
       const headers: HeadersInit = {};
       if (token) headers.Authorization = `Bearer ${token}`;
-      const [res, pcRes] = await Promise.all([
+      const [res, pcRes, stripeRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/leads/analytics`, { headers }),
         fetch(`${API_BASE_URL}/api/crm/paid-clients/analytics`, { headers }),
+        fetch(`${API_BASE_URL}/api/crm/stripe/summary`, { headers }),
       ]);
       const json   = await res.json();
       const pcJson = await pcRes.json();
+      const stripeJson = await stripeRes.json();
       if (!res.ok || !json.success) throw new Error(json.message || `HTTP ${res.status}`);
       setData(json.data as AnalyticsPayload);
       if (pcRes.ok && pcJson.success) setPaidClients(pcJson.data as PaidClientsPayload);
+      if (stripeRes.ok && stripeJson.success) setStripeData(stripeJson.data);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -736,6 +775,10 @@ export default function GraphsView02() {
     );
   }
 
+  const stripeChartData = useMemo(() =>
+    stripeData.map(r => ({ ...r, monthLabel: fmtMonth(r.month) }))
+  , [stripeData]);
+
   // ── Render ─────────────────────────────────────────────────────
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
@@ -750,6 +793,28 @@ export default function GraphsView02() {
         </div>
         {RefreshBtn}
       </div>
+
+      {/* ── Stripe Revenue — Month Wise ── */}
+      {stripeChartData.length > 0 && (
+        <Card
+          title="Stripe Revenue — Month Wise"
+          subtitle="USD & CAD totals per month · all time"
+          icon={TrendingUp}
+          iconColor="text-indigo-500"
+        >
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={stripeChartData} barCategoryGap="30%" barGap={4}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+              <XAxis dataKey="monthLabel" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+              <Tooltip content={<StripeRevTip />} cursor={CS} />
+              <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+              <Bar dataKey="usd" name="USD" fill="#6366F1" radius={[4,4,0,0]} />
+              <Bar dataKey="cad" name="CAD" fill="#F97316" radius={[4,4,0,0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
 
       {/* ── 5 Individual Status Graphs — 2 per row ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
