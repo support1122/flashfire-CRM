@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, RefreshCcw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, RefreshCcw, ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
+
+const STRIPE_DATA_PASSWORD = 'flashfire@1122334455';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -50,11 +52,53 @@ const PLAN_BUCKETS = [
   { key: 'upgrade',      label: 'Upgrade',      match: (p: string) => p.toLowerCase().includes('upgrade') },
 ] as const;
 
+function StripeDataPasswordGate({ onUnlock }: { onUnlock: () => void }) {
+  const [input, setInput] = useState('');
+  const [error, setError] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (input === STRIPE_DATA_PASSWORD) {
+      onUnlock();
+    } else {
+      setError(true);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center py-28 px-6">
+      <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 w-full max-w-sm text-center">
+        <div className="mx-auto mb-4 w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center">
+          <Lock size={20} className="text-orange-500" />
+        </div>
+        <h3 className="text-lg font-extrabold text-slate-900">Stripe Data is locked</h3>
+        <p className="text-xs text-slate-500 mt-1 mb-5">Enter the password to view this section.</p>
+        <input
+          type="password"
+          value={input}
+          onChange={(e) => { setInput(e.target.value); setError(false); }}
+          autoFocus
+          className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 ${error ? 'border-rose-300 focus:ring-rose-200' : 'border-slate-200 focus:ring-orange-200'}`}
+          placeholder="Password"
+        />
+        {error && <p className="text-rose-600 text-xs mt-2">Incorrect password.</p>}
+        <button
+          type="submit"
+          className="mt-4 w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-lg py-2 transition"
+        >
+          Unlock
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export default function StripeDataView() {
+  const [unlocked, setUnlocked] = useState(false);
   const { token } = useCrmAuth();
   const [month, setMonth] = useState<string>(currentYearMonth());
   const [data, setData] = useState<StripeMonthPayload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -77,7 +121,7 @@ export default function StripeDataView() {
     }
   }, [token, month]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { if (unlocked) fetchData(); }, [fetchData, unlocked]);
 
   const sortedRows = useMemo(() => {
     if (!data) return [];
@@ -102,6 +146,10 @@ export default function StripeDataView() {
   };
 
   const isCurrentMonth = month === currentYearMonth();
+
+  if (!unlocked) {
+    return <StripeDataPasswordGate onUnlock={() => setUnlocked(true)} />;
+  }
 
   const planBreakdown = useMemo(() => {
     if (!data) return [];
