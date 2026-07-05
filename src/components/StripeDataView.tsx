@@ -147,10 +147,6 @@ export default function StripeDataView() {
 
   const isCurrentMonth = month === currentYearMonth();
 
-  if (!unlocked) {
-    return <StripeDataPasswordGate onUnlock={() => setUnlocked(true)} />;
-  }
-
   const planBreakdown = useMemo(() => {
     if (!data) return [];
     return PLAN_BUCKETS.map((bucket) => {
@@ -160,6 +156,10 @@ export default function StripeDataView() {
       return { ...bucket, count: rows.length, usd, cad };
     }).filter((b) => b.count > 0);
   }, [data]);
+
+  if (!unlocked) {
+    return <StripeDataPasswordGate onUnlock={() => setUnlocked(true)} />;
+  }
 
   return (
     <div className="space-y-6 p-6 max-w-7xl mx-auto">
