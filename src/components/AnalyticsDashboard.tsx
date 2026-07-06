@@ -51,6 +51,7 @@ import {
   clearAllCache,
 } from '../utils/dataCache';
 import { usePlanConfig, type PlanOption, type PlanName } from '../context/PlanConfigContext';
+import { useCrmAuth } from '../auth/CrmAuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -117,6 +118,7 @@ interface AnalyticsDashboardProps {
 
 export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDashboardProps) {
   const { planOptions } = usePlanConfig();
+  const { user } = useCrmAuth();
   const [bookings, setBookings] = useState<Booking[]>(() => {
     const cached = getCachedBookings<Booking>();
     return cached || [];
@@ -526,6 +528,9 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
         },
         body: JSON.stringify({
           status,
+          changedBy: user?.email,
+          changedByName: user?.name,
+          source: user?.role === 'admin' ? 'admin' : 'bda',
           ...(planPayload ? { plan: planPayload } : {}),
         }),
       });

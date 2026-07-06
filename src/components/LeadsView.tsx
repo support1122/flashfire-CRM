@@ -40,6 +40,8 @@ import NotesModal from './NotesModal';
 import FollowUpModal, { type FollowUpData } from './FollowUpModal';
 import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
 import CustomWorkflowsModal from './CustomWorkflowsModal';
+import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPopover';
+import { formatRelativeTime } from '../utils/relativeTime';
 
 const QualifiedLeadsGraphs = lazy(() => import('./QualifiedLeadsGraphs'));
 
@@ -152,6 +154,17 @@ interface Booking {
     name: string;
     claimedAt: string;
   };
+  statusChangedBy?: string | null;
+  statusChangedByName?: string | null;
+  statusChangedAt?: string | null;
+  statusChangeSource?: string | null;
+  statusHistory?: StatusHistoryEntry[];
+  calendlyHost?: {
+    email?: string | null;
+    name?: string | null;
+    calendlyUserUri?: string | null;
+    matchedCrmUser?: boolean;
+  } | null;
 }
 
 interface LeadsViewProps {
@@ -627,6 +640,11 @@ export default function LeadsView({
         leadSource: booking.leadSource,
         metaLeadId: booking.metaLeadId ?? undefined,
         metaFormName: booking.metaFormName,
+        statusChangedByName: booking.statusChangedByName,
+        statusChangedAt: booking.statusChangedAt,
+        statusChangeSource: booking.statusChangeSource,
+        statusHistory: booking.statusHistory,
+        calendlyHost: booking.calendlyHost,
       };
     }).filter((row) => {
       if (row.name === 'Unknown Client' && row.email.includes('calendly.placeholder')) {
@@ -680,7 +698,7 @@ export default function LeadsView({
       paid: 0,
     };
     filteredData.forEach((lead) => {
-      if (lead.status && stats.hasOwnProperty(lead.status)) {
+      if (lead.status && Object.prototype.hasOwnProperty.call(stats, lead.status)) {
         stats[lead.status as keyof typeof stats]++;
       }
     });
@@ -1047,8 +1065,11 @@ export default function LeadsView({
           }
           : undefined;
 
-      const requestBody: any = {
+      const requestBody: Record<string, unknown> = {
         status,
+        changedBy: user?.email,
+        changedByName: user?.name,
+        source: user?.role === 'admin' ? 'admin' : 'bda',
       };
 
       if (planPayload) {
@@ -1084,6 +1105,10 @@ export default function LeadsView({
               ...booking,
               bookingStatus: status,
               paymentPlan: updatedBooking?.paymentPlan || planPayload || booking.paymentPlan,
+              statusChangedByName: updatedBooking?.statusChangedByName ?? booking.statusChangedByName,
+              statusChangedAt: updatedBooking?.statusChangedAt ?? booking.statusChangedAt,
+              statusChangeSource: updatedBooking?.statusChangeSource ?? booking.statusChangeSource,
+              statusHistory: updatedBooking?.statusHistory ?? booking.statusHistory,
             };
             if (status === 'completed') {
               updatedBookingForFollowUp = updated;
@@ -1132,29 +1157,26 @@ export default function LeadsView({
   const handleScheduleFollowUp = async (followUpData: FollowUpData) => {
     if (!selectedBookingForFollowUp) return;
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${selectedBookingForFollowUp.bookingId}/follow-up`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          bookingId: selectedBookingForFollowUp.bookingId,
-          ...followUpData,
-        }),
-      });
+    // Errors propagate to the caller so the modal can handle error display.
+    const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${selectedBookingForFollowUp.bookingId}/follow-up`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        bookingId: selectedBookingForFollowUp.bookingId,
+        ...followUpData,
+      }),
+    });
 
-      const data = await safeJsonParse(response);
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to schedule follow-up');
-      }
-
-      showToast('Follow-up scheduled successfully!', 'success');
-      setIsFollowUpModalOpen(false);
-      setSelectedBookingForFollowUp(null);
-    } catch (err) {
-      throw err; // Re-throw to let modal handle error display
+    const data = await safeJsonParse(response);
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to schedule follow-up');
     }
+
+    showToast('Follow-up scheduled successfully!', 'success');
+    setIsFollowUpModalOpen(false);
+    setSelectedBookingForFollowUp(null);
   };
 
   const handleUpdateAmount = async (bookingId: string, amount: number, planName: PlanName) => {
@@ -1245,24 +1267,20 @@ export default function LeadsView({
 
   const handleSaveNotes = async (notes: string) => {
     if (!selectedBookingForNotes) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${selectedBookingForNotes.id}/notes`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ notes }),
-      });
-      const data = await safeJsonParse(response);
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to save notes');
-      }
-      await fetchLeads(bookingsPage);
-      setIsNotesModalOpen(false);
-      setSelectedBookingForNotes(null);
-    } catch (err) {
-      throw err;
+    const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${selectedBookingForNotes.id}/notes`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ notes }),
+    });
+    const data = await safeJsonParse(response);
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to save notes');
     }
+    await fetchLeads(bookingsPage);
+    setIsNotesModalOpen(false);
+    setSelectedBookingForNotes(null);
   };
 
   const handleDeleteClick = (row: { name: string; email: string; phone?: string }) => {
@@ -1914,6 +1932,14 @@ export default function LeadsView({
                     </td>
                     <td className="px-1 py-1.5">
                       <div className="font-semibold text-slate-900 truncate text-[10px]" title={row.name}>{row.name}</div>
+                      {row.calendlyHost?.name || row.calendlyHost?.email ? (
+                        <div
+                          className="mt-0.5 inline-flex items-center gap-0.5 rounded bg-indigo-50 border border-indigo-100 px-1 text-[8px] font-semibold text-indigo-700 max-w-full truncate"
+                          title={`Assigned BDA: ${row.calendlyHost?.name || row.calendlyHost?.email}${row.calendlyHost?.matchedCrmUser === false ? ' (not a CRM user)' : ''}`}
+                        >
+                          <span className="truncate">👤 {row.calendlyHost?.name || row.calendlyHost?.email}</span>
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-1 py-1.5">
                       <div className="text-slate-700 truncate text-[9px]" title={row.email}>{row.email}</div>
@@ -2005,25 +2031,41 @@ export default function LeadsView({
                           }
                         }}
                       >
-                        <button
-                          onClick={() => setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId!)}
-                          disabled={updatingBookingId === row.bookingId}
-                          className={`inline-flex items-center gap-0.5 px-1 py-0.5 w-fit rounded text-[9px] font-semibold border transition disabled:opacity-60 w-full justify-center ${row.status ? statusColors[row.status] : 'text-slate-600 bg-slate-100'
-                            } border-current/20 hover:border-current/40`}
-                          title={row.status ? statusLabels[row.status] : 'No Status'}
-                        >
-                          {updatingBookingId === row.bookingId ? (
-                            <>
-                              <Loader2 className="animate-spin" size={9} />
-                              <span className="text-[8px]">Updating...</span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="truncate">{row.status ? statusLabels[row.status] : 'No Status'}</span>
-                              <ChevronDown size={8} className={`transition-transform duration-200 flex-shrink-0 ${openStatusDropdown === row.bookingId ? 'rotate-180' : ''}`} />
-                            </>
-                          )}
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId!)}
+                            disabled={updatingBookingId === row.bookingId}
+                            className={`inline-flex items-center gap-0.5 px-1 py-0.5 w-fit rounded text-[9px] font-semibold border transition disabled:opacity-60 flex-1 justify-center ${row.status ? statusColors[row.status] : 'text-slate-600 bg-slate-100'
+                              } border-current/20 hover:border-current/40`}
+                            title={row.status ? statusLabels[row.status] : 'No Status'}
+                          >
+                            {updatingBookingId === row.bookingId ? (
+                              <>
+                                <Loader2 className="animate-spin" size={9} />
+                                <span className="text-[8px]">Updating...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="truncate">{row.status ? statusLabels[row.status] : 'No Status'}</span>
+                                <ChevronDown size={8} className={`transition-transform duration-200 flex-shrink-0 ${openStatusDropdown === row.bookingId ? 'rotate-180' : ''}`} />
+                              </>
+                            )}
+                          </button>
+                          <StatusHistoryPopover
+                            history={row.statusHistory}
+                            latestStatus={row.status}
+                            latestChangedByName={row.statusChangedByName}
+                            latestChangedAt={row.statusChangedAt}
+                            latestSource={row.statusChangeSource}
+                          />
+                        </div>
+
+                        {row.statusChangedByName && (
+                          <div className="mt-0.5 text-[9px] leading-tight text-slate-400 truncate" title={`Last updated by ${row.statusChangedByName}`}>
+                            by <span className="font-semibold text-slate-500">{row.statusChangedByName}</span>
+                            {row.statusChangedAt && <> · {formatRelativeTime(row.statusChangedAt)}</>}
+                          </div>
+                        )}
 
                         {openStatusDropdown === row.bookingId && (
                           <div
