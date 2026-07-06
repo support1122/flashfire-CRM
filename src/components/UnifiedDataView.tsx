@@ -44,6 +44,8 @@ import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
 import { usePlanConfig, type PlanOption, type PlanName } from '../context/PlanConfigContext';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 import { useCallMinutes } from '../hooks/useCallMinutes';
+import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPopover';
+import { formatRelativeTime } from '../utils/relativeTime';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -90,6 +92,17 @@ interface Booking {
     name: string;
     claimedAt: string;
   };
+  statusChangedBy?: string | null;
+  statusChangedByName?: string | null;
+  statusChangedAt?: string | null;
+  statusChangeSource?: string | null;
+  statusHistory?: StatusHistoryEntry[];
+  calendlyHost?: {
+    email?: string | null;
+    name?: string | null;
+    calendlyUserUri?: string | null;
+    matchedCrmUser?: boolean;
+  } | null;
 }
 
 interface UserWithoutBooking {
@@ -122,6 +135,16 @@ interface UnifiedRow {
     name: string;
     claimedAt: string;
   };
+  statusChangedByName?: string | null;
+  statusChangedAt?: string | null;
+  statusChangeSource?: string | null;
+  statusHistory?: StatusHistoryEntry[];
+  calendlyHost?: {
+    email?: string | null;
+    name?: string | null;
+    calendlyUserUri?: string | null;
+    matchedCrmUser?: boolean;
+  } | null;
 }
 
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
@@ -199,7 +222,7 @@ interface CampaignDetails {
 }
 
 export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCampaign }: UnifiedDataViewProps) {
-  const { canEdit } = useCrmAuth();
+  const { canEdit, user } = useCrmAuth();
   const editable = canEdit('all_data');
   const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -480,6 +503,11 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           paymentPlan: booking.paymentPlan,
           bookingId: booking.bookingId,
           claimedBy: booking.claimedBy,
+          statusChangedByName: booking.statusChangedByName,
+          statusChangedAt: booking.statusChangedAt,
+          statusChangeSource: booking.statusChangeSource,
+          statusHistory: booking.statusHistory,
+          calendlyHost: booking.calendlyHost,
         });
       });
       return rows;
@@ -503,6 +531,11 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         paymentPlan: booking.paymentPlan,
           bookingId: booking.bookingId,
           claimedBy: booking.claimedBy,
+          statusChangedByName: booking.statusChangedByName,
+          statusChangedAt: booking.statusChangedAt,
+          statusChangeSource: booking.statusChangeSource,
+          statusHistory: booking.statusHistory,
+          calendlyHost: booking.calendlyHost,
         });
       });
     }
@@ -858,21 +891,24 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           }
         : undefined;
       
-      const requestBody: any = {
+      const requestBody: Record<string, unknown> = {
         status,
+        changedBy: user?.email,
+        changedByName: user?.name,
+        source: user?.role === 'admin' ? 'admin' : 'bda',
       };
-      
+
       if (planPayload) {
         requestBody.plan = planPayload;
       }
-      
+
       // If planDetails provided, also send days for finalkk template
       if (planDetails) {
         requestBody.planDetails = {
           days: planDetails.days,
         };
       }
-      
+
       const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${bookingId}/status`, {
         method: 'PUT',
         headers: {
@@ -892,6 +928,10 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                 ...booking,
                 bookingStatus: status,
                 paymentPlan: updatedBooking?.paymentPlan || planPayload || booking.paymentPlan,
+                statusChangedByName: updatedBooking?.statusChangedByName ?? booking.statusChangedByName,
+                statusChangedAt: updatedBooking?.statusChangedAt ?? booking.statusChangedAt,
+                statusChangeSource: updatedBooking?.statusChangeSource ?? booking.statusChangeSource,
+                statusHistory: updatedBooking?.statusHistory ?? booking.statusHistory,
               }
             : booking,
         );
@@ -941,29 +981,26 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const handleScheduleFollowUp = async (followUpData: FollowUpData) => {
     if (!selectedBookingForFollowUp) return;
 
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${selectedBookingForFollowUp.bookingId}/follow-up`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          bookingId: selectedBookingForFollowUp.bookingId,
-          ...followUpData,
-        }),
-      });
+    // Errors propagate to the caller so the modal can handle error display.
+    const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${selectedBookingForFollowUp.bookingId}/follow-up`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        bookingId: selectedBookingForFollowUp.bookingId,
+        ...followUpData,
+      }),
+    });
 
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.message || 'Failed to schedule follow-up');
-      }
-
-      showToast('Follow-up scheduled successfully!', 'success');
-      setIsFollowUpModalOpen(false);
-      setSelectedBookingForFollowUp(null);
-    } catch (err) {
-      throw err; // Re-throw to let modal handle error display
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to schedule follow-up');
     }
+
+    showToast('Follow-up scheduled successfully!', 'success');
+    setIsFollowUpModalOpen(false);
+    setSelectedBookingForFollowUp(null);
   };
 
   const handleSaveNotes = async (notes: string) => {
@@ -1716,6 +1753,14 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                       </td>
                       <td className="px-1 py-1.5">
                         <div className="font-semibold text-slate-900 truncate text-[10px]" title={row.name}>{row.name}</div>
+                        {row.calendlyHost?.name || row.calendlyHost?.email ? (
+                          <div
+                            className="mt-0.5 inline-flex items-center gap-0.5 rounded bg-indigo-50 border border-indigo-100 px-1 text-[8px] font-semibold text-indigo-700 max-w-full truncate"
+                            title={`Assigned BDA: ${row.calendlyHost?.name || row.calendlyHost?.email}${row.calendlyHost?.matchedCrmUser === false ? ' (not a CRM user)' : ''}`}
+                          >
+                            <span className="truncate">👤 {row.calendlyHost?.name || row.calendlyHost?.email}</span>
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-1 py-1.5">
                         <div className="text-slate-700 truncate text-[10px]" title={row.email}>{row.email}</div>
@@ -1773,12 +1818,13 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                               }
                             }}
                           >
+                            <div className="flex items-center gap-1">
                             <button
                               onClick={() =>
                                   row.bookingId ? setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId) : null
                               }
                               disabled={updatingBookingId === row.bookingId}
-                              className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border transition disabled:opacity-60 w-full justify-center ${
+                              className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border transition disabled:opacity-60 flex-1 justify-center ${
                                 statusColors[row.status] || 'text-slate-600 bg-slate-100'
                               } border-current/20 hover:border-current/40`}
                             >
@@ -1798,6 +1844,20 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                   </>
                               )}
                             </button>
+                            <StatusHistoryPopover
+                              history={row.statusHistory}
+                              latestStatus={row.status}
+                              latestChangedByName={row.statusChangedByName}
+                              latestChangedAt={row.statusChangedAt}
+                              latestSource={row.statusChangeSource}
+                            />
+                            </div>
+                            {row.statusChangedByName && (
+                              <div className="mt-0.5 text-[9px] leading-tight text-slate-400 truncate" title={`Last updated by ${row.statusChangedByName}`}>
+                                by <span className="font-semibold text-slate-500">{row.statusChangedByName}</span>
+                                {row.statusChangedAt && <> · {formatRelativeTime(row.statusChangedAt)}</>}
+                              </div>
+                            )}
                             {openStatusDropdown === row.bookingId && (
                               <>
                                 <div className="fixed inset-0 z-10" onClick={() => setOpenStatusDropdown(null)} />

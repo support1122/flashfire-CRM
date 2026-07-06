@@ -5,6 +5,8 @@ import { usePlanConfig, type PlanName } from '../context/PlanConfigContext';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import BdaPerformanceView from './BdaPerformanceView';
 import { validatePostMeetingBookingStatus } from '../utils/postMeetingStatus';
+import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPopover';
+import { formatRelativeTime } from '../utils/relativeTime';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -35,6 +37,17 @@ interface Lead {
     claimedAt: string | null;
   } | null;
   bdaApprovalStatus?: 'pending' | 'approved' | 'denied' | null;
+  statusChangedBy?: string | null;
+  statusChangedByName?: string | null;
+  statusChangedAt?: string | null;
+  statusChangeSource?: string | null;
+  statusHistory?: StatusHistoryEntry[];
+  calendlyHost?: {
+    email?: string | null;
+    name?: string | null;
+    calendlyUserUri?: string | null;
+    matchedCrmUser?: boolean;
+  } | null;
 }
 
 export default function ClaimLeadsView() {
@@ -80,11 +93,11 @@ export default function ClaimLeadsView() {
         });
         const body = await res.json();
         if (body.success && Array.isArray(body.configs)) {
-          const mappedConfigs = body.configs.map((c: any) => ({
+          const mappedConfigs = body.configs.map((c: { planName: PlanName; basePrice?: number; basePriceUsd?: number; currency?: string; incentivePerLeadInr?: number }) => ({
             planName: c.planName as PlanName,
-            basePrice: Number(c.basePrice ?? c.basePriceUsd) ?? 0,
+            basePrice: Number(c.basePrice ?? c.basePriceUsd ?? 0),
             currency: c.currency || 'USD',
-            incentivePerLeadInr: Number(c.incentivePerLeadInr) ?? 0
+            incentivePerLeadInr: Number(c.incentivePerLeadInr ?? 0)
           }));
           
           // Add default CAD configs if they don't exist
@@ -417,8 +430,11 @@ export default function ClaimLeadsView() {
         displayPrice: formData.paymentPlan.displayPrice || `${currency === 'CAD' ? 'CA$' : '$'}${totalAmt}`,
       } : undefined;
 
-      const requestBody: any = {
+      const requestBody: Record<string, unknown> = {
         status: newStatus,
+        changedBy: user?.email,
+        changedByName: user?.name,
+        source: user?.role === 'admin' ? 'admin' : 'bda',
       };
 
       if (planPayload) {
@@ -991,6 +1007,30 @@ export default function ClaimLeadsView() {
                           <option value="completed">COMPLETED</option>
                           <option value="rescheduled">RESCHEDULED</option>
                         </select>
+                        {lead.statusChangedByName && (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                            <span>
+                              Last updated by{' '}
+                              <span className="font-semibold text-slate-700">{lead.statusChangedByName}</span>
+                              {lead.statusChangedAt && <> · {formatRelativeTime(lead.statusChangedAt)}</>}
+                            </span>
+                            <StatusHistoryPopover
+                              history={lead.statusHistory}
+                              latestStatus={lead.bookingStatus}
+                              latestChangedByName={lead.statusChangedByName}
+                              latestChangedAt={lead.statusChangedAt}
+                              latestSource={lead.statusChangeSource}
+                            />
+                          </div>
+                        )}
+                        {(lead.calendlyHost?.name || lead.calendlyHost?.email) && (
+                          <div className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-indigo-50 border border-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700">
+                            👤 Assigned BDA: {lead.calendlyHost?.name || lead.calendlyHost?.email}
+                            {lead.calendlyHost?.matchedCrmUser === false && (
+                              <span className="font-normal text-indigo-400">(not a CRM user)</span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <div>
@@ -1187,6 +1227,24 @@ export default function ClaimLeadsView() {
                               }`}>
                                 {item.bookingStatus.toUpperCase()}
                               </span>
+                              {item.statusChangedByName && (
+                                <div
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="flex items-center gap-1.5 text-[11px] text-slate-400"
+                                >
+                                  <StatusHistoryPopover
+                                    history={item.statusHistory}
+                                    latestStatus={item.bookingStatus}
+                                    latestChangedByName={item.statusChangedByName}
+                                    latestChangedAt={item.statusChangedAt}
+                                    latestSource={item.statusChangeSource}
+                                  />
+                                  <span>
+                                    by <span className="font-medium text-slate-500">{item.statusChangedByName}</span>
+                                    {item.statusChangedAt && <> · {formatRelativeTime(item.statusChangedAt)}</>}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                             <div className="text-sm text-slate-600 space-y-1">
                               <p><Mail size={14} className="inline mr-1" />{item.clientEmail}</p>

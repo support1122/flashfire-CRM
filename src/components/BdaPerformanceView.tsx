@@ -3,6 +3,8 @@ import { Loader2, Users, CheckCircle2, Calendar, DollarSign, Filter, X, Mail, Ph
 import { useCrmAuth } from '../auth/CrmAuthContext';
 import { usePlanConfig, type PlanName } from '../context/PlanConfigContext';
 import { format, parseISO } from 'date-fns';
+import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPopover';
+import { formatRelativeTime } from '../utils/relativeTime';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 type BookingStatus = 'paid' | 'scheduled' | 'completed';
@@ -27,6 +29,10 @@ interface Lead {
     name: string;
     claimedAt: string;
   };
+  statusChangedByName?: string | null;
+  statusChangedAt?: string | null;
+  statusChangeSource?: string | null;
+  statusHistory?: StatusHistoryEntry[];
 }
 
 interface PerformanceData {
@@ -433,9 +439,23 @@ function BdaPerformanceContent() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(lead.bookingStatus)}`}>
-                          {lead.bookingStatus.toUpperCase()}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(lead.bookingStatus)}`}>
+                            {lead.bookingStatus.toUpperCase()}
+                          </span>
+                          <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+                            <StatusHistoryPopover
+                              history={lead.statusHistory}
+                              latestStatus={lead.bookingStatus}
+                              latestChangedByName={lead.statusChangedByName}
+                              latestChangedAt={lead.statusChangedAt}
+                              latestSource={lead.statusChangeSource}
+                            />
+                          </span>
+                        </div>
+                        {lead.statusChangedByName && (
+                          <div className="mt-1 text-[11px] text-slate-400">by {lead.statusChangedByName}</div>
+                        )}
                       </td>
                     <td className="px-4 py-3 text-slate-700">
                       {lead.paymentPlan?.name || 'N/A'}
@@ -524,9 +544,25 @@ function BdaPerformanceContent() {
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1">Status</label>
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(selectedLead.bookingStatus)}`}>
-                      {selectedLead.bookingStatus.toUpperCase()}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${getStatusColor(selectedLead.bookingStatus)}`}>
+                        {selectedLead.bookingStatus.toUpperCase()}
+                      </span>
+                      <StatusHistoryPopover
+                        history={selectedLead.statusHistory}
+                        latestStatus={selectedLead.bookingStatus}
+                        latestChangedByName={selectedLead.statusChangedByName}
+                        latestChangedAt={selectedLead.statusChangedAt}
+                        latestSource={selectedLead.statusChangeSource}
+                      />
+                    </div>
+                    {selectedLead.statusChangedByName && (
+                      <div className="mt-1 text-xs text-slate-500">
+                        Last updated by{' '}
+                        <span className="font-semibold text-slate-700">{selectedLead.statusChangedByName}</span>
+                        {selectedLead.statusChangedAt && <> · {formatRelativeTime(selectedLead.statusChangedAt)}</>}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-1">Plan</label>

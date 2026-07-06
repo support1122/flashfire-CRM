@@ -3,6 +3,8 @@ import { Loader2, TrendingUp, Users, CheckCircle2, BarChart3, ArrowLeft, X, Mail
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { validatePostMeetingBookingStatus } from '../../utils/postMeetingStatus';
+import StatusHistoryPopover, { type StatusHistoryEntry } from '../../components/StatusHistoryPopover';
+import { formatRelativeTime } from '../../utils/relativeTime';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 const ADMIN_TOKEN_KEY = 'flashfire_crm_admin_token';
@@ -59,6 +61,16 @@ interface Lead {
   };
   bdaApprovalStatus?: 'pending' | 'approved' | 'denied' | null;
   bdaApprovalId?: string | null;
+  statusChangedByName?: string | null;
+  statusChangedAt?: string | null;
+  statusChangeSource?: string | null;
+  statusHistory?: StatusHistoryEntry[];
+  calendlyHost?: {
+    email?: string | null;
+    name?: string | null;
+    calendlyUserUri?: string | null;
+    matchedCrmUser?: boolean;
+  } | null;
 }
 
 interface BdaDetailData {
@@ -79,6 +91,18 @@ export default function BdaAnalysisPage() {
       return null;
     }
   });
+  // Best-effort admin identity from the JWT payload, for status-change attribution.
+  const admin = useMemo(() => {
+    try {
+      const payload = JSON.parse(atob((adminToken || '').split('.')[1] || ''));
+      return {
+        email: typeof payload?.email === 'string' ? payload.email : undefined,
+        name: typeof payload?.name === 'string' ? payload.name : undefined,
+      };
+    } catch {
+      return {} as { email?: string; name?: string };
+    }
+  }, [adminToken]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AnalysisData | null>(null);
@@ -132,6 +156,9 @@ export default function BdaAnalysisPage() {
     fetchAnalysis();
     fetchCommissionConfig();
     fetchPendingApprovals();
+    // The fetchers read current state via closure on each run; this effect is
+    // intentionally keyed only to the filter values that should trigger a refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminToken, navigate, fromDate, toDate, statusFilter, planFilter, bdaEmailFilter]);
 
   const fetchAnalysis = async () => {
@@ -180,11 +207,11 @@ export default function BdaAnalysisPage() {
       if (!body.success || !Array.isArray(body.configs)) {
         throw new Error(body.message || 'Failed to load commission config');
       }
-      const mappedConfigs = body.configs.map((c: any) => ({
+      const mappedConfigs = body.configs.map((c: { planName: PlanName; basePrice?: number; basePriceUsd?: number; currency?: string; incentivePerLeadInr?: number }) => ({
         planName: c.planName as PlanName,
-        basePrice: Number(c.basePrice ?? c.basePriceUsd) ?? 0, // Support both basePrice and basePriceUsd for backward compatibility
+        basePrice: Number(c.basePrice ?? c.basePriceUsd ?? 0), // Support both basePrice and basePriceUsd for backward compatibility
         currency: c.currency || 'USD',
-        incentivePerLeadInr: Number(c.incentivePerLeadInr) ?? 0
+        incentivePerLeadInr: Number(c.incentivePerLeadInr ?? 0)
       }));
 
       // If no CAD configs exist, add default CAD configurations
@@ -251,7 +278,7 @@ export default function BdaAnalysisPage() {
         return;
       }
       setPendingApprovals(
-        body.data.map((item: any) => ({
+        body.data.map((item: Record<string, unknown>) => ({
           approvalId: String(item.approvalId),
           bookingId: String(item.bookingId),
           bdaEmail: String(item.bdaEmail || ''),
@@ -381,7 +408,18 @@ export default function BdaAnalysisPage() {
         return;
       }
 
-      const body: { status: string; plan?: { name: string; price: number } } = { status: editStatus };
+      const body: {
+        status: string;
+        plan?: { name: string; price: number };
+        changedBy?: string;
+        changedByName?: string;
+        source?: string;
+      } = {
+        status: editStatus,
+        changedBy: admin.email,
+        changedByName: admin.name || 'Admin',
+        source: 'admin',
+      };
       if (planRequired && editPlanName !== 'all' && editAmount) {
         body.plan = { name: editPlanName, price: parseFloat(editAmount) || 0 };
       }
@@ -507,6 +545,9 @@ export default function BdaAnalysisPage() {
         ...data
       }))
       .sort((a, b) => (a.month === 'unknown' ? '' : a.month).localeCompare(b.month === 'unknown' ? 'zzz' : b.month));
+    // Recomputed only when the lead set changes; the helper functions are stable enough
+    // for this per-lead aggregation and are intentionally excluded to preserve behavior.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detailData?.leads]);
 
   const handleApprovalDecision = async (approvalId: string | null | undefined, action: 'approved' | 'denied') => {
@@ -1252,6 +1293,29 @@ export default function BdaAnalysisPage() {
                               <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(lead.bookingStatus)}`}>
                                 {lead.bookingStatus}
                               </span>
+                              {(lead.calendlyHost?.name || lead.calendlyHost?.email) && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100"
+                                  title={`Assigned BDA: ${lead.calendlyHost?.name || lead.calendlyHost?.email}${lead.calendlyHost?.matchedCrmUser === false ? ' (not a CRM user)' : ''}`}
+                                >
+                                  👤 {lead.calendlyHost?.name || lead.calendlyHost?.email}
+                                </span>
+                              )}
+                              {lead.statusChangedByName && (
+                                <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
+                                  <StatusHistoryPopover
+                                    history={lead.statusHistory}
+                                    latestStatus={lead.bookingStatus}
+                                    latestChangedByName={lead.statusChangedByName}
+                                    latestChangedAt={lead.statusChangedAt}
+                                    latestSource={lead.statusChangeSource}
+                                  />
+                                  <span>
+                                    by <span className="font-medium text-slate-500">{lead.statusChangedByName}</span>
+                                    {lead.statusChangedAt && <> · {formatRelativeTime(lead.statusChangedAt)}</>}
+                                  </span>
+                                </span>
+                              )}
                               {lead.bdaApprovalStatus && (
                                 <span
                                   className={`px-2 py-1 rounded-full text-[11px] font-semibold ${
