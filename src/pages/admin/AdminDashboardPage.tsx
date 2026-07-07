@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, KeyRound, Plus, Shield, Trash2, UserRound, BarChart3 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CheckCircle2, KeyRound, Plus, Shield, Trash2, UserRound, BarChart3, Monitor, ShieldCheck, ShieldX } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
@@ -66,6 +66,120 @@ async function safeJson(res: Response) {
   } catch {
     return null;
   }
+}
+
+interface LoginApprovalRow {
+  id: string;
+  approvalId: string;
+  email: string;
+  name: string;
+  ip: string;
+  country: string;
+  deviceLabel: string;
+  createdAt: string;
+}
+
+function LoginApprovalsPanel({ adminToken }: { adminToken: string }) {
+  const [approvals, setApprovals] = useState<LoginApprovalRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadApprovals = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`${API_BASE_URL}/api/crm/admin/login-approvals`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const body = await safeJson(res);
+      if (!res.ok || !body?.success) throw new Error(body?.error || 'Failed to load login approvals');
+      setApprovals(body.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load login approvals');
+    } finally {
+      setLoading(false);
+    }
+  }, [adminToken]);
+
+  useEffect(() => {
+    loadApprovals();
+    const id = setInterval(loadApprovals, 15000);
+    return () => clearInterval(id);
+  }, [loadApprovals]);
+
+  const act = async (approvalId: string, action: 'approve' | 'deny') => {
+    try {
+      setActingId(approvalId);
+      const res = await fetch(`${API_BASE_URL}/api/crm/admin/login-approvals/${approvalId}/${action}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const body = await safeJson(res);
+      if (!res.ok || !body?.success) throw new Error(body?.error || `Failed to ${action}`);
+      await loadApprovals();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : `Failed to ${action}`);
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  if (!loading && approvals.length === 0 && !error) return null;
+
+  return (
+    <div className="mb-6 bg-white border border-orange-200 rounded-2xl shadow-xl overflow-hidden">
+      <div className="px-6 py-4 bg-orange-50 border-b border-orange-200 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={18} className="text-orange-600" />
+          <h2 className="text-base font-extrabold text-slate-900">Pending Login Approvals</h2>
+        </div>
+        {approvals.length > 0 && (
+          <span className="text-xs font-bold text-white bg-orange-500 rounded-full px-2.5 py-1">
+            {approvals.length}
+          </span>
+        )}
+      </div>
+
+      {error && <div className="px-6 py-4 text-sm text-red-600">{error}</div>}
+
+      {approvals.length > 0 && (
+        <div className="divide-y divide-slate-100">
+          {approvals.map((a) => (
+            <div key={a.approvalId} className="px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <div className="text-sm font-bold text-slate-900">{a.name} <span className="font-normal text-slate-400">({a.email})</span></div>
+                <div className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
+                  <Monitor size={12} /> {a.deviceLabel} · {a.ip} · {a.country || 'Unknown location'}
+                </div>
+                <div className="text-[11px] text-slate-400 mt-0.5">
+                  Requested {new Date(a.createdAt).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={actingId === a.approvalId}
+                  onClick={() => act(a.approvalId, 'approve')}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white text-xs font-bold transition-colors"
+                >
+                  <ShieldCheck size={14} /> Approve
+                </button>
+                <button
+                  type="button"
+                  disabled={actingId === a.approvalId}
+                  onClick={() => act(a.approvalId, 'deny')}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-50 hover:bg-red-100 disabled:opacity-50 text-red-600 text-xs font-bold transition-colors"
+                >
+                  <ShieldX size={14} /> Deny
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AdminDashboardPage() {
@@ -413,6 +527,8 @@ export default function AdminDashboardPage() {
             <p className="text-red-700 text-sm font-semibold">{usersError}</p>
           </div>
         )}
+
+        <LoginApprovalsPanel adminToken={adminToken} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <section className="lg:col-span-1">

@@ -1,25 +1,50 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Lock, Mail, ShieldCheck } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Lock, Mail, ShieldCheck, Clock, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 
 export default function LoginPage() {
-  const { requestOtp, verifyOtp, status } = useCrmAuth();
+  const { requestOtp, verifyOtp, pollLoginApproval, status } = useCrmAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'email' | 'otp'>('email');
+  const [step, setStep] = useState<'email' | 'otp' | 'awaiting_approval' | 'denied'>('email');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(false);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const emailTrimmed = useMemo(() => email.trim(), [email]);
 
   useEffect(() => {
     if (status === 'authenticated') navigate('/', { replace: true });
   }, [navigate, status]);
+
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, []);
+
+  function startPollingApproval(approvalId: string) {
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const result = await pollLoginApproval(approvalId);
+        if (result === 'approved') {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          navigate('/', { replace: true });
+        } else if (result === 'denied') {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          setStep('denied');
+        }
+      } catch {
+        // transient network error — keep polling
+      }
+    }, 3000);
+  }
 
   async function onSendOtp(e: React.FormEvent) {
     e.preventDefault();
@@ -43,8 +68,13 @@ export default function LoginPage() {
     setInfo(null);
     setLoading(true);
     try {
-      await verifyOtp(emailTrimmed, otp.trim(), rememberMe);
-      navigate('/', { replace: true });
+      const result = await verifyOtp(emailTrimmed, otp.trim(), rememberMe);
+      if (result.status === 'pending_approval') {
+        setStep('awaiting_approval');
+        startPollingApproval(result.approvalId);
+      } else {
+        navigate('/', { replace: true });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid OTP');
     } finally {
@@ -80,7 +110,54 @@ export default function LoginPage() {
               </div>
             )}
 
-            {step === 'email' ? (
+            {step === 'awaiting_approval' ? (
+              <div className="space-y-5 text-center py-4">
+                <div className="mx-auto w-14 h-14 rounded-full bg-orange-50 flex items-center justify-center">
+                  <Clock className="text-orange-500 animate-pulse" size={26} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900">Waiting for admin approval</h3>
+                  <p className="text-sm text-slate-500 mt-2">
+                    This is a new device. An admin needs to approve this login before you can continue.
+                    This page will update automatically once approved.
+                  </p>
+                </div>
+                <p className="text-xs text-slate-400 break-all">{emailTrimmed}</p>
+                <button
+                  type="button"
+                  className="text-sm font-semibold text-orange-600 hover:text-orange-700"
+                  onClick={() => {
+                    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+                    setOtp('');
+                    setStep('email');
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : step === 'denied' ? (
+              <div className="space-y-5 text-center py-4">
+                <div className="mx-auto w-14 h-14 rounded-full bg-red-50 flex items-center justify-center">
+                  <XCircle className="text-red-500" size={26} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900">Login denied</h3>
+                  <p className="text-sm text-slate-500 mt-2">
+                    An admin denied this login request. Contact your admin if this was unexpected.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="text-sm font-semibold text-orange-600 hover:text-orange-700"
+                  onClick={() => {
+                    setOtp('');
+                    setStep('email');
+                  }}
+                >
+                  Back to login
+                </button>
+              </div>
+            ) : step === 'email' ? (
               <form onSubmit={onSendOtp} className="space-y-5">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2" htmlFor="crm-email">

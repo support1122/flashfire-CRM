@@ -21,6 +21,7 @@ import {
   Phone,
   FileText,
   CreditCard,
+  ShieldCheck,
 } from 'lucide-react';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
@@ -46,6 +47,7 @@ const GraphsView02 = React.lazy(() => import('../components/GraphsView02'));
 const StripeDataView = React.lazy(() => import('../components/StripeDataView'));
 const PhoneCallsView = React.lazy(() => import('../components/PhoneCallsView'));
 const EmailTemplateBuilder = React.lazy(() => import('../components/EmailTemplateBuilder'));
+const SessionsView = React.lazy(() => import('../components/SessionsView'));
 
 function TabSpinner() {
   return (
@@ -103,6 +105,7 @@ export default function CrmDashboardPage() {
     }>
   >([]);
   const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const [showSessions, setShowSessions] = useState(false);
 
   const allowedTabs = useMemo(() => TAB_CONFIG.filter((t) => hasPermission(t.permission)), [hasPermission]);
 
@@ -111,6 +114,7 @@ export default function CrmDashboardPage() {
   const safeSetActiveTab = (tab: Tab) => {
     const cfg = TAB_CONFIG.find((t) => t.tab === tab);
     if (!cfg || !hasPermission(cfg.permission)) return;
+    setShowSessions(false);
     setActiveTab(tab);
   };
 
@@ -268,7 +272,17 @@ export default function CrmDashboardPage() {
 
         <div className="px-6 py-5 border-t border-gray-200 flex items-center justify-center">
           {sidebarOpen ? (
-            <div className="w-full">
+            <div className="w-full space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowSessions(true)}
+                className={`w-full inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold transition-colors ${
+                  showSessions ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+              >
+                <ShieldCheck size={16} />
+                My Sessions
+              </button>
               <button
                 type="button"
                 onClick={logout}
@@ -280,14 +294,26 @@ export default function CrmDashboardPage() {
               <div className="mt-3 text-xs text-gray-500 text-center">© {new Date().getFullYear()} FlashFire</div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={logout}
-              className="hidden md:inline-flex items-center justify-center w-10 h-10  bg-blue-500 hover:bg-blue-500 text-white transition-colors"
-              title="Logout"
-            >
-              <LogOut size={16} />
-            </button>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowSessions(true)}
+                className={`hidden md:inline-flex items-center justify-center w-10 h-10 transition-colors ${
+                  showSessions ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+                title="My Sessions"
+              >
+                <ShieldCheck size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="hidden md:inline-flex items-center justify-center w-10 h-10  bg-blue-500 hover:bg-blue-500 text-white transition-colors"
+                title="Logout"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
           )}
         </div>
       </aside>
@@ -396,7 +422,11 @@ export default function CrmDashboardPage() {
 
         <section className="flex-1 overflow-y-auto w-full">
           <div className="w-full h-full">
-            {allowedTabs.length === 0 ? (
+            {showSessions ? (
+              <Suspense fallback={<TabSpinner />}>
+                <SessionsView />
+              </Suspense>
+            ) : allowedTabs.length === 0 ? (
               <div className="min-h-[70vh] flex items-center justify-center px-4">
                 <div className="max-w-xl w-full bg-white border border-gray-200 rounded-2xl shadow-xl p-8">
                   <div className="flex items-center gap-3">
