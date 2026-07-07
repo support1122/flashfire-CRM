@@ -146,6 +146,29 @@ export function CrmAuthProvider({ children }: { children: React.ReactNode }) {
     loadMe();
   }, [loadMe]);
 
+  // Poll for revocation while logged in, so a session killed from the admin panel
+  // (or "My Sessions") logs the device out within seconds instead of waiting for
+  // the user to trigger some other API call first.
+  useEffect(() => {
+    if (status !== 'authenticated' || !token) return;
+
+    const checkStillValid = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/crm/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 401) {
+          logout();
+        }
+      } catch {
+        // Network hiccup — don't log the user out over a transient failure.
+      }
+    };
+
+    const id = setInterval(checkStillValid, 7000);
+    return () => clearInterval(id);
+  }, [status, token, logout]);
+
   const value = useMemo<CrmAuthContextValue>(
     () => ({
       status,
