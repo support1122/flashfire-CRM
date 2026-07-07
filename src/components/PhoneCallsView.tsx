@@ -1,6 +1,8 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, FileText, Loader2, Phone, PhoneIncoming, PhoneOutgoing, RefreshCcw, Search, Sparkles } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
+import CallButton from './CallButton';
+import CallerIdSelector from './CallerIdSelector';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -194,7 +196,8 @@ export default function PhoneCallsView() {
             <p className="text-xs text-slate-500">Zoom Phone calls — auto-matched to leads by number.</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <CallerIdSelector />
           {syncMsg && <span className="text-[11px] text-slate-500">{syncMsg}</span>}
           <button
             onClick={syncFromZoom}
@@ -300,13 +303,13 @@ export default function PhoneCallsView() {
                       <td className="py-2 px-3 text-slate-600">{fmtTime(g.scheduledEventStartTime)}</td>
                       <td className="py-2 px-3">
                         {g.clientPhone ? (
-                          <a
-                            href={`zoomphonecall://${g.clientPhone.replace(/[^\d+]/g, '')}`}
+                          <CallButton
+                            leadPhone={g.clientPhone}
                             className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded bg-orange-500 text-white hover:bg-orange-600"
                             title={`Call ${g.clientPhone} via Zoom Phone`}
                           >
-                            <Phone size={11} /> Call
-                          </a>
+                            <span className="inline-flex items-center gap-1"><Phone size={11} /> Call</span>
+                          </CallButton>
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
