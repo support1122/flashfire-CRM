@@ -5,12 +5,17 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfire
 
 type AuthStatus = 'loading' | 'unauthenticated' | 'authenticated';
 
+export type VerifyOtpResult =
+  | { status: 'authenticated' }
+  | { status: 'pending_approval'; approvalId: string };
+
 interface CrmAuthContextValue {
   status: AuthStatus;
   token: string | null;
   user: CrmUser | null;
   requestOtp: (email: string) => Promise<void>;
-  verifyOtp: (email: string, otp: string, rememberMe?: boolean) => Promise<void>;
+  verifyOtp: (email: string, otp: string, rememberMe?: boolean) => Promise<VerifyOtpResult>;
+  pollLoginApproval: (approvalId: string) => Promise<'pending' | 'denied' | 'approved'>;
   logout: () => void;
   hasPermission: (permission: CrmPermission) => boolean;
   canEdit: (module: CrmModule) => boolean;
@@ -52,20 +57,42 @@ export function CrmAuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const verifyOtp = useCallback(async (email: string, otp: string, rememberMe: boolean = false) => {
+  const verifyOtp = useCallback(async (email: string, otp: string, rememberMe: boolean = false): Promise<VerifyOtpResult> => {
     const res = await fetch(`${API_BASE_URL}/api/crm/auth/verify-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, otp, rememberMe }),
     });
     const body = await safeJson(res);
-    if (!res.ok || !body?.token) {
+    if (!res.ok || !body?.success) {
       throw new Error(body?.error || 'Invalid OTP');
+    }
+    if (body.pendingApproval) {
+      return { status: 'pending_approval', approvalId: body.approvalId };
+    }
+    if (!body.token) {
+      throw new Error('Unexpected response from server');
     }
     localStorage.setItem(TOKEN_KEY, body.token);
     setToken(body.token);
     setUser(body.user);
     setStatus('authenticated');
+    return { status: 'authenticated' };
+  }, []);
+
+  const pollLoginApproval = useCallback(async (approvalId: string): Promise<'pending' | 'denied' | 'approved'> => {
+    const res = await fetch(`${API_BASE_URL}/api/crm/auth/login-approval/${approvalId}/status`);
+    const body = await safeJson(res);
+    if (!res.ok || !body?.success) {
+      throw new Error(body?.error || 'Failed to check approval status');
+    }
+    if (body.status === 'approved' && body.token) {
+      localStorage.setItem(TOKEN_KEY, body.token);
+      setToken(body.token);
+      setUser(body.user);
+      setStatus('authenticated');
+    }
+    return body.status;
   }, []);
 
   const hasPermission = useCallback(
@@ -126,11 +153,12 @@ export function CrmAuthProvider({ children }: { children: React.ReactNode }) {
       user,
       requestOtp,
       verifyOtp,
+      pollLoginApproval,
       logout,
       hasPermission,
       canEdit,
     }),
-    [canEdit, hasPermission, logout, requestOtp, status, token, user, verifyOtp]
+    [canEdit, hasPermission, logout, pollLoginApproval, requestOtp, status, token, user, verifyOtp]
   );
 
   return <CrmAuthContext.Provider value={value}>{children}</CrmAuthContext.Provider>;
