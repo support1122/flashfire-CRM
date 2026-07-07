@@ -182,6 +182,148 @@ function LoginApprovalsPanel({ adminToken }: { adminToken: string }) {
   );
 }
 
+interface AdminSessionRow {
+  id: string;
+  sessionId: string;
+  email: string;
+  ip: string;
+  country: string;
+  deviceLabel: string;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+function timeAgo(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'Active now';
+  if (mins < 60) return `${mins} min${mins !== 1 ? 's' : ''} ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days !== 1 ? 's' : ''} ago`;
+}
+
+function AllSessionsPanel({ adminToken }: { adminToken: string }) {
+  const [sessions, setSessions] = useState<AdminSessionRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  const loadSessions = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch(`${API_BASE_URL}/api/crm/admin/sessions`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const body = await safeJson(res);
+      if (!res.ok || !body?.success) throw new Error(body?.error || 'Failed to load sessions');
+      setSessions(body.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load sessions');
+    } finally {
+      setLoading(false);
+    }
+  }, [adminToken]);
+
+  useEffect(() => {
+    loadSessions();
+    const id = setInterval(loadSessions, 20000);
+    return () => clearInterval(id);
+  }, [loadSessions]);
+
+  const revoke = async (session: AdminSessionRow) => {
+    if (!confirm(`Log out ${session.email} from ${session.deviceLabel}?`)) return;
+    try {
+      setRevokingId(session.sessionId);
+      const res = await fetch(`${API_BASE_URL}/api/crm/admin/sessions/${session.sessionId}/revoke`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${adminToken}` },
+      });
+      const body = await safeJson(res);
+      if (!res.ok || !body?.success) throw new Error(body?.error || 'Failed to revoke session');
+      await loadSessions();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to revoke session');
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  return (
+    <div className="mb-6 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((e) => !e)}
+        className="w-full px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between"
+      >
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={18} className="text-slate-600" />
+          <h2 className="text-base font-extrabold text-slate-900">All Active Sessions (BDAs + Admins)</h2>
+        </div>
+        <span className="text-xs font-bold text-white bg-slate-500 rounded-full px-2.5 py-1">
+          {sessions.length}
+        </span>
+      </button>
+
+      {expanded && (
+        <>
+          {error && <div className="px-6 py-4 text-sm text-red-600">{error}</div>}
+          {loading && sessions.length === 0 && <div className="px-6 py-4 text-sm text-slate-400">Loading…</div>}
+
+          {!loading && sessions.length === 0 && !error && (
+            <div className="px-6 py-8 text-center text-sm text-slate-400">No active sessions</div>
+          )}
+
+          {sessions.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left px-6 py-3 font-semibold text-slate-600">User</th>
+                    <th className="text-left px-6 py-3 font-semibold text-slate-600">Device</th>
+                    <th className="text-left px-6 py-3 font-semibold text-slate-600">IP</th>
+                    <th className="text-left px-6 py-3 font-semibold text-slate-600">Location</th>
+                    <th className="text-left px-6 py-3 font-semibold text-slate-600">Logged in</th>
+                    <th className="text-left px-6 py-3 font-semibold text-slate-600">Last active</th>
+                    <th className="text-left px-6 py-3 font-semibold text-slate-600 w-24"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessions.map((s) => (
+                    <tr key={s.sessionId} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                      <td className="px-6 py-3 font-semibold text-slate-900 whitespace-nowrap">{s.email}</td>
+                      <td className="px-6 py-3 text-slate-700 whitespace-nowrap">{s.deviceLabel}</td>
+                      <td className="px-6 py-3 text-slate-500 whitespace-nowrap">{s.ip || '—'}</td>
+                      <td className="px-6 py-3 text-slate-500 whitespace-nowrap">{s.country || 'Unknown'}</td>
+                      <td className="px-6 py-3 text-slate-500 whitespace-nowrap">
+                        {new Date(s.createdAt).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-6 py-3 text-slate-500 whitespace-nowrap">{timeAgo(s.lastSeenAt)}</td>
+                      <td className="px-6 py-3 whitespace-nowrap">
+                        <button
+                          type="button"
+                          disabled={revokingId === s.sessionId}
+                          onClick={() => revoke(s)}
+                          className="text-red-600 hover:text-red-700 disabled:opacity-50 text-xs font-bold"
+                        >
+                          Log out
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function AdminDashboardPage() {
   const [adminToken, setAdminToken] = useState<string | null>(() => {
     try {
@@ -529,6 +671,7 @@ export default function AdminDashboardPage() {
         )}
 
         <LoginApprovalsPanel adminToken={adminToken} />
+        <AllSessionsPanel adminToken={adminToken} />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <section className="lg:col-span-1">
