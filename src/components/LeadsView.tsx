@@ -42,6 +42,8 @@ import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
 import CustomWorkflowsModal from './CustomWorkflowsModal';
 import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPopover';
 import { formatRelativeTime } from '../utils/relativeTime';
+import CallButton from './CallButton';
+import CallerIdSelector from './CallerIdSelector';
 
 const QualifiedLeadsGraphs = lazy(() => import('./QualifiedLeadsGraphs'));
 
@@ -1339,6 +1341,7 @@ export default function LeadsView({
                 ? 'MQL, SQL & Converted pipeline. Each client appears once with their latest qualification. Filter and manage by stage.'
                 : 'View and manage all clients. Each client appears once with their latest booking status. Status and amount are editable.'}
             </p>
+            <CallerIdSelector className="justify-center md:justify-start" />
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto flex-wrap">
             <div className="flex-1 min-w-[160px] bg-orange-50 border border-orange-100 px-4 py-3 text-left rounded-lg">
@@ -1947,13 +1950,15 @@ export default function LeadsView({
                     <td className="px-1 py-1.5">
                       {row.phone && row.phone !== 'Not Specified' ? (
                         <>
-                          <a
-                            href={`zoomphonecall://${row.phone.replace(/[^\d+]/g, '')}`}
+                          <CallButton
+                            leadPhone={row.phone}
                             className="text-[9px] text-gray-600 font-semibold hover:text-gray-700 truncate block"
                             title={`Call ${row.phone} via Zoom Phone`}
+                            showPicker={false}
+                            showPresence={false}
                           >
                             {row.phone}
-                          </a>
+                          </CallButton>
                           {(() => {
                             const mins = lookupCallMins(row.phone);
                             if (mins && mins.calls > 0) {
@@ -2233,16 +2238,18 @@ export default function LeadsView({
                           </button>
                         )}
                         {row.phone && row.phone !== 'Not Specified' && (
-                          <a
-                            href={`zoomphonecall://${row.phone.replace(/[^\d+]/g, '')}`}
+                          <CallButton
+                            leadPhone={row.phone}
                             title={`Call ${row.phone} via Zoom Phone`}
                             className="inline-flex items-center justify-center p-0.5 rounded border border-slate-200 bg-white text-[#2D8CFF] hover:bg-blue-50 transition flex-shrink-0"
+                            showPicker={false}
+                            showPresence={false}
                           >
                             {/* Zoom video-camera mark */}
                             <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
                               <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h7A2.5 2.5 0 0 1 15 7.5v9A2.5 2.5 0 0 1 12.5 19h-7A2.5 2.5 0 0 1 3 16.5v-9Zm14 2.1 3.3-2.4c.6-.4 1.7-.1 1.7.8v8c0 .9-1.1 1.2-1.7.8L17 14.4V9.6Z" />
                             </svg>
-                          </a>
+                          </CallButton>
                         )}
                       </div>
                       {row.notes && (

@@ -43,6 +43,8 @@ import FollowUpModal, { type FollowUpData } from './FollowUpModal';
 import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
 import { usePlanConfig, type PlanOption, type PlanName } from '../context/PlanConfigContext';
 import { useCrmAuth } from '../auth/CrmAuthContext';
+import CallButton from './CallButton';
+import CallerIdSelector from './CallerIdSelector';
 import { useCallMinutes } from '../hooks/useCallMinutes';
 import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPopover';
 import { formatRelativeTime } from '../utils/relativeTime';
@@ -1256,6 +1258,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                 Insert Data
               </button>
             )}
+            <CallerIdSelector className="mr-1" />
             <button
               onClick={() => {
                 clearAllCache();
@@ -1433,13 +1436,15 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                               <td className="px-2 py-4">
                                 {row.phone && row.phone !== 'Not Specified' ? (
                                   <>
-                                    <a
-                                      href={`zoomphonecall://${row.phone.replace(/[^\d+]/g, '')}`}
+                                    <CallButton
+                                      leadPhone={row.phone}
                                       className="text-[10px] text-gray-600 font-semibold hover:text-orange-700 block"
                                       title={`Call ${row.phone} via Zoom Phone`}
+                                      showPicker={false}
+                                      showPresence={false}
                                     >
                                       {row.phone}
-                                    </a>
+                                    </CallButton>
                                     {(() => {
                                       const mins = lookupCallMins(row.phone);
                                       if (!mins || mins.calls === 0) return null;
@@ -1768,13 +1773,15 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                       <td className="px-1 py-1.5">
                         {row.phone && row.phone !== 'Not Specified' ? (
                           <>
-                            <a
-                              href={`zoomphonecall://${row.phone.replace(/[^\d+]/g, '')}`}
+                            <CallButton
+                              leadPhone={row.phone}
                               className="text-[10px] text-gray-600 font-semibold hover:text-orange-700 truncate block"
                               title={`Call ${row.phone} via Zoom Phone`}
+                              showPicker={false}
+                              showPresence={false}
                             >
                               {row.phone}
-                            </a>
+                            </CallButton>
                             {(() => {
                               const mins = lookupCallMins(row.phone);
                               if (!mins || mins.calls === 0) return null;
