@@ -8,7 +8,7 @@ const DEFAULT_PAGE_SIZE = 15;
 
 interface BdaAttendanceInfo {
   status: 'present' | 'absent' | 'manual' | 'unmarked';
-  source: 'auto' | 'manual' | 'scheduler';
+  source: 'auto' | 'manual' | 'scheduler' | 'meet_api';
   bdaName: string;
   bdaEmail: string;
   joinedAt?: string;
@@ -16,6 +16,12 @@ interface BdaAttendanceInfo {
   markedAt?: string;
   durationMs?: number | null;
   cumulativeDurationMs?: number | null;
+  /** true when the numbers come from Google Meet conference records */
+  verified?: boolean;
+  /** firstJoin - scheduledStart; negative = early */
+  lateByMs?: number | null;
+  sessions?: { startTime?: string | null; endTime?: string | null; durationMs?: number }[];
+  participantsAtJoin?: { displayName?: string | null; kind?: string | null }[];
   notes?: string | null;
 }
 
@@ -47,6 +53,8 @@ interface MissedMeetingLogRow {
   leftAt?: string | null;
   durationMs?: number | null;
   cumulativeDurationMs?: number | null;
+  lateByMs?: number | null;
+  verified?: boolean;
   meetLink?: string | null;
   meetingScheduledStart?: string | null;
   meetingScheduledEnd?: string | null;
@@ -75,6 +83,24 @@ function fmtTime(iso?: string | null): string {
   } catch {
     return '—';
   }
+}
+
+/** Exact-to-the-second clock time for Google-verified rows */
+function fmtTimeExact(iso?: string | null): string {
+  if (!iso) return '—';
+  try {
+    return format(parseISO(iso), 'h:mm:ss a');
+  } catch {
+    return '—';
+  }
+}
+
+/** "on time" | "3m late" | "2m early" from lateByMs */
+function punctuality(lateByMs?: number | null): { label: string; cls: string } | null {
+  if (lateByMs == null || !Number.isFinite(lateByMs)) return null;
+  if (lateByMs > 60_000) return { label: `${Math.round(lateByMs / 60_000)}m late`, cls: 'bg-red-100 text-red-700' };
+  if (lateByMs < -60_000) return { label: `${Math.round(-lateByMs / 60_000)}m early`, cls: 'bg-emerald-100 text-emerald-700' };
+  return { label: 'on time', cls: 'bg-emerald-100 text-emerald-700' };
 }
 
 function todayISO() {
@@ -354,10 +380,22 @@ export default function MeetingInfoView() {
                           >
                             {log.meetingVideoUrl ? 'Video' : 'No Video'}
                           </span>
+                          {log.verified && (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800"
+                              title="Verified from Google Meet conference records"
+                            >
+                              ✓ Google Meet
+                            </span>
+                          )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{fmtTime(log.joinedAt)}</td>
-                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{fmtTime(log.leftAt)}</td>
+                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                        {log.verified ? fmtTimeExact(log.joinedAt) : fmtTime(log.joinedAt)}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                        {log.verified ? fmtTimeExact(log.leftAt) : fmtTime(log.leftAt)}
+                      </td>
                       <td className="px-4 py-3 text-slate-700 whitespace-nowrap font-semibold">{formatDuration(durationMs)}</td>
                       <td className="px-4 py-3 text-slate-700">{log.notes || (isUnmarked ? 'No response captured' : 'No response')}</td>
                     </tr>
@@ -383,7 +421,9 @@ export default function MeetingInfoView() {
               <tr className="text-left">
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Client Name</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Date of Meet</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">BDA</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">BDA Status</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">In → Out (exact)</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Time in Meeting</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Google Drive Video URL</th>
               </tr>
@@ -391,7 +431,7 @@ export default function MeetingInfoView() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center">
+                  <td colSpan={7} className="px-4 py-12 text-center">
                     <Loader2 className="animate-spin text-orange-500 mx-auto" size={28} />
                   </td>
                 </tr>
@@ -401,6 +441,10 @@ export default function MeetingInfoView() {
                   const isAbsent = att ? att.status === 'absent' : row.bdaAbsent;
                   const isUnmarked = att?.status === 'unmarked';
                   const durationMs = att?.durationMs ?? att?.cumulativeDurationMs ?? null;
+                  const late = punctuality(att?.lateByMs);
+                  const roster = (att?.participantsAtJoin || [])
+                    .map((p) => p.displayName || 'Unknown')
+                    .join(', ');
                   return (
                     <tr
                       key={row.bookingId}
@@ -418,50 +462,83 @@ export default function MeetingInfoView() {
                           ? format(parseISO(row.dateOfMeet), 'MMM d, yyyy • h:mm a')
                           : '—'}
                       </td>
+                      <td className="px-4 py-3 text-slate-800 whitespace-nowrap">
+                        {att?.bdaName || att?.bdaEmail || <span className="text-slate-400">—</span>}
+                      </td>
                       <td className="px-4 py-3">
-                        {att ? (
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
-                              att.status === 'present'
-                                ? 'bg-emerald-100 text-emerald-800'
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {att ? (
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
+                                att.status === 'present'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : att.status === 'manual'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : att.status === 'unmarked'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {att.status === 'present'
+                                ? att.source === 'auto'
+                                  ? 'Present (Auto)'
+                                  : 'Present'
                                 : att.status === 'manual'
-                                ? 'bg-amber-100 text-amber-800'
+                                ? 'Present (Manual)'
                                 : att.status === 'unmarked'
-                                ? 'bg-amber-100 text-amber-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
+                                ? 'No Response'
+                                : 'Absent'}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-500">
+                              {row.bdaAbsent ? (
+                                <>
+                                  <AlertTriangle size={10} />
+                                  Likely Absent
+                                </>
+                              ) : (
+                                'No Data'
+                              )}
+                            </span>
+                          )}
+                          {att?.verified && (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800"
+                              title="Times verified from Google Meet conference records"
+                            >
+                              ✓ Google Meet
+                            </span>
+                          )}
+                          {late && (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${late.cls}`}>
+                              {late.label}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
+                        {att && (att.joinedAt || att.leftAt) ? (
+                          <div
+                            className="flex flex-col leading-tight"
+                            title={roster ? `In call when BDA joined: ${roster}` : undefined}
                           >
-                            {att.status === 'present'
-                              ? att.source === 'auto'
-                                ? 'Present (Auto)'
-                                : 'Present'
-                              : att.status === 'manual'
-                              ? 'Present (Manual)'
-                              : att.status === 'unmarked'
-                              ? 'No Response'
-                              : 'Absent'}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-500">
-                            {row.bdaAbsent ? (
-                              <>
-                                <AlertTriangle size={10} />
-                                Likely Absent
-                              </>
-                            ) : (
-                              'No Data'
+                            <span className="font-semibold text-slate-800">
+                              {att.verified ? fmtTimeExact(att.joinedAt) : fmtTime(att.joinedAt)} →{' '}
+                              {att.verified ? fmtTimeExact(att.leftAt) : fmtTime(att.leftAt)}
+                            </span>
+                            {roster && (
+                              <span className="text-[10px] text-slate-500 truncate max-w-[220px]">
+                                At join: {roster}
+                              </span>
                             )}
-                          </span>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
-                        {att && (att.joinedAt || durationMs) ? (
-                          <div className="flex flex-col leading-tight">
-                            <span className="font-semibold text-slate-800">{formatDuration(durationMs)}</span>
-                            <span className="text-[10px] text-slate-500">
-                              {fmtTime(att.joinedAt)} → {fmtTime(att.leftAt)}
-                            </span>
-                          </div>
+                        {durationMs != null ? (
+                          <span className="font-semibold text-slate-800">{formatDuration(durationMs)}</span>
                         ) : (
                           <span className="text-slate-400">—</span>
                         )}
@@ -491,7 +568,7 @@ export default function MeetingInfoView() {
               )}
               {!loading && rows.length === 0 && !error && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-slate-500 text-sm">
+                  <td colSpan={7} className="px-4 py-12 text-center text-slate-500 text-sm">
                     No completed meetings yet. Meetings will appear here once they have ended.
                   </td>
                 </tr>
