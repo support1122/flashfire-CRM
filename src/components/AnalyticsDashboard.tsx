@@ -18,9 +18,11 @@ import {
   AlertCircle,
   ChevronDown,
   DollarSign,
+  Lock,
 } from 'lucide-react';
 import NotesModal from './NotesModal';
 import { validatePostMeetingBookingStatus } from '../utils/postMeetingStatus';
+import { isStatusLockedForUser, statusLockMessage } from '../utils/statusLock';
 import {
   Area,
   AreaChart,
@@ -118,7 +120,7 @@ interface AnalyticsDashboardProps {
 
 export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDashboardProps) {
   const { planOptions } = usePlanConfig();
-  const { user } = useCrmAuth();
+  const { user, token } = useCrmAuth();
   const [bookings, setBookings] = useState<Booking[]>(() => {
     const cached = getCachedBookings<Booking>();
     return cached || [];
@@ -525,6 +527,7 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           status,
@@ -1330,12 +1333,22 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
                           <div className="flex flex-wrap items-center gap-2">
                             {/* Status Dropdown */}
                             <div className="relative status-dropdown-container">
+                              {(() => {
+                                const locked = isStatusLockedForUser(booking, user);
+                                return (
                               <button
-                                onClick={() => setOpenStatusDropdown(openStatusDropdown === booking.bookingId ? null : booking.bookingId)}
+                                onClick={() => {
+                                  if (locked) {
+                                    showToast(statusLockMessage(booking), 'error');
+                                    return;
+                                  }
+                                  setOpenStatusDropdown(openStatusDropdown === booking.bookingId ? null : booking.bookingId);
+                                }}
                                 disabled={updatingBookingId === booking.bookingId}
                                 className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition disabled:opacity-60 ${
                                   statusColors[booking.bookingStatus]
-                                } border-current/20 hover:border-current/40`}
+                                } border-current/20 ${locked ? 'cursor-not-allowed opacity-90' : 'hover:border-current/40'}`}
+                                title={locked ? statusLockMessage(booking) : undefined}
                               >
                                 {updatingBookingId === booking.bookingId ? (
                                   <>
@@ -1344,11 +1357,14 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
                                   </>
                                 ) : (
                                   <>
+                                    {locked && <Lock size={12} className="flex-shrink-0" />}
                                     <span>{statusLabels[booking.bookingStatus]}</span>
-                                    <ChevronDown size={12} className={`transition-transform duration-200 ${openStatusDropdown === booking.bookingId ? 'rotate-180' : ''}`} />
+                                    {!locked && <ChevronDown size={12} className={`transition-transform duration-200 ${openStatusDropdown === booking.bookingId ? 'rotate-180' : ''}`} />}
                                   </>
                                 )}
                               </button>
+                                );
+                              })()}
                               
                               {openStatusDropdown === booking.bookingId && (
                                 <>

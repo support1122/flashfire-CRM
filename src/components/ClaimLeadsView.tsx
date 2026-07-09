@@ -5,6 +5,7 @@ import { usePlanConfig, type PlanName } from '../context/PlanConfigContext';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import BdaPerformanceView from './BdaPerformanceView';
 import { validatePostMeetingBookingStatus } from '../utils/postMeetingStatus';
+import { isStatusLockedForUser, statusLockMessage } from '../utils/statusLock';
 import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPopover';
 import { formatRelativeTime } from '../utils/relativeTime';
 
@@ -448,6 +449,7 @@ export default function ClaimLeadsView() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(requestBody),
       });
@@ -981,6 +983,10 @@ export default function ClaimLeadsView() {
                         <select
                           value={lead.bookingStatus}
                           onChange={(e) => {
+                            if (isStatusLockedForUser(lead, user)) {
+                              setError(statusLockMessage(lead));
+                              return;
+                            }
                             const newStatus = e.target.value as 'paid' | 'scheduled' | 'completed' | 'rescheduled';
                             if (newStatus === 'paid' && lead.bookingStatus !== 'paid') {
                               if (!formData.paymentPlan || !formData.paymentPlan.name) {
@@ -998,9 +1004,9 @@ export default function ClaimLeadsView() {
                               handleStatusUpdate(newStatus);
                             }
                           }}
-                          className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white cursor-pointer"
-                          disabled={saving || !editable}
-                          title={!isClaimed ? 'You can change status before or after claiming.' : undefined}
+                          className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+                          disabled={saving || !editable || isStatusLockedForUser(lead, user)}
+                          title={isStatusLockedForUser(lead, user) ? statusLockMessage(lead) : (!isClaimed ? 'You can change status before or after claiming.' : undefined)}
                         >
                           <option value="scheduled">SCHEDULED</option>
                           <option value="paid">PAID</option>
