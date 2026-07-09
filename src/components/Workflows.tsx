@@ -445,6 +445,25 @@ function Workflows() {
       return;
     }
 
+    // In-dashboard "designed" templates carry a Mongo _id, not a SendGrid "d-" id.
+    // They aren't in the SendGrid emailTemplates list and have no /fields record to
+    // update, so persist the step onto the workflow instead of calling SendGrid.
+    // (Mirrors the backend isDesigned rule in WorkflowController.js.)
+    const isDesigned = !/^d-/i.test(String(step.templateId).trim());
+    if (isDesigned) {
+      if (workflowId === 'new') {
+        showToast('Template attached. Click "Save Workflow" to save it.', 'success');
+      } else {
+        const wf = workflows.find((w) => w.workflowId === workflowId);
+        if (wf) {
+          await saveWorkflow(wf);
+        } else {
+          showToast('Template attached to the step.', 'success');
+        }
+      }
+      return;
+    }
+
     // Find the template to get the original domainName from database
     const template = emailTemplates.find(t => t.templateId === step.templateId);
     if (!template) {
