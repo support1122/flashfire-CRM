@@ -26,6 +26,7 @@ import {
   Trash2,
   DollarSign,
   ChevronUp,
+  Lock,
 } from 'lucide-react';
 import {
   format,
@@ -45,6 +46,7 @@ import { usePlanConfig, type PlanOption, type PlanName } from '../context/PlanCo
 import { useCrmAuth } from '../auth/CrmAuthContext';
 import CallButton from './CallButton';
 import CallerIdSelector from './CallerIdSelector';
+import { isStatusLockedForUser, statusLockMessage } from '../utils/statusLock';
 import { useCallMinutes } from '../hooks/useCallMinutes';
 import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPopover';
 import { formatRelativeTime } from '../utils/relativeTime';
@@ -137,6 +139,7 @@ interface UnifiedRow {
     name: string;
     claimedAt: string;
   };
+  statusChangedBy?: string | null;
   statusChangedByName?: string | null;
   statusChangedAt?: string | null;
   statusChangeSource?: string | null;
@@ -224,7 +227,7 @@ interface CampaignDetails {
 }
 
 export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCampaign }: UnifiedDataViewProps) {
-  const { canEdit, user } = useCrmAuth();
+  const { canEdit, user, token } = useCrmAuth();
   const editable = canEdit('all_data');
   const { planOptions } = usePlanConfig();
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -505,6 +508,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           paymentPlan: booking.paymentPlan,
           bookingId: booking.bookingId,
           claimedBy: booking.claimedBy,
+          statusChangedBy: booking.statusChangedBy,
           statusChangedByName: booking.statusChangedByName,
           statusChangedAt: booking.statusChangedAt,
           statusChangeSource: booking.statusChangeSource,
@@ -533,6 +537,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         paymentPlan: booking.paymentPlan,
           bookingId: booking.bookingId,
           claimedBy: booking.claimedBy,
+          statusChangedBy: booking.statusChangedBy,
           statusChangedByName: booking.statusChangedByName,
           statusChangedAt: booking.statusChangedAt,
           statusChangeSource: booking.statusChangeSource,
@@ -915,6 +920,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(requestBody),
       });
@@ -1826,14 +1832,22 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                             }}
                           >
                             <div className="flex items-center gap-1">
+                            {(() => {
+                              const locked = isStatusLockedForUser(row, user);
+                              return (
                             <button
-                              onClick={() =>
-                                  row.bookingId ? setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId) : null
-                              }
+                              onClick={() => {
+                                if (locked) {
+                                  showToast(statusLockMessage(row), 'error');
+                                  return;
+                                }
+                                if (row.bookingId) setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId);
+                              }}
                               disabled={updatingBookingId === row.bookingId}
                               className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[10px] font-semibold border transition disabled:opacity-60 flex-1 justify-center ${
                                 statusColors[row.status] || 'text-slate-600 bg-slate-100'
-                              } border-current/20 hover:border-current/40`}
+                              } border-current/20 ${locked ? 'cursor-not-allowed opacity-90' : 'hover:border-current/40'}`}
+                              title={locked ? statusLockMessage(row) : undefined}
                             >
                               {updatingBookingId === row.bookingId ? (
                                 <>
@@ -1842,15 +1856,18 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                 </>
                               ) : (
                                   <>
+                                    {locked && <Lock size={11} className="flex-shrink-0" />}
                                     <span>{statusLabels[row.status]}</span>
-                                    {openStatusDropdown === row.bookingId ? (
+                                    {!locked && (openStatusDropdown === row.bookingId ? (
                                       <ChevronUp size={12} className="transition-transform duration-200" />
                                     ) : (
                                       <ChevronDown size={12} className="transition-transform duration-200" />
-                                    )}
+                                    ))}
                                   </>
                               )}
                             </button>
+                              );
+                            })()}
                             <StatusHistoryPopover
                               history={row.statusHistory}
                               latestStatus={row.status}

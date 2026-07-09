@@ -27,6 +27,7 @@ import {
   Workflow,
   Plus,
   SlidersHorizontal,
+  Lock,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Legend, CartesianGrid } from 'recharts';
@@ -44,6 +45,7 @@ import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPo
 import { formatRelativeTime } from '../utils/relativeTime';
 import CallButton from './CallButton';
 import CallerIdSelector from './CallerIdSelector';
+import { isStatusLockedForUser, statusLockMessage } from '../utils/statusLock';
 
 const QualifiedLeadsGraphs = lazy(() => import('./QualifiedLeadsGraphs'));
 
@@ -642,6 +644,7 @@ export default function LeadsView({
         leadSource: booking.leadSource,
         metaLeadId: booking.metaLeadId ?? undefined,
         metaFormName: booking.metaFormName,
+        statusChangedBy: booking.statusChangedBy,
         statusChangedByName: booking.statusChangedByName,
         statusChangedAt: booking.statusChangedAt,
         statusChangeSource: booking.statusChangeSource,
@@ -1089,6 +1092,7 @@ export default function LeadsView({
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(requestBody),
       });
@@ -2037,12 +2041,21 @@ export default function LeadsView({
                         }}
                       >
                         <div className="flex items-center gap-1">
+                          {(() => {
+                            const locked = isStatusLockedForUser(row, user);
+                            return (
                           <button
-                            onClick={() => setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId!)}
+                            onClick={() => {
+                              if (locked) {
+                                showToast(statusLockMessage(row), 'error');
+                                return;
+                              }
+                              setOpenStatusDropdown(openStatusDropdown === row.bookingId ? null : row.bookingId!);
+                            }}
                             disabled={updatingBookingId === row.bookingId}
                             className={`inline-flex items-center gap-0.5 px-1 py-0.5 w-fit rounded text-[9px] font-semibold border transition disabled:opacity-60 flex-1 justify-center ${row.status ? statusColors[row.status] : 'text-slate-600 bg-slate-100'
-                              } border-current/20 hover:border-current/40`}
-                            title={row.status ? statusLabels[row.status] : 'No Status'}
+                              } border-current/20 ${locked ? 'cursor-not-allowed opacity-90' : 'hover:border-current/40'}`}
+                            title={locked ? statusLockMessage(row) : (row.status ? statusLabels[row.status] : 'No Status')}
                           >
                             {updatingBookingId === row.bookingId ? (
                               <>
@@ -2051,11 +2064,14 @@ export default function LeadsView({
                               </>
                             ) : (
                               <>
+                                {locked && <Lock size={8} className="flex-shrink-0" />}
                                 <span className="truncate">{row.status ? statusLabels[row.status] : 'No Status'}</span>
-                                <ChevronDown size={8} className={`transition-transform duration-200 flex-shrink-0 ${openStatusDropdown === row.bookingId ? 'rotate-180' : ''}`} />
+                                {!locked && <ChevronDown size={8} className={`transition-transform duration-200 flex-shrink-0 ${openStatusDropdown === row.bookingId ? 'rotate-180' : ''}`} />}
                               </>
                             )}
                           </button>
+                            );
+                          })()}
                           <StatusHistoryPopover
                             history={row.statusHistory}
                             latestStatus={row.status}
