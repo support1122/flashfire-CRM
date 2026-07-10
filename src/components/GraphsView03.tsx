@@ -188,40 +188,6 @@ type TipProps<T> = {
   label?: string | number;
 };
 
-type MeetingsRow = { label: string; Completed: number; Paid: number };
-
-const MeetingsTip = ({ active, payload, label }: TipProps<MeetingsRow>) => {
-  if (!active || !payload?.length) return null;
-  const d = payload[0]?.payload;
-  if (!d) return null;
-  const rate = d.Completed > 0 ? Math.round((d.Paid / d.Completed) * 1000) / 10 : 0;
-  return (
-    <div style={TS} className="border p-3 min-w-[160px]">
-      <p className="font-bold text-slate-800 mb-2 text-xs">{label}</p>
-      <div className="space-y-1 text-xs">
-        <div className="flex items-center justify-between gap-6">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full" style={{ background: C_COMPLETED }} />
-            <span className="text-slate-600 font-medium">Completed</span>
-          </span>
-          <span className="font-bold text-slate-900">{d.Completed}</span>
-        </div>
-        <div className="flex items-center justify-between gap-6">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full" style={{ background: C_PAID }} />
-            <span className="text-slate-600 font-medium">Paid</span>
-          </span>
-          <span className="font-bold text-slate-900">{d.Paid}</span>
-        </div>
-        <div className="border-t border-slate-100 pt-1 flex justify-between">
-          <span className="text-slate-500 font-semibold">Conversion</span>
-          <span className="font-bold text-slate-900">{rate}%</span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 type NoShowRow = { name: string; Called: number; 'Not Called': number; calledPct: number };
 
 const NoShowTip = ({ active, payload, label }: TipProps<NoShowRow>) => {
@@ -501,11 +467,11 @@ export default function GraphsView03() {
         </Card>
       )}
 
-      {/* ── Chart 1 — Completed vs Paid, per BDA ── */}
+      {/* ── Chart 1 — Completed meetings, per BDA ── */}
       {meetings && (
         <Card
-          title={`Completed Meetings vs Paid — ${granularity === 'day' ? 'Daily' : 'Weekly'}`}
-          subtitle="Bucketed by when the meeting happened. A paid client also sat the meeting, so Paid is a subset of Completed."
+          title={`Completed Meetings — ${granularity === 'day' ? 'Daily' : 'Weekly'}`}
+          subtitle="Bucketed by when the meeting happened."
           icon={CalendarCheck}
           iconColor="text-blue-600"
         >
@@ -518,10 +484,7 @@ export default function GraphsView03() {
                   <p className={`text-xs font-bold ${bda.email === UNASSIGNED ? 'text-slate-400 italic' : 'text-slate-800'}`}>
                     {bda.name}
                   </p>
-                  <p className="text-[11px] text-slate-500">
-                    {totals.completed} · <span className="text-emerald-700 font-semibold">{totals.paid} paid</span> ·{' '}
-                    {totals.conversionRate}%
-                  </p>
+                  <p className="text-[11px] text-slate-500">{totals.completed} completed</p>
                 </div>
                 <ResponsiveContainer width="100%" height={190}>
                   <BarChart data={rows} margin={{ top: 6, right: 4, left: -22, bottom: 0 }} barGap={2}>
@@ -534,10 +497,13 @@ export default function GraphsView03() {
                       minTickGap={12}
                     />
                     <YAxis tick={{ fontSize: 9, fill: INK_MUTED }} stroke={AXIS} allowDecimals={false} />
-                    <Tooltip content={<MeetingsTip />} cursor={{ fill: 'rgba(11,11,11,0.04)' }} />
-                    <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconType="circle" iconSize={7} />
+                    <Tooltip
+                      contentStyle={TS}
+                      labelStyle={{ fontWeight: 700, fontSize: 11, color: '#0b0b0b' }}
+                      itemStyle={{ fontSize: 11 }}
+                      cursor={{ fill: 'rgba(11,11,11,0.04)' }}
+                    />
                     <Bar dataKey="Completed" fill={C_COMPLETED} radius={[4, 4, 0, 0]} maxBarSize={14} />
-                    <Bar dataKey="Paid" fill={C_PAID} radius={[4, 4, 0, 0]} maxBarSize={14} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -563,7 +529,7 @@ export default function GraphsView03() {
                         const v = bk.byBda[b.email] ?? { completed: 0, paid: 0 };
                         return (
                           <td key={b.email} className="text-right py-1 px-3 text-slate-700">
-                            {v.completed} / <span className="text-emerald-700 font-semibold">{v.paid}</span>
+                            {v.completed}
                           </td>
                         );
                       })}
@@ -571,7 +537,7 @@ export default function GraphsView03() {
                   ))}
                 </tbody>
               </table>
-              <p className="text-[10px] text-slate-400 mt-1">Each cell is completed / paid.</p>
+              <p className="text-[10px] text-slate-400 mt-1">Each cell is completed meetings.</p>
             </div>
           )}
         </Card>
