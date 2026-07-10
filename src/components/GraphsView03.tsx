@@ -43,6 +43,12 @@ const AXIS      = '#c3c2b7';
 const UNASSIGNED = 'unassigned';
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+// Default data window: everything from Jul 1 onward — not a rolling last-N-days range.
+// Uses this year's Jul 1, or last year's if the page loads before July.
+const DEFAULT_START_YEAR = new Date().getMonth() >= 6 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+const DEFAULT_START_DATE = `${DEFAULT_START_YEAR}-07-01`;
+const DEFAULT_START_MONTH = `${DEFAULT_START_YEAR}-07`;
+
 // ── Types ──────────────────────────────────────────────────────────
 type Granularity = 'day' | 'week';
 type BdaLite = { email: string; name: string };
@@ -75,7 +81,7 @@ type Agent = {
   conversations: number; conversationRate: number;
 };
 
-type MonthlyStatusRow = { month: string; completed: number; paid: number };
+type MonthlyStatusRow = { month: string; completed: number };
 type StripeMonthRow = { month: string; usd: number; cad: number; count: number };
 
 type CallActivityPayload = {
@@ -178,7 +184,7 @@ const CoverageNote = ({ coverage, what }: { coverage: Coverage; what: string }) 
       <span>
         <strong>{coverage.unattributed}</strong> of <strong>{coverage.total}</strong> {what}
         {' '}({(100 - coverage.attributedPct).toFixed(1)}%) have no BDA on record and are shown as
-        {' '}<em>Unassigned</em>. A BDA is recorded from the Calendly round-robin host, or a manual
+        {' '}<em>Flashfire Team</em>. A BDA is recorded from the Calendly round-robin host, or a manual
         claim. Older bookings pre-date host capture — running the
         {' '}<code className="font-mono">backfill-calendly-hosts</code> admin job fills them in.
       </span>
@@ -279,14 +285,18 @@ export default function GraphsView03() {
       setError(null);
       const headers: HeadersInit = {};
       if (token) headers.Authorization = `Bearer ${token}`;
-      const days = granularity === 'week' ? 84 : 30;
+      // Default window: everything from Jul 1 onward, not a rolling 30/84-day range.
+      const daysSinceJuly = Math.max(
+        1,
+        Math.ceil((Date.now() - Date.UTC(DEFAULT_START_YEAR, 6, 1)) / 86400000)
+      );
       const [mRes, nRes, cRes, leadsRes, stripeRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-meetings?granularity=${granularity}&days=${days}`, { headers }),
-        fetch(`${API_BASE_URL}/api/crm/graphs03/no-show-followup?days=120`, { headers }),
-        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-call-activity?granularity=${granularity}&days=${days}`, { headers }),
-        // "Completed" side of the monthly chart — same source as Graph 02.
+        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-meetings?granularity=${granularity}&fromDate=${DEFAULT_START_DATE}`, { headers }),
+        fetch(`${API_BASE_URL}/api/crm/graphs03/no-show-followup?days=${daysSinceJuly}`, { headers }),
+        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-call-activity?granularity=${granularity}&fromDate=${DEFAULT_START_DATE}`, { headers }),
+        // Completed — same monthlyStatus rows and formula as Graph 02's Completed — Monthly card.
         fetch(`${API_BASE_URL}/api/leads/analytics`, { headers }),
-        // "Paid" side — Stripe succeeded-payment count per month, same as the Stripe Data tab.
+        // Paid — Stripe succeeded-payment count per month (the Stripe Data tab's Payments KPI).
         fetch(`${API_BASE_URL}/api/crm/stripe/summary`, { headers }),
       ]);
       const mJson = await mRes.json();
@@ -298,8 +308,14 @@ export default function GraphsView03() {
       setMeetings(mJson.data as MeetingsPayload);
       if (nRes.ok && nJson.success) setNoShow(nJson.data as NoShowPayload);
       if (cRes.ok && cJson.success) setCallActivity(cJson.data as CallActivityPayload);
-      if (leadsRes.ok && leadsJson.success) setMonthlyStatus(leadsJson.data?.monthlyStatus ?? []);
-      if (stripeRes.ok && stripeJson.success) setStripeMonthly(stripeJson.data ?? []);
+      if (leadsRes.ok && leadsJson.success) {
+        const rows = (leadsJson.data?.monthlyStatus ?? []) as MonthlyStatusRow[];
+        setMonthlyStatus(rows.filter((r) => r.month >= DEFAULT_START_MONTH));
+      }
+      if (stripeRes.ok && stripeJson.success) {
+        const rows = (stripeJson.data ?? []) as StripeMonthRow[];
+        setStripeMonthly(rows.filter((r) => r.month >= DEFAULT_START_MONTH));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -324,33 +340,20 @@ export default function GraphsView03() {
     }));
   }, [meetings]);
 
-  // Completed comes from the leads DB (same monthlyStatus rows as Graph 02);
-  // Paid is the Stripe succeeded-payment count for that month, same number
-  // shown as the "Payments" KPI on the Stripe Data tab.
+  // Completed bar: same monthlyStatus rows Graph 02 uses for its own Completed count.
+  // Paid bar: Stripe succeeded-payment count for that month (Stripe Data tab's Payments KPI).
   const monthlyRows = useMemo(() => {
     const stripeByMonth: Record<string, number> = {};
     stripeMonthly.forEach((r) => { stripeByMonth[r.month] = r.count; });
     return [...monthlyStatus]
       .filter((r) => r.month)
       .sort((a, b) => a.month.localeCompare(b.month))
-      .map((r) => {
-        const paid = stripeByMonth[r.month] ?? 0;
-        const total = r.completed + paid;
-        return {
-          label: fmtMonth(r.month),
-          Completed: r.completed,
-          Paid: paid,
-          pct: total > 0 ? Math.round((paid / total) * 1000) / 10 : 0,
-        };
-      });
+      .map((r) => ({
+        label: fmtMonth(r.month),
+        Completed: r.completed,
+        Paid: stripeByMonth[r.month] ?? 0,
+      }));
   }, [monthlyStatus, stripeMonthly]);
-
-  const monthlyTotals = useMemo(() => {
-    const completed = monthlyRows.reduce((s, r) => s + r.Completed, 0);
-    const paid = monthlyRows.reduce((s, r) => s + r.Paid, 0);
-    const total = completed + paid;
-    return { completed, paid, pct: total > 0 ? Math.round((paid / total) * 1000) / 10 : 0 };
-  }, [monthlyRows]);
 
   const noShowRows = useMemo(() => {
     if (!noShow) return [];
@@ -456,16 +459,6 @@ export default function GraphsView03() {
       </div>
 
       {/* KPIs */}
-      {meetings && noShow && (
-        <KpiStrip
-          items={[
-            { label: 'Completed Meetings', value: meetings.overall.completed, color: 'text-slate-900' },
-            { label: 'Paid', value: meetings.overall.paid, color: 'text-emerald-700' },
-            { label: 'Conversion', value: `${meetings.overall.conversionRate}%`, color: 'text-blue-700' },
-            { label: 'No-Shows Followed Up', value: `${noShow.overall.calledPct}%`, color: 'text-orange-600' },
-          ]}
-        />
-      )}
       {callActivity && (
         <KpiStrip
           items={[
@@ -481,28 +474,28 @@ export default function GraphsView03() {
         />
       )}
 
-      {/* ── Completed — Monthly (Completed from leads DB, Paid from Stripe payments count) ── */}
+      {/* ── Completed — Monthly ── */}
       {monthlyRows.length > 0 && (
         <Card
           title="Completed — Monthly"
-          subtitle="Completed meetings vs Stripe payments, per month. Paid = succeeded Stripe charges that month (same count as the Stripe Data tab)."
+          subtitle="Completed = meetings completed that month (same monthlyStatus rows as Graph 02). Paid = succeeded Stripe payments that month (Stripe Data tab's Payments KPI); it is bucketed by charge date, not meeting date, so it will not always reconcile 1:1 with Completed in the same bar."
           icon={CalendarCheck}
           iconColor="text-blue-600"
-          badge={
-            <span className="text-[11px] font-semibold text-slate-500">
-              {monthlyTotals.completed} completed · {monthlyTotals.paid} paid · {monthlyTotals.pct}%
-            </span>
-          }
         >
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={monthlyRows} margin={{ top: 10, right: 16, left: 0, bottom: 6 }} barGap={2}>
               <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: INK_MUTED }} stroke={AXIS} />
               <YAxis tick={{ fontSize: 11, fill: INK_MUTED }} stroke={AXIS} allowDecimals={false} width={34} />
-              <Tooltip content={<MeetingsTip />} cursor={{ fill: 'rgba(11,11,11,0.04)' }} />
+              <Tooltip
+                contentStyle={TS}
+                labelStyle={{ fontWeight: 700, fontSize: 11, color: '#0b0b0b' }}
+                itemStyle={{ fontSize: 11 }}
+                cursor={{ fill: 'rgba(11,11,11,0.04)' }}
+              />
               <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" iconSize={8} />
-              <Bar dataKey="Completed" fill={C_COMPLETED} radius={[5, 5, 0, 0]} maxBarSize={48} />
-              <Bar dataKey="Paid" fill={C_PAID} radius={[5, 5, 0, 0]} maxBarSize={48} />
+              <Bar dataKey="Completed" name="Completed" fill={C_COMPLETED} radius={[5, 5, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="Paid" name="Paid" fill={C_PAID} radius={[5, 5, 0, 0]} maxBarSize={40} />
             </BarChart>
           </ResponsiveContainer>
 
@@ -513,8 +506,7 @@ export default function GraphsView03() {
                   <tr className="text-slate-500 border-b border-slate-200">
                     <th className="text-left py-1.5 pr-3 font-semibold">Month</th>
                     <th className="text-right py-1.5 px-3 font-semibold">Completed</th>
-                    <th className="text-right py-1.5 px-3 font-semibold">Paid</th>
-                    <th className="text-right py-1.5 pl-3 font-semibold">%</th>
+                    <th className="text-right py-1.5 pl-3 font-semibold">Paid</th>
                   </tr>
                 </thead>
                 <tbody className="tabular-nums">
@@ -522,8 +514,7 @@ export default function GraphsView03() {
                     <tr key={r.label} className="border-b border-slate-50">
                       <td className="py-1 pr-3 text-slate-600">{r.label}</td>
                       <td className="text-right py-1 px-3 text-slate-700">{r.Completed}</td>
-                      <td className="text-right py-1 px-3 text-emerald-700 font-semibold">{r.Paid}</td>
-                      <td className="text-right py-1 pl-3 text-slate-700">{r.pct}%</td>
+                      <td className="text-right py-1 pl-3 text-emerald-700 font-semibold">{r.Paid}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -540,11 +531,6 @@ export default function GraphsView03() {
           subtitle="Bucketed by when the meeting happened. A paid client also sat the meeting, so Paid is a subset of Completed."
           icon={CalendarCheck}
           iconColor="text-blue-600"
-          badge={
-            <span className="text-[11px] font-semibold text-slate-500">
-              {meetings.overall.completed} meetings · {meetings.overall.paid} paid
-            </span>
-          }
         >
           <CoverageNote coverage={meetings.coverage} what="completed meetings" />
 
