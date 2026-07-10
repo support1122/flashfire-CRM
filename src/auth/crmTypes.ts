@@ -12,6 +12,7 @@ export const CRM_MODULES = [
   'bda_admin',
   'activity_logs',
   'lead_analytics',
+  'graphs03',
   'phone_calls',
 ] as const;
 
