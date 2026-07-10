@@ -594,8 +594,9 @@ export default function GraphsView03() {
             <p className="text-xs text-slate-500 py-8 text-center">No BDA calls in this window.</p>
           ) : (
             <>
-              {/* Per-BDA summary */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+              {/* One panel per BDA: their own summary + their own two charts, so
+                  Siddhartha's bars never appear on Kalpataru's side or vice versa. */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {bdaAgents.map((a) => (
                   <div key={a.email} className="border border-slate-100 rounded-xl p-3">
                     <div className="flex items-center gap-2 mb-2">
@@ -639,42 +640,39 @@ export default function GraphsView03() {
                         <span>&gt;60s: <strong className="text-slate-700">{a.over60s}</strong></span>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
 
-              {/* Two units → two plots. Never one chart with two y-scales. */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {[
-                  { title: 'Calls Made', rows: callRows, unit: '' },
-                  { title: 'Time Spent on Calls (minutes)', rows: talkRows, unit: 'm' },
-                ].map((chart) => (
-                  <div key={chart.title} className="border border-slate-100 rounded-xl p-3">
-                    <p className="text-xs font-bold text-slate-800 mb-2">{chart.title}</p>
-                    <ResponsiveContainer width="100%" height={210}>
-                      <BarChart data={chart.rows} margin={{ top: 6, right: 6, left: -20, bottom: 0 }} barGap={2}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ fontSize: 9, fill: INK_MUTED }}
-                          stroke={AXIS}
-                          interval="preserveStartEnd"
-                          minTickGap={12}
-                        />
-                        <YAxis tick={{ fontSize: 9, fill: INK_MUTED }} stroke={AXIS} allowDecimals={false} />
-                        <Tooltip
-                          contentStyle={TS}
-                          labelStyle={{ fontWeight: 700, fontSize: 11, color: '#0b0b0b' }}
-                          itemStyle={{ fontSize: 11 }}
-                          formatter={(v: number) => `${v}${chart.unit}`}
-                          cursor={{ fill: 'rgba(11,11,11,0.04)' }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconType="circle" iconSize={7} />
-                        {bdaAgents.map((a) => (
-                          <Bar key={a.email} dataKey={a.name} fill={colorFor(a.email)} radius={[4, 4, 0, 0]} maxBarSize={14} />
-                        ))}
-                      </BarChart>
-                    </ResponsiveContainer>
+                    {/* Two units → two plots. Never one chart with two y-scales. */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                      {[
+                        { title: 'Calls Made', rows: callRows, unit: '' },
+                        { title: 'Time Spent (minutes)', rows: talkRows, unit: 'm' },
+                      ].map((chart) => (
+                        <div key={chart.title}>
+                          <p className="text-[11px] font-bold text-slate-700 mb-1">{chart.title}</p>
+                          <ResponsiveContainer width="100%" height={160}>
+                            <BarChart data={chart.rows} margin={{ top: 6, right: 4, left: -20, bottom: 0 }} barGap={2}>
+                              <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+                              <XAxis
+                                dataKey="label"
+                                tick={{ fontSize: 9, fill: INK_MUTED }}
+                                stroke={AXIS}
+                                interval="preserveStartEnd"
+                                minTickGap={12}
+                              />
+                              <YAxis tick={{ fontSize: 9, fill: INK_MUTED }} stroke={AXIS} allowDecimals={false} />
+                              <Tooltip
+                                contentStyle={TS}
+                                labelStyle={{ fontWeight: 700, fontSize: 11, color: '#0b0b0b' }}
+                                itemStyle={{ fontSize: 11 }}
+                                formatter={(v: number) => `${v}${chart.unit}`}
+                                cursor={{ fill: 'rgba(11,11,11,0.04)' }}
+                              />
+                              <Bar dataKey={a.name} fill={colorFor(a.email)} radius={[4, 4, 0, 0]} maxBarSize={14} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
