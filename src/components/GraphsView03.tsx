@@ -82,7 +82,7 @@ type Agent = {
 };
 
 type MonthlyStatusRow = { month: string; completed: number };
-type StripeMonthRow = { month: string; usd: number; cad: number; count: number };
+type StripePaidPlanRow = { month: string; paidCount: number };
 
 type CallActivityPayload = {
   granularity: Granularity;
@@ -163,17 +163,6 @@ const Card = memo(({
   </div>
 ));
 Card.displayName = 'Card';
-
-const KpiStrip = ({ items }: { items: { label: string; value: string | number; color: string }[] }) => (
-  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-    {items.map((it) => (
-      <div key={it.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
-        <p className="text-[11px] text-slate-500 font-medium">{it.label}</p>
-        <p className={`text-xl font-bold mt-0.5 ${it.color}`}>{it.value}</p>
-      </div>
-    ))}
-  </div>
-);
 
 /** Honest banner: how much of the data actually carries a BDA. */
 const CoverageNote = ({ coverage, what }: { coverage: Coverage; what: string }) => {
@@ -274,7 +263,7 @@ export default function GraphsView03() {
   const [noShow, setNoShow] = useState<NoShowPayload | null>(null);
   const [callActivity, setCallActivity] = useState<CallActivityPayload | null>(null);
   const [monthlyStatus, setMonthlyStatus] = useState<MonthlyStatusRow[]>([]);
-  const [stripeMonthly, setStripeMonthly] = useState<StripeMonthRow[]>([]);
+  const [stripePaidPlan, setStripePaidPlan] = useState<StripePaidPlanRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
@@ -296,8 +285,9 @@ export default function GraphsView03() {
         fetch(`${API_BASE_URL}/api/crm/graphs03/bda-call-activity?granularity=${granularity}&fromDate=${DEFAULT_START_DATE}`, { headers }),
         // Completed — same monthlyStatus rows and formula as Graph 02's Completed — Monthly card.
         fetch(`${API_BASE_URL}/api/leads/analytics`, { headers }),
-        // Paid — Stripe succeeded-payment count per month (the Stripe Data tab's Payments KPI).
-        fetch(`${API_BASE_URL}/api/crm/stripe/summary`, { headers }),
+        // Paid — real-plan paid-client count per month (Stripe + manual payments,
+        // classified by plan name same as the Stripe Data tab, excluding Add-on/Upgrade).
+        fetch(`${API_BASE_URL}/api/crm/stripe/paid-plan-summary`, { headers }),
       ]);
       const mJson = await mRes.json();
       const nJson = await nRes.json();
@@ -313,8 +303,8 @@ export default function GraphsView03() {
         setMonthlyStatus(rows.filter((r) => r.month >= DEFAULT_START_MONTH));
       }
       if (stripeRes.ok && stripeJson.success) {
-        const rows = (stripeJson.data ?? []) as StripeMonthRow[];
-        setStripeMonthly(rows.filter((r) => r.month >= DEFAULT_START_MONTH));
+        const rows = (stripeJson.data ?? []) as StripePaidPlanRow[];
+        setStripePaidPlan(rows.filter((r) => r.month >= DEFAULT_START_MONTH));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
@@ -341,19 +331,21 @@ export default function GraphsView03() {
   }, [meetings]);
 
   // Completed bar: same monthlyStatus rows Graph 02 uses for its own Completed count.
-  // Paid bar: Stripe succeeded-payment count for that month (Stripe Data tab's Payments KPI).
+  // Paid bar: real-plan paid-client count for that month — same universe as the Stripe
+  // Data tab's Plan Breakdown (Stripe + manual payments), summed across plan tiers but
+  // excluding Add-on/Upgrade line items.
   const monthlyRows = useMemo(() => {
-    const stripeByMonth: Record<string, number> = {};
-    stripeMonthly.forEach((r) => { stripeByMonth[r.month] = r.count; });
+    const paidByMonth: Record<string, number> = {};
+    stripePaidPlan.forEach((r) => { paidByMonth[r.month] = r.paidCount; });
     return [...monthlyStatus]
       .filter((r) => r.month)
       .sort((a, b) => a.month.localeCompare(b.month))
       .map((r) => ({
         label: fmtMonth(r.month),
         Completed: r.completed,
-        Paid: stripeByMonth[r.month] ?? 0,
+        Paid: paidByMonth[r.month] ?? 0,
       }));
-  }, [monthlyStatus, stripeMonthly]);
+  }, [monthlyStatus, stripePaidPlan]);
 
   const noShowRows = useMemo(() => {
     if (!noShow) return [];
@@ -458,27 +450,12 @@ export default function GraphsView03() {
         </div>
       </div>
 
-      {/* KPIs */}
-      {callActivity && (
-        <KpiStrip
-          items={[
-            { label: 'Calls Made', value: callActivity.overall.calls, color: 'text-slate-900' },
-            { label: 'Time on Calls', value: fmtDuration(callActivity.overall.talkSec), color: 'text-blue-700' },
-            {
-              label: 'Conversations (>60s)',
-              value: `${callActivity.overall.conversations} (${callActivity.overall.conversationRate}%)`,
-              color: 'text-emerald-700',
-            },
-            { label: 'Avg Call Length', value: `${callActivity.overall.avgCallSec}s`, color: 'text-slate-900' },
-          ]}
-        />
-      )}
 
       {/* ── Completed — Monthly ── */}
       {monthlyRows.length > 0 && (
         <Card
           title="Completed — Monthly"
-          subtitle="Completed = meetings completed that month (same monthlyStatus rows as Graph 02). Paid = succeeded Stripe payments that month (Stripe Data tab's Payments KPI); it is bucketed by charge date, not meeting date, so it will not always reconcile 1:1 with Completed in the same bar."
+          subtitle="Completed = meetings completed that month (same monthlyStatus rows as Graph 02). Paid = real-plan paid clients that month — same Plan Breakdown as the Stripe Data tab (Stripe + manual payments), summed across plan tiers, excluding Add-on/Upgrade. It is bucketed by payment date, not meeting date, so it will not always reconcile 1:1 with Completed in the same bar."
           icon={CalendarCheck}
           iconColor="text-blue-600"
         >
