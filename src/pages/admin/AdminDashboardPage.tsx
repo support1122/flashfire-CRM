@@ -19,6 +19,7 @@ type CrmModule =
   | 'bda_admin'
   | 'activity_logs'
   | 'lead_analytics'
+  | 'graphs03'
   | 'phone_calls';
 
 type CrmPermission = CrmModule | `${CrmModule}_edit`;
@@ -37,6 +38,7 @@ const PERMISSIONS: Array<{ key: CrmModule; label: string; description: string; v
   { key: 'bda_admin', label: 'BDA Admin', description: 'Approve BDA claims and review notifications' },
   { key: 'activity_logs', label: 'Activity Log', description: 'View every action across the CRM — who did what, when' },
   { key: 'lead_analytics', label: 'Graphs', description: 'Lead graphs — monthly status, paid vs organic, paid clients' },
+  { key: 'graphs03', label: 'Graphs 03', description: 'BDA performance — completed meetings, calls made, no-show follow-up' },
   { key: 'phone_calls', label: 'Phone Calls', description: 'Access Zoom Phone call recordings and per-lead call history' },
 ];
 
