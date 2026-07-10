@@ -188,6 +188,47 @@ type TipProps<T> = {
   label?: string | number;
 };
 
+type MonthlyRow = { label: string; Completed: number; Paid: number; byBda: Record<string, number> };
+
+const MonthlyTip = ({ active, payload, label }: TipProps<MonthlyRow>) => {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  const bdaEntries = Object.entries(d.byBda).sort((a, b) => b[1] - a[1]);
+  return (
+    <div style={TS} className="border p-3 min-w-[180px]">
+      <p className="font-bold text-slate-800 mb-2 text-xs">{label}</p>
+      <div className="space-y-1 text-xs">
+        <div className="flex items-center justify-between gap-6">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ background: C_COMPLETED }} />
+            <span className="text-slate-600 font-medium">Completed</span>
+          </span>
+          <span className="font-bold text-slate-900">{d.Completed}</span>
+        </div>
+        <div className="flex items-center justify-between gap-6">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full" style={{ background: C_PAID }} />
+            <span className="text-slate-600 font-medium">Paid</span>
+          </span>
+          <span className="font-bold text-slate-900">{d.Paid}</span>
+        </div>
+        {bdaEntries.length > 0 && (
+          <div className="border-t border-slate-100 pt-1.5 mt-1 space-y-1">
+            <p className="text-slate-500 font-semibold">Completed by BDA</p>
+            {bdaEntries.map(([name, count]) => (
+              <div key={name} className="flex items-center justify-between gap-6">
+                <span className="text-slate-600">{name}</span>
+                <span className="font-bold text-slate-900">{count}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 type NoShowRow = { name: string; Called: number; 'Not Called': number; calledPct: number };
 
 const NoShowTip = ({ active, payload, label }: TipProps<NoShowRow>) => {
@@ -296,6 +337,23 @@ export default function GraphsView03() {
     }));
   }, [meetings]);
 
+  // Per-BDA completed count for each month, derived from the same daily/weekly
+  // buckets Chart 1 uses — so the "Completed — Monthly" tooltip breaks down
+  // exactly the same completed meetings by who owns them.
+  const bdaCompletedByMonth = useMemo(() => {
+    const byMonth: Record<string, Record<string, number>> = {};
+    if (!meetings) return byMonth;
+    for (const b of meetings.buckets) {
+      const month = b.bucket.slice(0, 7);
+      const row = (byMonth[month] ??= {});
+      for (const bda of meetings.bdas) {
+        const completed = b.byBda[bda.email]?.completed ?? 0;
+        if (completed > 0) row[bda.name] = (row[bda.name] ?? 0) + completed;
+      }
+    }
+    return byMonth;
+  }, [meetings]);
+
   // Completed bar: same monthlyStatus rows Graph 02 uses for its own Completed count.
   // Paid bar: real-plan paid-client count for that month — same universe as the Stripe
   // Data tab's Plan Breakdown (Stripe + manual payments), summed across plan tiers but
@@ -310,8 +368,9 @@ export default function GraphsView03() {
         label: fmtMonth(r.month),
         Completed: r.completed,
         Paid: paidByMonth[r.month] ?? 0,
+        byBda: bdaCompletedByMonth[r.month] ?? {},
       }));
-  }, [monthlyStatus, stripePaidPlan]);
+  }, [monthlyStatus, stripePaidPlan, bdaCompletedByMonth]);
 
   const noShowRows = useMemo(() => {
     if (!noShow) return [];
@@ -430,12 +489,7 @@ export default function GraphsView03() {
               <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: INK_MUTED }} stroke={AXIS} />
               <YAxis tick={{ fontSize: 11, fill: INK_MUTED }} stroke={AXIS} allowDecimals={false} width={34} />
-              <Tooltip
-                contentStyle={TS}
-                labelStyle={{ fontWeight: 700, fontSize: 11, color: '#0b0b0b' }}
-                itemStyle={{ fontSize: 11 }}
-                cursor={{ fill: 'rgba(11,11,11,0.04)' }}
-              />
+              <Tooltip content={<MonthlyTip />} cursor={{ fill: 'rgba(11,11,11,0.04)' }} />
               <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" iconSize={8} />
               <Bar dataKey="Completed" name="Completed" fill={C_COMPLETED} radius={[5, 5, 0, 0]} maxBarSize={40} />
               <Bar dataKey="Paid" name="Paid" fill={C_PAID} radius={[5, 5, 0, 0]} maxBarSize={40} />
@@ -475,8 +529,6 @@ export default function GraphsView03() {
           icon={CalendarCheck}
           iconColor="text-blue-600"
         >
-          <CoverageNote coverage={meetings.coverage} what="completed meetings" />
-
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
             {panels.map(({ bda, totals, rows }) => (
               <div key={bda.email} className="border border-slate-100 rounded-xl p-3">
@@ -570,18 +622,11 @@ export default function GraphsView03() {
                       <p className="text-xs font-bold text-slate-800">{a.name}</p>
                       <span className="text-[10px] text-slate-400 truncate" title={a.email}>{a.email}</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 tabular-nums">
-                      {[
-                        { l: 'Calls', v: a.calls },
-                        { l: 'Conversations', v: `${a.conversations} (${a.conversationRate}%)` },
-                        { l: 'Time Spent', v: fmtDuration(a.talkSec) },
-                        { l: 'Avg Call', v: `${a.avgCallSec}s` },
-                      ].map((s) => (
-                        <div key={s.l}>
-                          <p className="text-[10px] text-slate-500">{s.l}</p>
-                          <p className="text-sm font-bold text-slate-900">{s.v}</p>
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-1 gap-2 tabular-nums">
+                      <div>
+                        <p className="text-[10px] text-slate-500">Calls</p>
+                        <p className="text-sm font-bold text-slate-900">{a.calls}</p>
+                      </div>
                     </div>
 
                     {/* Call length is ordered, so the ramp goes light (quick) → dark
