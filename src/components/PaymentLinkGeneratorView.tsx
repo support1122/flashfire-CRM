@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Copy, ExternalLink, Check, Zap, AlertCircle, Loader2 } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 
