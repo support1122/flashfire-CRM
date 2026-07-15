@@ -22,6 +22,8 @@ interface Campaign {
   utmContent?: string | null;
   utmTerm?: string | null;
   generatedUrl: string;
+  /** Destination website the link points at; defaults to the main site. */
+  baseUrl?: string | null;
   /** Optional extra link path (same UTM set), e.g. blog/promo */
   customPath?: string | null;
   totalClicks: number;
@@ -35,6 +37,14 @@ interface Campaign {
 }
 
 const FLASHFIRE_SITE = 'https://www.flashfirejobs.com';
+const REGISTER_SITE = 'https://register.flashfirejobs.com';
+
+const DESTINATION_OPTIONS = [
+  { value: FLASHFIRE_SITE, label: 'Main website - flashfirejobs.com' },
+  { value: REGISTER_SITE, label: 'Meta ads landing - register.flashfirejobs.com' },
+];
+
+const siteOf = (c: Pick<Campaign, 'baseUrl'>) => c.baseUrl || FLASHFIRE_SITE;
 
 function buildUtmSearchParams(c: Pick<Campaign, 'utmSource' | 'utmMedium' | 'utmCampaign' | 'utmContent' | 'utmTerm'>) {
   const p = new URLSearchParams();
@@ -47,13 +57,16 @@ function buildUtmSearchParams(c: Pick<Campaign, 'utmSource' | 'utmMedium' | 'utm
 }
 
 function buildRegisterLandingUrl(c: Campaign) {
-  return `${FLASHFIRE_SITE}/register?${buildUtmSearchParams(c)}`;
+  const site = siteOf(c);
+  // On the register domain the landing page IS the root, so /register makes no sense.
+  if (site === REGISTER_SITE) return `${REGISTER_SITE}/?${buildUtmSearchParams(c)}`;
+  return `${site}/register?${buildUtmSearchParams(c)}`;
 }
 
 function buildCustomPathUrl(c: Campaign) {
   if (!c.customPath?.trim()) return null;
   const path = c.customPath.replace(/^\/+/, '');
-  return `${FLASHFIRE_SITE}/${path}?${buildUtmSearchParams(c)}`;
+  return `${siteOf(c)}/${path}?${buildUtmSearchParams(c)}`;
 }
 
 function buildCalendlyCampaignUrl(c: Campaign) {
@@ -84,6 +97,7 @@ export default function CampaignManager() {
   const { canEdit } = useCrmAuth();
   const editable = canEdit('campaign_manager');
   const [campaignName, setCampaignName] = useState('');
+  const [destination, setDestination] = useState(FLASHFIRE_SITE);
   const [exactUtmSource, setExactUtmSource] = useState('');
   const [utmMedium, setUtmMedium] = useState('campaign');
   const [utmCampaign, setUtmCampaign] = useState('');
@@ -215,6 +229,7 @@ export default function CampaignManager() {
         campaignName: nameTrim || exactTrim,
         utmMedium,
         utmCampaign: utmCampaign || null,
+        baseUrl: destination,
       };
       if (exactTrim) {
         body.utmSource = exactTrim.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/gi, '');
@@ -236,6 +251,7 @@ export default function CampaignManager() {
       if (data.success) {
         alert('Campaign created successfully!');
         setCampaignName('');
+        setDestination(FLASHFIRE_SITE);
         setExactUtmSource('');
         setUtmMedium('campaign');
         setUtmCampaign('');
@@ -351,6 +367,25 @@ export default function CampaignManager() {
           {editable ? (
           <form onSubmit={handleCreateCampaign} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2">
+                <label htmlFor="destination" className="block text-sm font-semibold text-gray-700 mb-2">
+                  Destination website *
+                </label>
+                <select
+                  id="destination"
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all bg-white"
+                >
+                  {DESTINATION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Where the campaign link sends visitors</p>
+              </div>
+
               <div>
                 <label htmlFor="campaignName" className="block text-sm font-semibold text-gray-700 mb-2">
                   Campaign name *
@@ -414,7 +449,7 @@ export default function CampaignManager() {
                   Custom site path (optional)
                 </label>
                 <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                  <span className="text-sm text-gray-500 shrink-0 font-mono">flashfirejobs.com/</span>
+                  <span className="text-sm text-gray-500 shrink-0 font-mono">{destination.replace(/^https?:\/\/(www\.)?/, '')}/</span>
                   <input
                     type="text"
                     id="customPath"
@@ -616,6 +651,7 @@ export default function CampaignManager() {
                         </div>
                       </div>
 
+                      {siteOf(campaign) !== REGISTER_SITE && (
                       <div>
                         <div className="text-xs text-gray-500 mb-1 font-semibold">Register landing:</div>
                         <div className="flex items-center gap-2">
@@ -636,6 +672,7 @@ export default function CampaignManager() {
                           </button>
                         </div>
                       </div>
+                      )}
 
                       <div>
                         <div className="text-xs text-gray-500 mb-1 font-semibold">Calendly URL:</div>
