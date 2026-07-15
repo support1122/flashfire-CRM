@@ -11,7 +11,7 @@ import {
   LabelList,
 } from 'recharts';
 import {
-  Loader2, RefreshCcw, CalendarCheck, PhoneCall, AlertTriangle, Table2, PhoneOutgoing, ClipboardCheck,
+  Loader2, RefreshCcw, CalendarCheck, PhoneCall, AlertTriangle, Table2, PhoneOutgoing,
 } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 
@@ -35,18 +35,6 @@ const AGENT_SLOTS = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#4a3aa7', '#e3
 const D_UNDER10 = '#86b6ef';
 const D_10_60   = '#3987e5';
 const D_OVER60  = '#184f95';
-const PLAN_RAMP: Record<string, string> = {
-  IGNITE: '#86b6ef', PRIME: '#5598e7', PROFESSIONAL: '#2a78d6', EXECUTIVE: '#184f95',
-};
-
-// "Unmarked" is absence of data, not a third outcome — a neutral, never a hue.
-const C_UNMARKED = '#c3c2b7';
-
-/**
- * Below this many observations a rate is noise, not signal: Kalpataru's attendance is
- * a single row, which would render as a confident "0%" beside Siddhartha's 98.3%.
- */
-const MIN_SAMPLE = 5;
 
 const INK_MUTED = '#898781';
 const GRID      = '#e1e0d9';
@@ -54,6 +42,12 @@ const AXIS      = '#c3c2b7';
 
 const UNASSIGNED = 'unassigned';
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Default data window: everything from Jul 1 onward — not a rolling last-N-days range.
+// Uses this year's Jul 1, or last year's if the page loads before July.
+const DEFAULT_START_YEAR = new Date().getMonth() >= 6 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+const DEFAULT_START_DATE = `${DEFAULT_START_YEAR}-07-01`;
+const DEFAULT_START_MONTH = `${DEFAULT_START_YEAR}-07`;
 
 // ── Types ──────────────────────────────────────────────────────────
 type Granularity = 'day' | 'week';
@@ -87,29 +81,8 @@ type Agent = {
   conversations: number; conversationRate: number;
 };
 
-type AttendanceRow = {
-  email: string; name: string; role: string; isBda: boolean;
-  present: number; absent: number; unmarked: number; manual: number;
-  marked: number; total: number; presentRate: number;
-};
-
-type SalesCycleRow = {
-  email: string; name: string; role: string; isBda: boolean;
-  paid: number; cycleN: number;
-  avgCycleDays: number | null; medianCycleDays: number | null;
-  fastestDays: number | null; slowestDays: number | null;
-  planMix: Record<string, number>; unknownPlan: number;
-};
-
-type ScorecardPayload = {
-  days: number;
-  planTiers: string[];
-  attendance: AttendanceRow[];
-  salesCycle: SalesCycleRow[];
-  overall: { paid: number; avgCycleDays: number | null; cycleN: number };
-  coverage: Coverage;
-  excludedOutliers: number;
-};
+type MonthlyStatusRow = { month: string; completed: number };
+type StripePaidPlanRow = { month: string; paidCount: number };
 
 type CallActivityPayload = {
   granularity: Granularity;
@@ -129,6 +102,12 @@ type CallActivityPayload = {
 const fmtBucket = (ymd: string) => {
   const [, m, d] = ymd.split('-').map(Number);
   return `${MONTHS[m - 1]} ${d}`;
+};
+
+/** "2026-07" → "Jul '26" */
+const fmtMonth = (ym: string) => {
+  const [y, m] = ym.split('-');
+  return `${MONTHS[parseInt(m, 10) - 1] || m} '${y?.slice(2)}`;
 };
 
 /** 8577 → "2h 23m", 900 → "15m", 45 → "45s". */
@@ -185,17 +164,6 @@ const Card = memo(({
 ));
 Card.displayName = 'Card';
 
-const KpiStrip = ({ items }: { items: { label: string; value: string | number; color: string }[] }) => (
-  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-    {items.map((it) => (
-      <div key={it.label} className="bg-white border border-slate-200 rounded-xl px-4 py-3">
-        <p className="text-[11px] text-slate-500 font-medium">{it.label}</p>
-        <p className={`text-xl font-bold mt-0.5 ${it.color}`}>{it.value}</p>
-      </div>
-    ))}
-  </div>
-);
-
 /** Honest banner: how much of the data actually carries a BDA. */
 const CoverageNote = ({ coverage, what }: { coverage: Coverage; what: string }) => {
   if (!coverage || coverage.total === 0 || coverage.unattributed === 0) return null;
@@ -205,7 +173,7 @@ const CoverageNote = ({ coverage, what }: { coverage: Coverage; what: string }) 
       <span>
         <strong>{coverage.unattributed}</strong> of <strong>{coverage.total}</strong> {what}
         {' '}({(100 - coverage.attributedPct).toFixed(1)}%) have no BDA on record and are shown as
-        {' '}<em>Unassigned</em>. A BDA is recorded from the Calendly round-robin host, or a manual
+        {' '}<em>Flashfire Team</em>. A BDA is recorded from the Calendly round-robin host, or a manual
         claim. Older bookings pre-date host capture — running the
         {' '}<code className="font-mono">backfill-calendly-hosts</code> admin job fills them in.
       </span>
@@ -220,15 +188,15 @@ type TipProps<T> = {
   label?: string | number;
 };
 
-type MeetingsRow = { label: string; Completed: number; Paid: number };
+type MonthlyRow = { label: string; Completed: number; Paid: number; byBda: Record<string, number> };
 
-const MeetingsTip = ({ active, payload, label }: TipProps<MeetingsRow>) => {
+const MonthlyTip = ({ active, payload, label }: TipProps<MonthlyRow>) => {
   if (!active || !payload?.length) return null;
   const d = payload[0]?.payload;
   if (!d) return null;
-  const rate = d.Completed > 0 ? Math.round((d.Paid / d.Completed) * 1000) / 10 : 0;
+  const bdaEntries = Object.entries(d.byBda).sort((a, b) => b[1] - a[1]);
   return (
-    <div style={TS} className="border p-3 min-w-[160px]">
+    <div style={TS} className="border p-3 min-w-[180px]">
       <p className="font-bold text-slate-800 mb-2 text-xs">{label}</p>
       <div className="space-y-1 text-xs">
         <div className="flex items-center justify-between gap-6">
@@ -245,10 +213,17 @@ const MeetingsTip = ({ active, payload, label }: TipProps<MeetingsRow>) => {
           </span>
           <span className="font-bold text-slate-900">{d.Paid}</span>
         </div>
-        <div className="border-t border-slate-100 pt-1 flex justify-between">
-          <span className="text-slate-500 font-semibold">Conversion</span>
-          <span className="font-bold text-slate-900">{rate}%</span>
-        </div>
+        {bdaEntries.length > 0 && (
+          <div className="border-t border-slate-100 pt-1.5 mt-1 space-y-1">
+            <p className="text-slate-500 font-semibold">Completed by BDA</p>
+            {bdaEntries.map(([name, count]) => (
+              <div key={name} className="flex items-center justify-between gap-6">
+                <span className="text-slate-600">{name}</span>
+                <span className="font-bold text-slate-900">{count}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -294,7 +269,8 @@ export default function GraphsView03() {
   const [meetings, setMeetings] = useState<MeetingsPayload | null>(null);
   const [noShow, setNoShow] = useState<NoShowPayload | null>(null);
   const [callActivity, setCallActivity] = useState<CallActivityPayload | null>(null);
-  const [scorecard, setScorecard] = useState<ScorecardPayload | null>(null);
+  const [monthlyStatus, setMonthlyStatus] = useState<MonthlyStatusRow[]>([]);
+  const [stripePaidPlan, setStripePaidPlan] = useState<StripePaidPlanRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
@@ -305,23 +281,38 @@ export default function GraphsView03() {
       setError(null);
       const headers: HeadersInit = {};
       if (token) headers.Authorization = `Bearer ${token}`;
-      const days = granularity === 'week' ? 84 : 30;
-      const [mRes, nRes, cRes, sRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-meetings?granularity=${granularity}&days=${days}`, { headers }),
-        fetch(`${API_BASE_URL}/api/crm/graphs03/no-show-followup?days=120`, { headers }),
-        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-call-activity?granularity=${granularity}&days=${days}`, { headers }),
-        // Paid volume is low, so the scorecard needs a wider window than the toggle.
-        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-scorecard?days=180`, { headers }),
+      // Default window: everything from Jul 1 onward, not a rolling 30/84-day range.
+      const daysSinceJuly = Math.max(
+        1,
+        Math.ceil((Date.now() - Date.UTC(DEFAULT_START_YEAR, 6, 1)) / 86400000)
+      );
+      const [mRes, nRes, cRes, leadsRes, stripeRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-meetings?granularity=${granularity}&fromDate=${DEFAULT_START_DATE}`, { headers }),
+        fetch(`${API_BASE_URL}/api/crm/graphs03/no-show-followup?days=${daysSinceJuly}`, { headers }),
+        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-call-activity?granularity=${granularity}&fromDate=${DEFAULT_START_DATE}`, { headers }),
+        // Completed — same monthlyStatus rows and formula as Graph 02's Completed — Monthly card.
+        fetch(`${API_BASE_URL}/api/leads/analytics`, { headers }),
+        // Paid — real-plan paid-client count per month (Stripe + manual payments,
+        // classified by plan name same as the Stripe Data tab, excluding Add-on/Upgrade).
+        fetch(`${API_BASE_URL}/api/crm/stripe/paid-plan-summary`, { headers }),
       ]);
       const mJson = await mRes.json();
       const nJson = await nRes.json();
       const cJson = await cRes.json();
-      const sJson = await sRes.json();
+      const leadsJson = await leadsRes.json();
+      const stripeJson = await stripeRes.json();
       if (!mRes.ok || !mJson.success) throw new Error(mJson.message || `HTTP ${mRes.status}`);
       setMeetings(mJson.data as MeetingsPayload);
       if (nRes.ok && nJson.success) setNoShow(nJson.data as NoShowPayload);
       if (cRes.ok && cJson.success) setCallActivity(cJson.data as CallActivityPayload);
-      if (sRes.ok && sJson.success) setScorecard(sJson.data as ScorecardPayload);
+      if (leadsRes.ok && leadsJson.success) {
+        const rows = (leadsJson.data?.monthlyStatus ?? []) as MonthlyStatusRow[];
+        setMonthlyStatus(rows.filter((r) => r.month >= DEFAULT_START_MONTH));
+      }
+      if (stripeRes.ok && stripeJson.success) {
+        const rows = (stripeJson.data ?? []) as StripePaidPlanRow[];
+        setStripePaidPlan(rows.filter((r) => r.month >= DEFAULT_START_MONTH));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -345,6 +336,41 @@ export default function GraphsView03() {
       })),
     }));
   }, [meetings]);
+
+  // Per-BDA completed count for each month, derived from the same daily/weekly
+  // buckets Chart 1 uses — so the "Completed — Monthly" tooltip breaks down
+  // exactly the same completed meetings by who owns them.
+  const bdaCompletedByMonth = useMemo(() => {
+    const byMonth: Record<string, Record<string, number>> = {};
+    if (!meetings) return byMonth;
+    for (const b of meetings.buckets) {
+      const month = b.bucket.slice(0, 7);
+      const row = (byMonth[month] ??= {});
+      for (const bda of meetings.bdas) {
+        const completed = b.byBda[bda.email]?.completed ?? 0;
+        if (completed > 0) row[bda.name] = (row[bda.name] ?? 0) + completed;
+      }
+    }
+    return byMonth;
+  }, [meetings]);
+
+  // Completed bar: same monthlyStatus rows Graph 02 uses for its own Completed count.
+  // Paid bar: real-plan paid-client count for that month — same universe as the Stripe
+  // Data tab's Plan Breakdown (Stripe + manual payments), summed across plan tiers but
+  // excluding Add-on/Upgrade line items.
+  const monthlyRows = useMemo(() => {
+    const paidByMonth: Record<string, number> = {};
+    stripePaidPlan.forEach((r) => { paidByMonth[r.month] = r.paidCount; });
+    return [...monthlyStatus]
+      .filter((r) => r.month)
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map((r) => ({
+        label: fmtMonth(r.month),
+        Completed: r.completed,
+        Paid: paidByMonth[r.month] ?? 0,
+        byBda: bdaCompletedByMonth[r.month] ?? {},
+      }));
+  }, [monthlyStatus, stripePaidPlan, bdaCompletedByMonth]);
 
   const noShowRows = useMemo(() => {
     if (!noShow) return [];
@@ -449,47 +475,60 @@ export default function GraphsView03() {
         </div>
       </div>
 
-      {/* KPIs */}
-      {meetings && noShow && (
-        <KpiStrip
-          items={[
-            { label: 'Completed Meetings', value: meetings.overall.completed, color: 'text-slate-900' },
-            { label: 'Paid', value: meetings.overall.paid, color: 'text-emerald-700' },
-            { label: 'Conversion', value: `${meetings.overall.conversionRate}%`, color: 'text-blue-700' },
-            { label: 'No-Shows Followed Up', value: `${noShow.overall.calledPct}%`, color: 'text-orange-600' },
-          ]}
-        />
-      )}
-      {callActivity && (
-        <KpiStrip
-          items={[
-            { label: 'Calls Made', value: callActivity.overall.calls, color: 'text-slate-900' },
-            { label: 'Time on Calls', value: fmtDuration(callActivity.overall.talkSec), color: 'text-blue-700' },
-            {
-              label: 'Conversations (>60s)',
-              value: `${callActivity.overall.conversations} (${callActivity.overall.conversationRate}%)`,
-              color: 'text-emerald-700',
-            },
-            { label: 'Avg Call Length', value: `${callActivity.overall.avgCallSec}s`, color: 'text-slate-900' },
-          ]}
-        />
-      )}
 
-      {/* ── Chart 1 — Completed vs Paid, per BDA ── */}
-      {meetings && (
+      {/* ── Completed — Monthly ── */}
+      {monthlyRows.length > 0 && (
         <Card
-          title={`Completed Meetings vs Paid — ${granularity === 'day' ? 'Daily' : 'Weekly'}`}
-          subtitle="Bucketed by when the meeting happened. A paid client also sat the meeting, so Paid is a subset of Completed."
+          title="Completed — Monthly"
+          subtitle="Completed = meetings completed that month (same monthlyStatus rows as Graph 02). Paid = real-plan paid clients that month — same Plan Breakdown as the Stripe Data tab (Stripe + manual payments), summed across plan tiers, excluding Add-on/Upgrade. It is bucketed by payment date, not meeting date, so it will not always reconcile 1:1 with Completed in the same bar."
           icon={CalendarCheck}
           iconColor="text-blue-600"
-          badge={
-            <span className="text-[11px] font-semibold text-slate-500">
-              {meetings.overall.completed} meetings · {meetings.overall.paid} paid
-            </span>
-          }
         >
-          <CoverageNote coverage={meetings.coverage} what="completed meetings" />
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={monthlyRows} margin={{ top: 10, right: 16, left: 0, bottom: 6 }} barGap={2}>
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: INK_MUTED }} stroke={AXIS} />
+              <YAxis tick={{ fontSize: 11, fill: INK_MUTED }} stroke={AXIS} allowDecimals={false} width={34} />
+              <Tooltip content={<MonthlyTip />} cursor={{ fill: 'rgba(11,11,11,0.04)' }} />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" iconSize={8} />
+              <Bar dataKey="Completed" name="Completed" fill={C_COMPLETED} radius={[5, 5, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="Paid" name="Paid" fill={C_PAID} radius={[5, 5, 0, 0]} maxBarSize={40} />
+            </BarChart>
+          </ResponsiveContainer>
 
+          {showTable && (
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="text-slate-500 border-b border-slate-200">
+                    <th className="text-left py-1.5 pr-3 font-semibold">Month</th>
+                    <th className="text-right py-1.5 px-3 font-semibold">Completed</th>
+                    <th className="text-right py-1.5 pl-3 font-semibold">Paid</th>
+                  </tr>
+                </thead>
+                <tbody className="tabular-nums">
+                  {monthlyRows.map((r) => (
+                    <tr key={r.label} className="border-b border-slate-50">
+                      <td className="py-1 pr-3 text-slate-600">{r.label}</td>
+                      <td className="text-right py-1 px-3 text-slate-700">{r.Completed}</td>
+                      <td className="text-right py-1 pl-3 text-emerald-700 font-semibold">{r.Paid}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* ── Chart 1 — Completed meetings, per BDA ── */}
+      {meetings && (
+        <Card
+          title={`Completed Meetings — ${granularity === 'day' ? 'Daily' : 'Weekly'}`}
+          subtitle="Bucketed by when the meeting happened."
+          icon={CalendarCheck}
+          iconColor="text-blue-600"
+        >
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
             {panels.map(({ bda, totals, rows }) => (
               <div key={bda.email} className="border border-slate-100 rounded-xl p-3">
@@ -497,10 +536,7 @@ export default function GraphsView03() {
                   <p className={`text-xs font-bold ${bda.email === UNASSIGNED ? 'text-slate-400 italic' : 'text-slate-800'}`}>
                     {bda.name}
                   </p>
-                  <p className="text-[11px] text-slate-500">
-                    {totals.completed} · <span className="text-emerald-700 font-semibold">{totals.paid} paid</span> ·{' '}
-                    {totals.conversionRate}%
-                  </p>
+                  <p className="text-[11px] text-slate-500">{totals.completed} completed</p>
                 </div>
                 <ResponsiveContainer width="100%" height={190}>
                   <BarChart data={rows} margin={{ top: 6, right: 4, left: -22, bottom: 0 }} barGap={2}>
@@ -513,10 +549,13 @@ export default function GraphsView03() {
                       minTickGap={12}
                     />
                     <YAxis tick={{ fontSize: 9, fill: INK_MUTED }} stroke={AXIS} allowDecimals={false} />
-                    <Tooltip content={<MeetingsTip />} cursor={{ fill: 'rgba(11,11,11,0.04)' }} />
-                    <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconType="circle" iconSize={7} />
+                    <Tooltip
+                      contentStyle={TS}
+                      labelStyle={{ fontWeight: 700, fontSize: 11, color: '#0b0b0b' }}
+                      itemStyle={{ fontSize: 11 }}
+                      cursor={{ fill: 'rgba(11,11,11,0.04)' }}
+                    />
                     <Bar dataKey="Completed" fill={C_COMPLETED} radius={[4, 4, 0, 0]} maxBarSize={14} />
-                    <Bar dataKey="Paid" fill={C_PAID} radius={[4, 4, 0, 0]} maxBarSize={14} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -542,7 +581,7 @@ export default function GraphsView03() {
                         const v = bk.byBda[b.email] ?? { completed: 0, paid: 0 };
                         return (
                           <td key={b.email} className="text-right py-1 px-3 text-slate-700">
-                            {v.completed} / <span className="text-emerald-700 font-semibold">{v.paid}</span>
+                            {v.completed}
                           </td>
                         );
                       })}
@@ -550,7 +589,7 @@ export default function GraphsView03() {
                   ))}
                 </tbody>
               </table>
-              <p className="text-[10px] text-slate-400 mt-1">Each cell is completed / paid.</p>
+              <p className="text-[10px] text-slate-400 mt-1">Each cell is completed meetings.</p>
             </div>
           )}
         </Card>
@@ -573,8 +612,9 @@ export default function GraphsView03() {
             <p className="text-xs text-slate-500 py-8 text-center">No BDA calls in this window.</p>
           ) : (
             <>
-              {/* Per-BDA summary */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+              {/* One panel per BDA: their own summary + their own two charts, so
+                  Siddhartha's bars never appear on Kalpataru's side or vice versa. */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {bdaAgents.map((a) => (
                   <div key={a.email} className="border border-slate-100 rounded-xl p-3">
                     <div className="flex items-center gap-2 mb-2">
@@ -582,18 +622,11 @@ export default function GraphsView03() {
                       <p className="text-xs font-bold text-slate-800">{a.name}</p>
                       <span className="text-[10px] text-slate-400 truncate" title={a.email}>{a.email}</span>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 tabular-nums">
-                      {[
-                        { l: 'Calls', v: a.calls },
-                        { l: 'Conversations', v: `${a.conversations} (${a.conversationRate}%)` },
-                        { l: 'Time Spent', v: fmtDuration(a.talkSec) },
-                        { l: 'Avg Call', v: `${a.avgCallSec}s` },
-                      ].map((s) => (
-                        <div key={s.l}>
-                          <p className="text-[10px] text-slate-500">{s.l}</p>
-                          <p className="text-sm font-bold text-slate-900">{s.v}</p>
-                        </div>
-                      ))}
+                    <div className="grid grid-cols-1 gap-2 tabular-nums">
+                      <div>
+                        <p className="text-[10px] text-slate-500">Calls</p>
+                        <p className="text-sm font-bold text-slate-900">{a.calls}</p>
+                      </div>
                     </div>
 
                     {/* Call length is ordered, so the ramp goes light (quick) → dark
@@ -618,42 +651,39 @@ export default function GraphsView03() {
                         <span>&gt;60s: <strong className="text-slate-700">{a.over60s}</strong></span>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
 
-              {/* Two units → two plots. Never one chart with two y-scales. */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                {[
-                  { title: 'Calls Made', rows: callRows, unit: '' },
-                  { title: 'Time Spent on Calls (minutes)', rows: talkRows, unit: 'm' },
-                ].map((chart) => (
-                  <div key={chart.title} className="border border-slate-100 rounded-xl p-3">
-                    <p className="text-xs font-bold text-slate-800 mb-2">{chart.title}</p>
-                    <ResponsiveContainer width="100%" height={210}>
-                      <BarChart data={chart.rows} margin={{ top: 6, right: 6, left: -20, bottom: 0 }} barGap={2}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ fontSize: 9, fill: INK_MUTED }}
-                          stroke={AXIS}
-                          interval="preserveStartEnd"
-                          minTickGap={12}
-                        />
-                        <YAxis tick={{ fontSize: 9, fill: INK_MUTED }} stroke={AXIS} allowDecimals={false} />
-                        <Tooltip
-                          contentStyle={TS}
-                          labelStyle={{ fontWeight: 700, fontSize: 11, color: '#0b0b0b' }}
-                          itemStyle={{ fontSize: 11 }}
-                          formatter={(v: number) => `${v}${chart.unit}`}
-                          cursor={{ fill: 'rgba(11,11,11,0.04)' }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} iconType="circle" iconSize={7} />
-                        {bdaAgents.map((a) => (
-                          <Bar key={a.email} dataKey={a.name} fill={colorFor(a.email)} radius={[4, 4, 0, 0]} maxBarSize={14} />
-                        ))}
-                      </BarChart>
-                    </ResponsiveContainer>
+                    {/* Two units → two plots. Never one chart with two y-scales. */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                      {[
+                        { title: 'Calls Made', rows: callRows, unit: '' },
+                        { title: 'Time Spent (minutes)', rows: talkRows, unit: 'm' },
+                      ].map((chart) => (
+                        <div key={chart.title}>
+                          <p className="text-[11px] font-bold text-slate-700 mb-1">{chart.title}</p>
+                          <ResponsiveContainer width="100%" height={160}>
+                            <BarChart data={chart.rows} margin={{ top: 6, right: 4, left: -20, bottom: 0 }} barGap={2}>
+                              <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+                              <XAxis
+                                dataKey="label"
+                                tick={{ fontSize: 9, fill: INK_MUTED }}
+                                stroke={AXIS}
+                                interval="preserveStartEnd"
+                                minTickGap={12}
+                              />
+                              <YAxis tick={{ fontSize: 9, fill: INK_MUTED }} stroke={AXIS} allowDecimals={false} />
+                              <Tooltip
+                                contentStyle={TS}
+                                labelStyle={{ fontWeight: 700, fontSize: 11, color: '#0b0b0b' }}
+                                itemStyle={{ fontSize: 11 }}
+                                formatter={(v: number) => `${v}${chart.unit}`}
+                                cursor={{ fill: 'rgba(11,11,11,0.04)' }}
+                              />
+                              <Bar dataKey={a.name} fill={colorFor(a.email)} radius={[4, 4, 0, 0]} maxBarSize={14} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -713,153 +743,6 @@ export default function GraphsView03() {
               )}
             </>
           )}
-        </Card>
-      )}
-
-      {/* ── Scorecard — attendance, sales cycle, plan mix ── */}
-      {scorecard && (
-        <Card
-          title="BDA Scorecard — Attendance, Sales Cycle & Plan Mix"
-          subtitle={`Last ${scorecard.days} days. Rates from fewer than ${MIN_SAMPLE} observations are withheld as too small to read.`}
-          icon={ClipboardCheck}
-          iconColor="text-violet-700"
-          badge={
-            <span className="text-[11px] font-semibold text-slate-500">
-              {scorecard.overall.paid} paid
-              {scorecard.overall.avgCycleDays !== null && ` · ${scorecard.overall.avgCycleDays}d avg cycle`}
-            </span>
-          }
-        >
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Attendance — keyed on bdaEmail directly, so it does not depend on
-                the sparse Calendly-host attribution the other charts rely on. */}
-            <div>
-              <p className="text-xs font-bold text-slate-800 mb-1">Meeting Attendance</p>
-              <p className="text-[11px] text-slate-500 mb-3">
-                Present vs absent on booked meetings. <em>Unmarked</em> means nobody recorded an outcome — it is not
-                counted as a miss. Time-in-meeting is not shown: <code className="font-mono">joinedAt</code> is never
-                recorded, so it cannot be computed.
-              </p>
-              <div className="space-y-2.5">
-                {scorecard.attendance.filter((a) => a.total > 0).map((a) => {
-                  const enough = a.marked >= MIN_SAMPLE;
-                  return (
-                    <div key={a.email}>
-                      <div className="flex items-baseline justify-between mb-1">
-                        <span className={`text-[11px] font-semibold ${a.isBda ? 'text-slate-800' : 'text-slate-400 italic'}`}>
-                          {a.name}
-                          {!a.isBda && <span className="ml-1 font-normal">({a.role})</span>}
-                        </span>
-                        <span className="text-[11px] tabular-nums">
-                          {enough ? (
-                            <span className="font-bold text-slate-900">{a.presentRate}% present</span>
-                          ) : (
-                            <span className="text-slate-400">n={a.marked}, too few to rate</span>
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex h-2.5 rounded-full overflow-hidden gap-[2px] bg-slate-50">
-                        {[
-                          { k: 'Present', n: a.present + a.manual, c: C_CALLED },
-                          { k: 'Absent', n: a.absent, c: C_NOT_CALLED },
-                          { k: 'Unmarked', n: a.unmarked, c: C_UNMARKED },
-                        ].map((seg) => seg.n > 0 && (
-                          <div key={seg.k} style={{ width: `${(seg.n / Math.max(a.total, 1)) * 100}%`, background: seg.c }} title={`${seg.k}: ${seg.n}`} />
-                        ))}
-                      </div>
-                      <div className="flex gap-3 mt-1 text-[10px] text-slate-500 tabular-nums">
-                        <span>Present {a.present + a.manual}</span>
-                        <span>Absent {a.absent}</span>
-                        {a.unmarked > 0 && <span>Unmarked {a.unmarked}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="flex gap-4 mt-3 pt-2 border-t border-slate-100 text-[10px] text-slate-500">
-                {[['Present', C_CALLED], ['Absent', C_NOT_CALLED], ['Unmarked', C_UNMARKED]].map(([l, c]) => (
-                  <span key={l} className="flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full" style={{ background: c }} /> {l}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Sales cycle + plan mix */}
-            <div>
-              <p className="text-xs font-bold text-slate-800 mb-1">Sales Cycle & Plan Mix</p>
-              <p className="text-[11px] text-slate-500 mb-3">
-                Days from the meeting to payment. Plan mix is <strong>counts only</strong> — revenue is omitted because{' '}
-                <code className="font-mono">paymentPlan.price</code> mixes USD, CAD and INR in one field. Use the Stripe
-                Data tab for money.
-              </p>
-
-              <div className="space-y-3">
-                {scorecard.salesCycle.filter((b) => b.paid > 0).map((b) => {
-                  const enough = b.cycleN >= MIN_SAMPLE;
-                  const mixTotal = Object.values(b.planMix).reduce((s, v) => s + v, 0);
-                  return (
-                    <div key={b.email} className="border border-slate-100 rounded-lg p-2.5">
-                      <div className="flex items-baseline justify-between mb-1.5">
-                        <span className={`text-[11px] font-semibold ${b.email === UNASSIGNED ? 'text-slate-400 italic' : b.isBda ? 'text-slate-800' : 'text-slate-500'}`}>
-                          {b.name}
-                        </span>
-                        <span className="text-[11px] text-slate-500 tabular-nums">{b.paid} paid</span>
-                      </div>
-
-                      {enough ? (
-                        <div className="grid grid-cols-3 gap-2 mb-2 tabular-nums">
-                          {[
-                            { l: 'Median', v: `${b.medianCycleDays}d` },
-                            { l: 'Average', v: `${b.avgCycleDays}d` },
-                            { l: 'Range', v: `${b.fastestDays}–${b.slowestDays}d` },
-                          ].map((s) => (
-                            <div key={s.l}>
-                              <p className="text-[10px] text-slate-500">{s.l}</p>
-                              <p className="text-xs font-bold text-slate-900">{s.v}</p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-[10px] text-slate-400 mb-2">
-                          Cycle from n={b.cycleN} — too few to average.
-                        </p>
-                      )}
-
-                      {mixTotal > 0 && (
-                        <>
-                          <div className="flex h-2 rounded-full overflow-hidden gap-[2px]">
-                            {scorecard.planTiers.map((t) => (b.planMix[t] > 0) && (
-                              <div key={t} style={{ width: `${(b.planMix[t] / mixTotal) * 100}%`, background: PLAN_RAMP[t] }} title={`${t}: ${b.planMix[t]}`} />
-                            ))}
-                          </div>
-                          <div className="flex flex-wrap gap-x-3 mt-1 text-[10px] text-slate-500 tabular-nums">
-                            {scorecard.planTiers.map((t) => (b.planMix[t] > 0) && (
-                              <span key={t} className="flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full" style={{ background: PLAN_RAMP[t] }} />
-                                {t.slice(0, 4)} {b.planMix[t]}
-                              </span>
-                            ))}
-                            {b.unknownPlan > 0 && <span>No plan {b.unknownPlan}</span>}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <p className="text-[10px] text-slate-400 mt-2">
-                Plans low→high: {scorecard.planTiers.join(' · ')}
-                {scorecard.excludedOutliers > 0 &&
-                  ` — ${scorecard.excludedOutliers} booking${scorecard.excludedOutliers === 1 ? '' : 's'} excluded with an impossible meeting→payment gap.`}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <CoverageNote coverage={scorecard.coverage} what="paid bookings" />
-          </div>
         </Card>
       )}
 

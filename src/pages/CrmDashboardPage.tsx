@@ -51,6 +51,7 @@ const PhoneCallsView = React.lazy(() => import('../components/PhoneCallsView'));
 const CallLeadsView = React.lazy(() => import('../components/CallLeadsView'));
 const EmailTemplateBuilder = React.lazy(() => import('../components/EmailTemplateBuilder'));
 const SessionsView = React.lazy(() => import('../components/SessionsView'));
+const PaymentLinkGeneratorView = React.lazy(() => import('../components/PaymentLinkGeneratorView'));
 
 function TabSpinner() {
   return (
@@ -63,7 +64,7 @@ function TabSpinner() {
 }
 
 
-type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs' | 'graphs02' | 'graphs03' | 'stripe_data' | 'phone' | 'call_leads' | 'email_templates';
+type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs' | 'graphs02' | 'graphs03' | 'stripe_data' | 'phone' | 'email_templates' | 'payment_links';
 
 const TAB_CONFIG: Array<{
   tab: Tab;
@@ -84,14 +85,15 @@ const TAB_CONFIG: Array<{
   { tab: 'meeting_links', permission: 'meeting_links', label: 'Meeting Info', icon: Video },
   { tab: 'activity', permission: 'activity_logs', label: 'Activity Log', icon: Activity },
   { tab: 'graphs', permission: 'lead_analytics', label: 'Graphs', icon: BarChart3 },
-  { tab: 'graphs02', permission: 'lead_analytics', label: 'Graphs 02', icon: BarChart3 },
-  { tab: 'graphs03', permission: 'lead_analytics', label: 'Graphs 03', icon: BarChart3 },
+  { tab: 'graphs02', permission: 'lead_analytics', label: 'Graphs BDA Analysis', icon: BarChart3 },
+  { tab: 'graphs03', permission: 'graphs03', label: 'Graphs 03', icon: BarChart3 },
   { tab: 'stripe_data', permission: 'lead_analytics', label: 'Stripe Data', icon: CreditCard },
   { tab: 'phone', permission: 'phone_calls', label: 'Phone Calls', icon: Phone },
   // Gated on `leads`, not `phone_calls`: the BDAs who work this list hold leads/all_data
   // but not phone_calls, so gating on phone_calls would hide the tab from them.
   { tab: 'call_leads', permission: 'leads', label: 'Call Leads', icon: PhoneCall },
   { tab: 'email_templates', permission: 'email_campaign', label: 'Email Templates', icon: FileText },
+  { tab: 'payment_links', permission: 'payment_links', label: 'Payment Link Generator', icon: CreditCard },
 ];
 
 export default function CrmDashboardPage() {
@@ -498,6 +500,7 @@ export default function CrmDashboardPage() {
                 {activeTab === 'phone' && <PhoneCallsView />}
                 {activeTab === 'call_leads' && <CallLeadsView />}
                 {activeTab === 'email_templates' && <EmailTemplateBuilder />}
+                {activeTab === 'payment_links' && <PaymentLinkGeneratorView />}
               </Suspense>
             )}
           </div>
