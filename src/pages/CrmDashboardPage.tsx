@@ -19,6 +19,7 @@ import {
   Facebook,
   Activity,
   Phone,
+  PhoneCall,
   FileText,
   CreditCard,
   ShieldCheck,
@@ -47,6 +48,7 @@ const GraphsView02 = React.lazy(() => import('../components/GraphsView02'));
 const GraphsView03 = React.lazy(() => import('../components/GraphsView03'));
 const StripeDataView = React.lazy(() => import('../components/StripeDataView'));
 const PhoneCallsView = React.lazy(() => import('../components/PhoneCallsView'));
+const CallLeadsView = React.lazy(() => import('../components/CallLeadsView'));
 const EmailTemplateBuilder = React.lazy(() => import('../components/EmailTemplateBuilder'));
 const SessionsView = React.lazy(() => import('../components/SessionsView'));
 
@@ -61,7 +63,7 @@ function TabSpinner() {
 }
 
 
-type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs' | 'graphs02' | 'graphs03' | 'stripe_data' | 'phone' | 'email_templates';
+type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs' | 'graphs02' | 'graphs03' | 'stripe_data' | 'phone' | 'call_leads' | 'email_templates';
 
 const TAB_CONFIG: Array<{
   tab: Tab;
@@ -86,6 +88,9 @@ const TAB_CONFIG: Array<{
   { tab: 'graphs03', permission: 'lead_analytics', label: 'Graphs 03', icon: BarChart3 },
   { tab: 'stripe_data', permission: 'lead_analytics', label: 'Stripe Data', icon: CreditCard },
   { tab: 'phone', permission: 'phone_calls', label: 'Phone Calls', icon: Phone },
+  // Gated on `leads`, not `phone_calls`: the BDAs who work this list hold leads/all_data
+  // but not phone_calls, so gating on phone_calls would hide the tab from them.
+  { tab: 'call_leads', permission: 'leads', label: 'Call Leads', icon: PhoneCall },
   { tab: 'email_templates', permission: 'email_campaign', label: 'Email Templates', icon: FileText },
 ];
 
@@ -491,6 +496,7 @@ export default function CrmDashboardPage() {
                 {activeTab === 'graphs03' && <GraphsView03 />}
                 {activeTab === 'stripe_data' && <StripeDataView />}
                 {activeTab === 'phone' && <PhoneCallsView />}
+                {activeTab === 'call_leads' && <CallLeadsView />}
                 {activeTab === 'email_templates' && <EmailTemplateBuilder />}
               </Suspense>
             )}
