@@ -101,7 +101,8 @@ interface SummaryPayload {
   };
   types: Facet[];
   statuses: Facet[];
-  ages: Facet[];
+  dateQuick: Facet[];
+  dateBounds: { min: string | null; max: string | null };
   assignees: { email: string; name: string; leads: number }[];
   /** Set when the caller is a BDA seeing only their own queue. */
   scopedTo: string | null;
@@ -372,10 +373,29 @@ export default function CallLeadsView() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [ageFilter, setAgeFilter] = useState('all');
+  // Date filtering is either a quick preset OR an explicit day range, never both.
+  const [datePreset, setDatePreset] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [sort, setSort] = useState('newest');
   const [scopedTo, setScopedTo] = useState<string | null>(null);
+
+  // A preset and a custom range are mutually exclusive: choosing one clears the other,
+  // so the UI never shows two date filters fighting over the same query param.
+  const pickDatePreset = useCallback((value: string) => {
+    setDatePreset((prev) => (prev === value ? 'all' : value));
+    setDateFrom('');
+    setDateTo('');
+  }, []);
+  const pickDateFrom = useCallback((value: string) => {
+    setDateFrom(value);
+    setDatePreset('all');
+  }, []);
+  const pickDateTo = useCallback((value: string) => {
+    setDateTo(value);
+    setDatePreset('all');
+  }, []);
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [notesFor, setNotesFor] = useState<string | null>(null);
@@ -398,7 +418,12 @@ export default function CallLeadsView() {
       if (search.trim()) params.set('search', search.trim());
       if (statusFilter !== 'all') params.set('status', statusFilter);
       if (typeFilter !== 'all') params.set('type', typeFilter);
-      if (ageFilter !== 'all') params.set('age', ageFilter);
+      if (dateFrom || dateTo) {
+        if (dateFrom) params.set('from', dateFrom);
+        if (dateTo) params.set('to', dateTo);
+      } else if (datePreset !== 'all') {
+        params.set('datePreset', datePreset);
+      }
       if (assigneeFilter !== 'all') params.set('assignee', assigneeFilter);
 
       const res = await fetch(`${API_BASE_URL}/api/crm/call-leads?${params}`, {
@@ -416,7 +441,7 @@ export default function CallLeadsView() {
     } finally {
       setLoading(false);
     }
-  }, [authHeaders, page, search, statusFilter, typeFilter, ageFilter, assigneeFilter, sort]);
+  }, [authHeaders, page, search, statusFilter, typeFilter, datePreset, dateFrom, dateTo, assigneeFilter, sort]);
 
   const fetchSummary = useCallback(async () => {
     try {
@@ -440,7 +465,7 @@ export default function CallLeadsView() {
   // Any filter change invalidates the current page number.
   useEffect(() => {
     setPage(1);
-  }, [search, statusFilter, typeFilter, ageFilter, assigneeFilter, sort]);
+  }, [search, statusFilter, typeFilter, datePreset, dateFrom, dateTo, assigneeFilter, sort]);
 
   const toggleExpanded = (id: string) => {
     setExpanded((prev) => {
@@ -478,13 +503,16 @@ export default function CallLeadsView() {
 
   const activeLead = notesFor ? rows.find((r) => r.bookingId === notesFor) ?? null : null;
 
+  const dateActive = datePreset !== 'all' || dateFrom !== '' || dateTo !== '';
+
   // Sort is a view preference, not a filter — it never hides a row, so it is not counted
-  // here and "Clear filters" leaves it alone.
+  // here and "Clear filters" leaves it alone. A preset and a range are one date filter,
+  // counted once.
   const activeFilterCount = [
     search.trim() !== '',
     statusFilter !== 'all',
     typeFilter !== 'all',
-    ageFilter !== 'all',
+    dateActive,
     assigneeFilter !== 'all',
   ].filter(Boolean).length;
 
@@ -492,7 +520,9 @@ export default function CallLeadsView() {
     setSearch('');
     setStatusFilter('all');
     setTypeFilter('all');
-    setAgeFilter('all');
+    setDatePreset('all');
+    setDateFrom('');
+    setDateTo('');
     setAssigneeFilter('all');
   }, []);
 
@@ -591,6 +621,7 @@ export default function CallLeadsView() {
 
       {/* Filter bar */}
       <div className="bg-white border border-slate-200 rounded-xl p-3 space-y-3">
+        {/* Search + global actions */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[240px]">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -601,6 +632,23 @@ export default function CallLeadsView() {
               className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
             />
           </div>
+
+          {/* Always here when anything is filtered, so "clear everything" is one obvious
+              click regardless of which filters are set. */}
+          <button
+            onClick={clearFilters}
+            disabled={activeFilterCount === 0}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded-lg border transition ${
+              activeFilterCount > 0
+                ? 'text-orange-700 bg-orange-50 border-orange-200 hover:bg-orange-100'
+                : 'text-slate-300 bg-white border-slate-200 cursor-not-allowed'
+            }`}
+          >
+            <X size={14} />
+            {activeFilterCount > 0
+              ? `Clear filters (${activeFilterCount})`
+              : 'Clear filters'}
+          </button>
 
           <button
             onClick={() => {
@@ -614,6 +662,66 @@ export default function CallLeadsView() {
           </button>
         </div>
 
+        {/* Quick date filters + day range. Both drive the same date filter, so choosing a
+            chip clears the range and vice versa. */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+            When
+          </span>
+          {(summary?.dateQuick ?? []).map((q) => {
+            const active = datePreset === q.value;
+            return (
+              <button
+                key={q.value}
+                onClick={() => pickDatePreset(q.value)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border transition ${
+                  active
+                    ? 'bg-orange-500 text-white border-orange-500'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-orange-300'
+                }`}
+              >
+                {q.label}
+                <span className={active ? 'text-orange-100' : 'text-slate-400'}>{q.count}</span>
+              </button>
+            );
+          })}
+
+          <span className="mx-1 h-4 w-px bg-slate-200" />
+
+          <label className="text-[11px] text-slate-500">From</label>
+          <input
+            type="date"
+            value={dateFrom}
+            min={summary?.dateBounds.min ?? undefined}
+            max={dateTo || summary?.dateBounds.max || undefined}
+            onChange={(e) => pickDateFrom(e.target.value)}
+            className={`text-xs border rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+              dateFrom ? 'border-orange-300 text-orange-800' : 'border-slate-200 text-slate-600'
+            }`}
+          />
+          <label className="text-[11px] text-slate-500">To</label>
+          <input
+            type="date"
+            value={dateTo}
+            min={dateFrom || summary?.dateBounds.min || undefined}
+            max={summary?.dateBounds.max ?? undefined}
+            onChange={(e) => pickDateTo(e.target.value)}
+            className={`text-xs border rounded-lg px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 ${
+              dateTo ? 'border-orange-300 text-orange-800' : 'border-slate-200 text-slate-600'
+            }`}
+          />
+          {dateActive && (
+            <button
+              onClick={() => pickDatePreset('all')}
+              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-lg text-slate-500 hover:text-orange-700 hover:bg-orange-50 transition"
+              title="Clear the date filter"
+            >
+              <X size={11} /> Date
+            </button>
+          )}
+        </div>
+
+        {/* Attribute filters */}
         <div className="flex flex-wrap items-end gap-2">
           <FilterSelect
             label="Status"
@@ -628,13 +736,6 @@ export default function CallLeadsView() {
             onChange={setTypeFilter}
             allLabel="Any type"
             options={summary?.types ?? []}
-          />
-          <FilterSelect
-            label="Age"
-            value={ageFilter}
-            onChange={setAgeFilter}
-            allLabel="Any age"
-            options={summary?.ages ?? []}
           />
           {/* Pointless when you only ever see your own leads. */}
           {!scopedTo && (
@@ -675,15 +776,6 @@ export default function CallLeadsView() {
               <option value="oldest">Longest waiting</option>
             </select>
           </div>
-
-          {activeFilterCount > 0 && (
-            <button
-              onClick={clearFilters}
-              className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold rounded-lg text-orange-700 bg-orange-50 border border-orange-200 hover:bg-orange-100 transition"
-            >
-              <X size={12} /> Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
-            </button>
-          )}
         </div>
       </div>
 
