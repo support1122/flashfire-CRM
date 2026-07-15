@@ -19,6 +19,7 @@ import {
   Facebook,
   Activity,
   Phone,
+  PhoneCall,
   FileText,
   CreditCard,
   ShieldCheck,
@@ -47,6 +48,7 @@ const GraphsView02 = React.lazy(() => import('../components/GraphsView02'));
 const GraphsView03 = React.lazy(() => import('../components/GraphsView03'));
 const StripeDataView = React.lazy(() => import('../components/StripeDataView'));
 const PhoneCallsView = React.lazy(() => import('../components/PhoneCallsView'));
+const CallLeadsView = React.lazy(() => import('../components/CallLeadsView'));
 const EmailTemplateBuilder = React.lazy(() => import('../components/EmailTemplateBuilder'));
 const SessionsView = React.lazy(() => import('../components/SessionsView'));
 const PaymentLinkGeneratorView = React.lazy(() => import('../components/PaymentLinkGeneratorView'));
@@ -87,6 +89,9 @@ const TAB_CONFIG: Array<{
   { tab: 'graphs03', permission: 'graphs03', label: 'Graphs 03', icon: BarChart3 },
   { tab: 'stripe_data', permission: 'lead_analytics', label: 'Stripe Data', icon: CreditCard },
   { tab: 'phone', permission: 'phone_calls', label: 'Phone Calls', icon: Phone },
+  // Gated on `leads`, not `phone_calls`: the BDAs who work this list hold leads/all_data
+  // but not phone_calls, so gating on phone_calls would hide the tab from them.
+  { tab: 'call_leads', permission: 'leads', label: 'Call Leads', icon: PhoneCall },
   { tab: 'email_templates', permission: 'email_campaign', label: 'Email Templates', icon: FileText },
   { tab: 'payment_links', permission: 'payment_links', label: 'Payment Link Generator', icon: CreditCard },
 ];
@@ -493,6 +498,7 @@ export default function CrmDashboardPage() {
                 {activeTab === 'graphs03' && <GraphsView03 />}
                 {activeTab === 'stripe_data' && <StripeDataView />}
                 {activeTab === 'phone' && <PhoneCallsView />}
+                {activeTab === 'call_leads' && <CallLeadsView />}
                 {activeTab === 'email_templates' && <EmailTemplateBuilder />}
                 {activeTab === 'payment_links' && <PaymentLinkGeneratorView />}
               </Suspense>
