@@ -127,6 +127,8 @@ interface Booking {
   clientName: string;
   clientEmail: string;
   clientPhone?: string;
+  /** Phone exactly as the client typed it, before country-code resolution rewrote clientPhone */
+  rawClientPhone?: string | null;
   calendlyMeetLink?: string;
   googleMeetUrl?: string;
   meetingVideoUrl?: string;
@@ -625,6 +627,7 @@ export default function LeadsView({
         name: booking.clientName || 'Unknown',
         email: booking.clientEmail,
         phone: booking.clientPhone,
+        rawPhone: booking.rawClientPhone ?? undefined,
         createdAt: booking.bookingCreatedAt,
         scheduledTime: booking.scheduledEventStartTime,
         source: booking.utmSource || 'direct',
@@ -1963,6 +1966,16 @@ export default function LeadsView({
                           >
                             {row.phone}
                           </CallButton>
+                          {defaultUtmSource === 'meta_lead_ad' &&
+                            row.rawPhone &&
+                            row.rawPhone.replace(/\D/g, '') !== (row.phone || '').replace(/\D/g, '') && (
+                            <span
+                              className="block text-[8px] text-slate-400 truncate"
+                              title={`Client typed: ${row.rawPhone} — revised to ${row.phone} by country-code lookup`}
+                            >
+                              typed: {row.rawPhone}
+                            </span>
+                          )}
                           {(() => {
                             const mins = lookupCallMins(row.phone);
                             if (mins && mins.calls > 0) {
