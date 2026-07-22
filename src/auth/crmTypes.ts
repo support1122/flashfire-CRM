@@ -8,6 +8,7 @@ export const CRM_MODULES = [
   'leads',
   'meta_leads',
   'claim_leads',
+  'call_leads',
   'meeting_links',
   'bda_admin',
   'activity_logs',
