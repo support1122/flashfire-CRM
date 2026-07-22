@@ -89,9 +89,7 @@ const TAB_CONFIG: Array<{
   { tab: 'graphs03', permission: 'graphs03', label: 'Graphs 03', icon: BarChart3 },
   { tab: 'stripe_data', permission: 'lead_analytics', label: 'Stripe Data', icon: CreditCard },
   { tab: 'phone', permission: 'phone_calls', label: 'Phone Calls', icon: Phone },
-  // Gated on `leads`, not `phone_calls`: the BDAs who work this list hold leads/all_data
-  // but not phone_calls, so gating on phone_calls would hide the tab from them.
-  { tab: 'call_leads', permission: 'leads', label: 'Call Leads', icon: PhoneCall },
+  { tab: 'call_leads', permission: 'call_leads', label: 'Call Leads', icon: PhoneCall },
   { tab: 'email_templates', permission: 'email_campaign', label: 'Email Templates', icon: FileText },
   { tab: 'payment_links', permission: 'payment_links', label: 'Payment Link Generator', icon: CreditCard },
 ];
