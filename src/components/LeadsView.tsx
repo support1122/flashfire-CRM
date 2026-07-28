@@ -65,24 +65,14 @@ function getMetaComparableDay(booking: { metaRawData?: { created_time?: string }
 }
 
 function metaLeadInUserDateRange(
-  booking: { metaRawData?: { created_time?: string }; bookingCreatedAt: string; scheduledEventStartTime?: string },
+  booking: { metaRawData?: { created_time?: string }; bookingCreatedAt: string },
   fromDate: string,
   toDate: string
 ): boolean {
-  const inRange = (day: string) => {
-    if (fromDate && day < fromDate) return false;
-    if (toDate && day > toDate) return false;
-    return true;
-  };
-  // Match if bookingCreatedAt (or meta created_time) OR scheduledEventStartTime falls in range
-  if (inRange(getMetaComparableDay(booking))) return true;
-  if (booking.scheduledEventStartTime) {
-    try {
-      const schedDay = format(parseISO(booking.scheduledEventStartTime), 'yyyy-MM-dd');
-      if (inRange(schedDay)) return true;
-    } catch { /* fall through */ }
-  }
-  return false;
+  const day = getMetaComparableDay(booking);
+  if (fromDate && day < fromDate) return false;
+  if (toDate && day > toDate) return false;
+  return true;
 }
 
 function metaLeadSortTime(booking: { metaRawData?: { created_time?: string }; bookingCreatedAt: string }): number {
