@@ -386,8 +386,38 @@ export default function LeadsView({
         setMqlCount(0);
         setSqlCount(0);
         setConvertedCount(0);
-        setStatusBreakdown({});
-        setMonthlyStatusBreakdown([]);
+
+        // Compute status breakdown from all filtered bookings (anchored to metaRawData.created_time)
+        const sb: Record<string, number> = {};
+        filtered.forEach((b) => {
+          const s = b.bookingStatus || 'not-scheduled';
+          sb[s] = (sb[s] ?? 0) + 1;
+        });
+        setStatusBreakdown(sb);
+
+        // Compute monthly breakdown bucketed by Meta form submission date (metaRawData.created_time)
+        const monthBuckets = new Map<string, Record<string, number>>();
+        filtered.forEach((b) => {
+          const monthKey = getMetaComparableDay(b).slice(0, 7); // yyyy-MM
+          const bucket = monthBuckets.get(monthKey) ?? {};
+          const s = b.bookingStatus || 'not-scheduled';
+          bucket[s] = (bucket[s] ?? 0) + 1;
+          monthBuckets.set(monthKey, bucket);
+        });
+        const monthly = Array.from(monthBuckets.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([month, counts]) => ({
+            month,
+            NotScheduled: counts['not-scheduled'] ?? 0,
+            Scheduled: counts['scheduled'] ?? 0,
+            Cancelled: counts['canceled'] ?? 0,
+            NoShow: counts['no-show'] ?? 0,
+            Rescheduled: counts['rescheduled'] ?? 0,
+            Completed: counts['completed'] ?? 0,
+            Ignored: counts['ignored'] ?? 0,
+            Paid: counts['paid'] ?? 0,
+          }));
+        setMonthlyStatusBreakdown(monthly);
       } else {
         metaDateFilteredFullRef.current = null;
         metaDateFilterSigRef.current = '';
@@ -1450,14 +1480,14 @@ export default function LeadsView({
                       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                       return `${months[parseInt(mo, 10) - 1]} ${y}`;
                     })(),
-                    NotScheduled: m['not-scheduled'] ?? 0,
-                    Scheduled: m.booked ?? 0,
-                    Cancelled: m.canceled ?? 0,
-                    NoShow: m['no-show'] ?? 0,
-                    Completed: m.completed ?? 0,
-                    Rescheduled: m.rescheduled ?? 0,
-                    Ignored: m.ignored ?? 0,
-                    Converted: m.paid ?? 0,
+                    NotScheduled: (m as Record<string, number | string>)['NotScheduled'] ?? (m as Record<string, number | string>)['not-scheduled'] ?? 0,
+                    Scheduled: (m as Record<string, number | string>)['Scheduled'] ?? (m as Record<string, number | string>)['booked'] ?? 0,
+                    Cancelled: (m as Record<string, number | string>)['Cancelled'] ?? (m as Record<string, number | string>)['canceled'] ?? 0,
+                    NoShow: (m as Record<string, number | string>)['NoShow'] ?? (m as Record<string, number | string>)['no-show'] ?? 0,
+                    Completed: (m as Record<string, number | string>)['Completed'] ?? (m as Record<string, number | string>)['completed'] ?? 0,
+                    Rescheduled: (m as Record<string, number | string>)['Rescheduled'] ?? (m as Record<string, number | string>)['rescheduled'] ?? 0,
+                    Ignored: (m as Record<string, number | string>)['Ignored'] ?? (m as Record<string, number | string>)['ignored'] ?? 0,
+                    Converted: (m as Record<string, number | string>)['Paid'] ?? (m as Record<string, number | string>)['paid'] ?? 0,
                   }))}
                   margin={{ top: 8, right: 8, left: 0, bottom: 8 }}
                 >
