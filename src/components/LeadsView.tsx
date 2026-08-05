@@ -1105,37 +1105,36 @@ export default function LeadsView({
       }
       const updatedBooking = data.data as Booking | undefined;
 
-      // Update local bookings state and prepare updated booking for follow-up modal
-      let updatedBookingForFollowUp: Booking | null = null;
-      setBookings((prev) => {
-        return prev.map((booking) => {
-          if (booking.bookingId === bookingId) {
-            const updated = {
-              ...booking,
-              bookingStatus: status,
-              paymentPlan: updatedBooking?.paymentPlan || planPayload || booking.paymentPlan,
-              statusChangedByName: updatedBooking?.statusChangedByName ?? booking.statusChangedByName,
-              statusChangedAt: updatedBooking?.statusChangedAt ?? booking.statusChangedAt,
-              statusChangeSource: updatedBooking?.statusChangeSource ?? booking.statusChangeSource,
-              statusHistory: updatedBooking?.statusHistory ?? booking.statusHistory,
-            };
-            if (status === 'completed') {
-              updatedBookingForFollowUp = updated;
-            }
-            return updated;
-          }
-          return booking;
-        });
+      const applyUpdate = (booking: Booking): Booking => ({
+        ...booking,
+        bookingStatus: status,
+        paymentPlan: updatedBooking?.paymentPlan || planPayload || booking.paymentPlan,
+        statusChangedByName: updatedBooking?.statusChangedByName ?? booking.statusChangedByName,
+        statusChangedAt: updatedBooking?.statusChangedAt ?? booking.statusChangedAt,
+        statusChangeSource: updatedBooking?.statusChangeSource ?? booking.statusChangeSource,
+        statusHistory: updatedBooking?.statusHistory ?? booking.statusHistory,
       });
+
+      setBookings((prev) =>
+        prev.map((booking) => (booking.bookingId === bookingId ? applyUpdate(booking) : booking))
+      );
 
       // Show toast notification if workflow was triggered
       if (data.workflowTriggered) {
         showToast(`Workflow triggered for ${status} action`, 'success');
       }
 
-      if (status === 'completed' && updatedBookingForFollowUp) {
-        setSelectedBookingForFollowUp(updatedBookingForFollowUp);
-        setIsFollowUpModalOpen(true);
+      // Marking a meeting completed is what schedules the follow-up (email + call and
+      // WhatsApp reminders), so the modal has to open every time. Resolve the booking
+      // here rather than from inside the setBookings updater above: React runs that
+      // updater during the next render, so anything it assigns is still unset on this
+      // line and the modal would silently never open.
+      if (status === 'completed') {
+        const current = bookingsById.get(bookingId) ?? bookings.find((b) => b.bookingId === bookingId);
+        if (current) {
+          setSelectedBookingForFollowUp(applyUpdate(current));
+          setIsFollowUpModalOpen(true);
+        }
       }
 
       await fetchLeads(bookingsPage);
