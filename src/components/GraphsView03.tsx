@@ -287,6 +287,9 @@ export default function GraphsView03() {
   const [monthlyStatus, setMonthlyStatus] = useState<MonthlyStatusRow[]>([]);
   const [stripePaidPlan, setStripePaidPlan] = useState<StripePaidPlanRow[]>([]);
   const [statusBreakdown, setStatusBreakdown] = useState<StatusBreakdownPayload | null>(null);
+  const [sbFromDate, setSbFromDate] = useState(DEFAULT_START_DATE);
+  const [sbToDate, setSbToDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [sbLoading, setSbLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
@@ -311,7 +314,7 @@ export default function GraphsView03() {
         // Paid — real-plan paid-client count per month (Stripe + manual payments,
         // classified by plan name same as the Stripe Data tab, excluding Add-on/Upgrade).
         fetch(`${API_BASE_URL}/api/crm/stripe/paid-plan-summary`, { headers }),
-        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-status-breakdown?fromDate=${DEFAULT_START_DATE}`, { headers }),
+        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-status-breakdown?fromDate=${sbFromDate}&toDate=${sbToDate}`, { headers }),
       ]);
       const mJson = await mRes.json();
       const nJson = await nRes.json();
@@ -340,6 +343,19 @@ export default function GraphsView03() {
   }, [token, granularity]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const fetchBreakdown = useCallback(async (from: string, to: string) => {
+    try {
+      setSbLoading(true);
+      const headers: HeadersInit = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/api/crm/graphs03/bda-status-breakdown?fromDate=${from}&toDate=${to}`, { headers });
+      const json = await res.json();
+      if (res.ok && json.success) setStatusBreakdown(json.data as StatusBreakdownPayload);
+    } catch { /* non-critical, existing data stays */ } finally {
+      setSbLoading(false);
+    }
+  }, [token]);
 
   // One panel per BDA (small multiples) — 2 series per panel stays inside the
   // comfortable CVD band, where 3 BDAs x 2 measures in one plot would not.
@@ -891,9 +907,34 @@ export default function GraphsView03() {
             icon={BarChart2}
             iconColor="text-violet-600"
             badge={
-              <span className="text-[11px] font-semibold text-slate-500">
-                {statusBreakdown.overall.assigned} assigned · {statusBreakdown.overall.paid} paid · {statusBreakdown.overall.conversionRate}% conv
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {statusBreakdown.overall.assigned} assigned · {statusBreakdown.overall.paid} paid · {statusBreakdown.overall.conversionRate}% conv
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={sbFromDate}
+                    onChange={(e) => setSbFromDate(e.target.value)}
+                    className="text-[11px] border border-slate-200 rounded-md px-2 py-1 text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
+                  />
+                  <span className="text-[11px] text-slate-400">to</span>
+                  <input
+                    type="date"
+                    value={sbToDate}
+                    onChange={(e) => setSbToDate(e.target.value)}
+                    className="text-[11px] border border-slate-200 rounded-md px-2 py-1 text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
+                  />
+                  <button
+                    onClick={() => fetchBreakdown(sbFromDate, sbToDate)}
+                    disabled={sbLoading}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-500 text-white rounded-md text-[11px] font-semibold hover:bg-orange-600 disabled:opacity-50 transition"
+                  >
+                    {sbLoading ? <Loader2 size={11} className="animate-spin" /> : <RefreshCcw size={11} />}
+                    Apply
+                  </button>
+                </div>
+              </div>
             }
           >
             <CoverageNote coverage={statusBreakdown.coverage} what="bookings" />
