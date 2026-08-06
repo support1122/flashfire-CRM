@@ -206,6 +206,12 @@ export default function LeadsView({
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
+  // Separate from fromDate/toDate: filters strictly on scheduledEventStartTime (the actual
+  // meeting time), so leads with no meeting booked (not-scheduled, meeting-less Meta leads —
+  // scheduledEventStartTime is null) never match this filter, unlike the general date range
+  // above which falls back to bookingCreatedAt for those.
+  const [bookedFromDate, setBookedFromDate] = useState<string>('');
+  const [bookedToDate, setBookedToDate] = useState<string>('');
   const [quickRange, setQuickRange] = useState<QuickRange>('all');
   const [activeLeadsTab, setActiveLeadsTab] = useState<LeadsTab>('table');
   const [utmFilter, setUtmFilter] = useState<string>(defaultUtmSource || 'all');
@@ -294,6 +300,8 @@ export default function LeadsView({
       ? JSON.stringify({
           fromDate,
           toDate,
+          bookedFromDate,
+          bookedToDate,
           utmFilter,
           mediumFilter,
           campaignFilter,
@@ -346,6 +354,8 @@ export default function LeadsView({
           if (search) params.append('search', search);
           if (minAmount) params.append('minAmount', minAmount);
           if (maxAmount) params.append('maxAmount', maxAmount);
+          if (bookedFromDate) params.append('bookedFromDate', bookedFromDate);
+          if (bookedToDate) params.append('bookedToDate', bookedToDate);
 
           const response = await fetch(`${API_BASE_URL}/api/leads/paginated?${params}`, { headers });
           const data = await safeJsonParse(response);
@@ -444,6 +454,12 @@ export default function LeadsView({
         if (toDate) {
           params.append('toDate', toDate);
         }
+        if (bookedFromDate) {
+          params.append('bookedFromDate', bookedFromDate);
+        }
+        if (bookedToDate) {
+          params.append('bookedToDate', bookedToDate);
+        }
         if (minAmount) {
           params.append('minAmount', minAmount);
         }
@@ -483,7 +499,7 @@ export default function LeadsView({
       setRefreshing(false);
       setLoading(false);
     }
-  }, [token, variant, planFilter, statusFilter, qualificationFilter, utmFilter, mediumFilter, campaignFilter, search, fromDate, toDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
+  }, [token, variant, planFilter, statusFilter, qualificationFilter, utmFilter, mediumFilter, campaignFilter, search, fromDate, toDate, bookedFromDate, bookedToDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -815,6 +831,8 @@ export default function LeadsView({
       if (search) params.append('search', search);
       if (fromDate) params.append('fromDate', fromDate);
       if (toDate) params.append('toDate', toDate);
+      if (bookedFromDate) params.append('bookedFromDate', bookedFromDate);
+      if (bookedToDate) params.append('bookedToDate', bookedToDate);
       if (minAmount) params.append('minAmount', minAmount);
       if (maxAmount) params.append('maxAmount', maxAmount);
       const headers: HeadersInit = {};
@@ -832,7 +850,7 @@ export default function LeadsView({
     } finally {
       setSelectAllLoading(false);
     }
-  }, [token, utmFilter, mediumFilter, campaignFilter, planFilter, qualificationFilter, statusFilter, search, fromDate, toDate, minAmount, maxAmount, variant, allSelectedBookingIds, dateRangeOnBookingCreatedAt]);
+  }, [token, utmFilter, mediumFilter, campaignFilter, planFilter, qualificationFilter, statusFilter, search, fromDate, toDate, bookedFromDate, bookedToDate, minAmount, maxAmount, variant, allSelectedBookingIds, dateRangeOnBookingCreatedAt]);
 
   const handleSelectRow = useCallback((id: string) => {
     setSelectedRows((prev) => {
@@ -1728,6 +1746,27 @@ export default function LeadsView({
               )}
             </div>
             <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Booked date</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={bookedFromDate}
+                  onChange={(e) => setBookedFromDate(e.target.value)}
+                  className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+                />
+                <span className="text-slate-400">–</span>
+                <input
+                  type="date"
+                  value={bookedToDate}
+                  onChange={(e) => setBookedToDate(e.target.value)}
+                  className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+                />
+              </div>
+              <p className="text-[10px] text-slate-500 max-w-[min(100%,26rem)]">
+                Filters by actual meeting time. Only leads with a booked meeting (Scheduled, Completed, Cancelled, Rescheduled, No-Show) can match — Not Scheduled leads have no meeting time, so they never show up here.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Quick range</label>
               <select
                 value={quickRange}
@@ -1761,13 +1800,15 @@ export default function LeadsView({
               </div>
             </div>
             <div className="flex items-center gap-2 ml-auto">
-              {(fromDate || toDate || searchInput || planFilter !== 'all' || (utmFilter !== 'all' && !hideSourceFilter) || mediumFilter !== 'all' || campaignFilter !== 'all' || statusFilter !== 'all' || qualificationFilter !== 'all' || minAmount || maxAmount) && (
+              {(fromDate || toDate || bookedFromDate || bookedToDate || searchInput || planFilter !== 'all' || (utmFilter !== 'all' && !hideSourceFilter) || mediumFilter !== 'all' || campaignFilter !== 'all' || statusFilter !== 'all' || qualificationFilter !== 'all' || minAmount || maxAmount) && (
                 <button
                   onClick={() => {
                     metaDateFilteredFullRef.current = null;
                     metaDateFilterSigRef.current = '';
                     setFromDate('');
                     setToDate('');
+                    setBookedFromDate('');
+                    setBookedToDate('');
                     setPlanFilter('all');
                     setUtmFilter(defaultUtmSource || 'all');
                     setMediumFilter('all');
