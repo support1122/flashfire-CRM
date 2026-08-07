@@ -1438,9 +1438,13 @@ export default function LeadsView({
           <h2 className="text-base font-semibold text-slate-900 mb-1">
             {dateRangeOnBookingCreatedAt
               ? `Meta lead time window (${dateRangeDisplay})`
-              : `Meetings from ${dateRangeDisplay}`}
+              : `Leads from ${dateRangeDisplay}`}
           </h2>
-          <p className="text-xs text-slate-500 mb-4">Monthly breakdown by status • Hover for details</p>
+          <p className="text-xs text-slate-500 mb-4">
+            Monthly breakdown by status • Hover for details. Not Scheduled sits on its own bar —
+            those leads have no meeting, so they are not part of the meeting-status stack.
+            A lead counted under two statuses in the range (e.g. cancelled, then rescheduled) appears under both.
+          </p>
           {monthlyStatusBreakdown.length > 0 ? (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
@@ -1481,7 +1485,9 @@ export default function LeadsView({
                     labelFormatter={(label) => label}
                   />
                   <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-                  <Bar dataKey="NotScheduled" stackId="a" fill="#3B82F6" name="Not Scheduled" radius={[0, 0, 0, 0]} />
+                  {/* Own stackId: these leads have no meeting, so they must not stack into the
+                      meeting-status bar (they outnumber it heavily and would hide it entirely). */}
+                  <Bar dataKey="NotScheduled" stackId="notScheduled" fill="#3B82F6" name="Not Scheduled" radius={[0, 4, 4, 0]} />
                   <Bar dataKey="Scheduled" stackId="a" fill="#F97316" name="Scheduled" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="Cancelled" stackId="a" fill="#BE123C" name="Cancelled" radius={[0, 0, 0, 0]} />
                   <Bar dataKey="NoShow" stackId="a" fill="#FB7185" name="No-Show" radius={[0, 0, 0, 0]} />
