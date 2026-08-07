@@ -181,10 +181,10 @@ const KpiCard = memo(({ label, value, sub, trend, color = 'text-slate-900' }: { 
 KpiCard.displayName = 'KpiCard';
 
 // ── Custom Funnel Bar Shape ────────────────────────────────────────
-const FunnelBar = (props: any) => {
-  const { x, y, width, height, fill } = props;
-  return <rect x={x} y={y} width={width} height={height} fill={fill} rx={6} ry={6} />;
-};
+type FunnelBarProps = { x?: number; y?: number; width?: number; height?: number; fill?: string };
+const FunnelBar = ({ x, y, width, height, fill }: FunnelBarProps) => (
+  <rect x={x} y={y} width={width} height={height} fill={fill} rx={6} ry={6} />
+);
 
 // ── Status label mapping ───────────────────────────────────────────
 const STATUS_LABELS: Record<string, string> = {
@@ -1038,7 +1038,9 @@ export default function QualifiedLeadsGraphs({ className = '', filters = {}, mon
                         labelFormatter={(label) => label}
                       />
                       <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-                      <Bar dataKey="NotScheduled" stackId="a" fill="#3B82F6" name="Not Scheduled" radius={[0, 0, 0, 0]} />
+                      {/* Own stackId: no-meeting leads must not stack into the meeting-status
+                          bar — they outnumber it heavily and would hide it entirely. */}
+                      <Bar dataKey="NotScheduled" stackId="notScheduled" fill="#3B82F6" name="Not Scheduled" radius={[0, 6, 6, 0]} />
                       <Bar dataKey="Booked" stackId="a" fill="#F97316" name="Booked" radius={[0, 0, 0, 0]} />
                       <Bar dataKey="Cancelled" stackId="a" fill="#BE123C" name="Cancelled" radius={[0, 0, 0, 0]} />
                       <Bar dataKey="NoShow" stackId="a" fill="#FB7185" name="No-Show" radius={[0, 0, 0, 0]} />
