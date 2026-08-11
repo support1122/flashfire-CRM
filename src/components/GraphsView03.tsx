@@ -11,7 +11,7 @@ import {
   LabelList,
 } from 'recharts';
 import {
-  Loader2, RefreshCcw, CalendarCheck, PhoneCall, AlertTriangle, Table2, PhoneOutgoing,
+  Loader2, RefreshCcw, CalendarCheck, PhoneCall, AlertTriangle, Table2, PhoneOutgoing, BarChart2,
 } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 
@@ -94,6 +94,21 @@ type CallActivityPayload = {
   };
   inboundCalls: number;
   unattributedOutbound: number;
+};
+
+type StatusBdaRow = {
+  email: string; name: string;
+  assigned: number; completed: number; paid: number;
+  noShow: number; rescheduled: number; cancelled: number; scheduled: number; ignored: number;
+  conversionRate: number; completionRate: number; noShowRate: number;
+};
+
+type StatusBreakdownPayload = {
+  timezone: string;
+  from: string; to: string;
+  bdas: StatusBdaRow[];
+  overall: StatusBdaRow & { conversionRate: number; completionRate: number; noShowRate: number };
+  coverage: Coverage;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -271,6 +286,10 @@ export default function GraphsView03() {
   const [callActivity, setCallActivity] = useState<CallActivityPayload | null>(null);
   const [monthlyStatus, setMonthlyStatus] = useState<MonthlyStatusRow[]>([]);
   const [stripePaidPlan, setStripePaidPlan] = useState<StripePaidPlanRow[]>([]);
+  const [statusBreakdown, setStatusBreakdown] = useState<StatusBreakdownPayload | null>(null);
+  const [sbFromDate, setSbFromDate] = useState(DEFAULT_START_DATE);
+  const [sbToDate, setSbToDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [sbLoading, setSbLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTable, setShowTable] = useState(false);
@@ -286,7 +305,7 @@ export default function GraphsView03() {
         1,
         Math.ceil((Date.now() - Date.UTC(DEFAULT_START_YEAR, 6, 1)) / 86400000)
       );
-      const [mRes, nRes, cRes, leadsRes, stripeRes] = await Promise.all([
+      const [mRes, nRes, cRes, leadsRes, stripeRes, sbRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/crm/graphs03/bda-meetings?granularity=${granularity}&fromDate=${DEFAULT_START_DATE}`, { headers }),
         fetch(`${API_BASE_URL}/api/crm/graphs03/no-show-followup?days=${daysSinceJuly}`, { headers }),
         fetch(`${API_BASE_URL}/api/crm/graphs03/bda-call-activity?granularity=${granularity}&fromDate=${DEFAULT_START_DATE}`, { headers }),
@@ -295,12 +314,14 @@ export default function GraphsView03() {
         // Paid — real-plan paid-client count per month (Stripe + manual payments,
         // classified by plan name same as the Stripe Data tab, excluding Add-on/Upgrade).
         fetch(`${API_BASE_URL}/api/crm/stripe/paid-plan-summary`, { headers }),
+        fetch(`${API_BASE_URL}/api/crm/graphs03/bda-status-breakdown?fromDate=${sbFromDate}&toDate=${sbToDate}`, { headers }),
       ]);
       const mJson = await mRes.json();
       const nJson = await nRes.json();
       const cJson = await cRes.json();
       const leadsJson = await leadsRes.json();
       const stripeJson = await stripeRes.json();
+      const sbJson = await sbRes.json();
       if (!mRes.ok || !mJson.success) throw new Error(mJson.message || `HTTP ${mRes.status}`);
       setMeetings(mJson.data as MeetingsPayload);
       if (nRes.ok && nJson.success) setNoShow(nJson.data as NoShowPayload);
@@ -313,6 +334,7 @@ export default function GraphsView03() {
         const rows = (stripeJson.data ?? []) as StripePaidPlanRow[];
         setStripePaidPlan(rows.filter((r) => r.month >= DEFAULT_START_MONTH));
       }
+      if (sbRes.ok && sbJson.success) setStatusBreakdown(sbJson.data as StatusBreakdownPayload);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
@@ -321,6 +343,19 @@ export default function GraphsView03() {
   }, [token, granularity]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const fetchBreakdown = useCallback(async (from: string, to: string) => {
+    try {
+      setSbLoading(true);
+      const headers: HeadersInit = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${API_BASE_URL}/api/crm/graphs03/bda-status-breakdown?fromDate=${from}&toDate=${to}`, { headers });
+      const json = await res.json();
+      if (res.ok && json.success) setStatusBreakdown(json.data as StatusBreakdownPayload);
+    } catch { /* non-critical, existing data stays */ } finally {
+      setSbLoading(false);
+    }
+  }, [token]);
 
   // One panel per BDA (small multiples) — 2 series per panel stays inside the
   // comfortable CVD band, where 3 BDAs x 2 measures in one plot would not.
@@ -843,6 +878,158 @@ export default function GraphsView03() {
           )}
         </Card>
       )}
+
+      {/* ── BDA Status Breakdown ── */}
+      {statusBreakdown && statusBreakdown.bdas.length > 0 && (() => {
+        const C_ASSIGNED    = '#94a3b8';
+        const C_COMPLETED2  = '#2a78d6';
+        const C_NOSHOW      = '#eb6834';
+        const C_RESCHEDULED = '#eda100';
+        const C_CANCELLED   = '#e34948';
+        const C_CONV        = '#008300';
+
+        const chartData = statusBreakdown.bdas
+          .filter((b) => b.email !== UNASSIGNED)
+          .map((b) => ({
+            name: b.name,
+            Assigned: b.assigned,
+            Completed: b.completed,
+            'No-Show': b.noShow,
+            Rescheduled: b.rescheduled,
+            Cancelled: b.cancelled,
+            _bda: b,
+          }));
+
+        return (
+          <Card
+            title="BDA Status Breakdown"
+            subtitle="Assigned = all bookings attributed to the BDA in the window. Conversion rate = Paid ÷ Assigned."
+            icon={BarChart2}
+            iconColor="text-violet-600"
+            badge={
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-semibold text-slate-500">
+                  {statusBreakdown.overall.assigned} assigned · {statusBreakdown.overall.paid} paid · {statusBreakdown.overall.conversionRate}% conv
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={sbFromDate}
+                    onChange={(e) => setSbFromDate(e.target.value)}
+                    className="text-[11px] border border-slate-200 rounded-md px-2 py-1 text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
+                  />
+                  <span className="text-[11px] text-slate-400">to</span>
+                  <input
+                    type="date"
+                    value={sbToDate}
+                    onChange={(e) => setSbToDate(e.target.value)}
+                    className="text-[11px] border border-slate-200 rounded-md px-2 py-1 text-slate-700 bg-white focus:outline-none focus:ring-1 focus:ring-orange-400"
+                  />
+                  <button
+                    onClick={() => fetchBreakdown(sbFromDate, sbToDate)}
+                    disabled={sbLoading}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-orange-500 text-white rounded-md text-[11px] font-semibold hover:bg-orange-600 disabled:opacity-50 transition"
+                  >
+                    {sbLoading ? <Loader2 size={11} className="animate-spin" /> : <RefreshCcw size={11} />}
+                    Apply
+                  </button>
+                </div>
+              </div>
+            }
+          >
+            <CoverageNote coverage={statusBreakdown.coverage} what="bookings" />
+
+            {/* Grouped bar chart — one group per BDA, one bar per status */}
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 6 }} barGap={2} barCategoryGap="25%">
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: INK_MUTED }} stroke={AXIS} />
+                <YAxis tick={{ fontSize: 11, fill: INK_MUTED }} stroke={AXIS} allowDecimals={false} width={34} />
+                <Tooltip
+                  contentStyle={TS}
+                  labelStyle={{ fontWeight: 700, fontSize: 11, color: '#0b0b0b' }}
+                  itemStyle={{ fontSize: 11 }}
+                  cursor={{ fill: 'rgba(11,11,11,0.04)' }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" iconSize={8} />
+                <Bar dataKey="Assigned" fill={C_ASSIGNED} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="Completed" fill={C_COMPLETED2} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="No-Show" fill={C_NOSHOW} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="Rescheduled" fill={C_RESCHEDULED} radius={[4, 4, 0, 0]} maxBarSize={22} />
+                <Bar dataKey="Cancelled" fill={C_CANCELLED} radius={[4, 4, 0, 0]} maxBarSize={22} />
+              </BarChart>
+            </ResponsiveContainer>
+
+            {/* Conversion rate mini-bars */}
+            <div className="mt-5 pt-4 border-t border-slate-100">
+              <p className="text-xs font-bold text-slate-800 mb-3">Conversion Rate (Paid ÷ Assigned)</p>
+              <div className="space-y-2">
+                {statusBreakdown.bdas.filter((b) => b.email !== UNASSIGNED).map((b) => (
+                  <div key={b.email} className="flex items-center gap-3">
+                    <span className="text-[11px] text-slate-600 w-28 truncate flex-shrink-0" title={b.email}>{b.name}</span>
+                    <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${b.conversionRate}%`, background: C_CONV }}
+                        title={`${b.conversionRate}%`}
+                      />
+                    </div>
+                    <span className="text-[11px] font-bold text-slate-800 w-10 text-right tabular-nums">{b.conversionRate}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Full table */}
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="text-slate-500 border-b border-slate-200">
+                    <th className="text-left py-1.5 pr-3 font-semibold">BDA</th>
+                    <th className="text-right py-1.5 px-3 font-semibold">Assigned</th>
+                    <th className="text-right py-1.5 px-3 font-semibold">Completed</th>
+                    <th className="text-right py-1.5 px-3 font-semibold">No-Show</th>
+                    <th className="text-right py-1.5 px-3 font-semibold">Rescheduled</th>
+                    <th className="text-right py-1.5 px-3 font-semibold">Cancelled</th>
+                    <th className="text-right py-1.5 px-3 font-semibold">Pending</th>
+                    <th className="text-right py-1.5 px-3 font-semibold">Ignored</th>
+                    <th className="text-right py-1.5 px-3 font-semibold">Paid</th>
+                    <th className="text-right py-1.5 pl-3 font-semibold">Conv %</th>
+                  </tr>
+                </thead>
+                <tbody className="tabular-nums">
+                  {statusBreakdown.bdas.map((b) => (
+                    <tr key={b.email} className="border-b border-slate-50">
+                      <td className="py-1 pr-3 text-slate-700">{b.name}</td>
+                      <td className="text-right py-1 px-3 text-slate-700">{b.assigned}</td>
+                      <td className="text-right py-1 px-3 text-slate-700">{b.completed}</td>
+                      <td className="text-right py-1 px-3 text-slate-700">{b.noShow}</td>
+                      <td className="text-right py-1 px-3 text-slate-700">{b.rescheduled}</td>
+                      <td className="text-right py-1 px-3 text-slate-700">{b.cancelled}</td>
+                      <td className="text-right py-1 px-3 text-slate-500">{b.scheduled}</td>
+                      <td className="text-right py-1 px-3 text-slate-400">{b.ignored}</td>
+                      <td className="text-right py-1 px-3 font-semibold text-emerald-700">{b.paid}</td>
+                      <td className="text-right py-1 pl-3 font-bold text-slate-900">{b.conversionRate}%</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-slate-200 font-semibold text-slate-900">
+                    <td className="py-1.5 pr-3">Total</td>
+                    <td className="text-right py-1.5 px-3">{statusBreakdown.overall.assigned}</td>
+                    <td className="text-right py-1.5 px-3">{statusBreakdown.overall.completed}</td>
+                    <td className="text-right py-1.5 px-3">{statusBreakdown.overall.noShow}</td>
+                    <td className="text-right py-1.5 px-3">{statusBreakdown.overall.rescheduled}</td>
+                    <td className="text-right py-1.5 px-3">{statusBreakdown.overall.cancelled}</td>
+                    <td className="text-right py-1.5 px-3 text-slate-500">{statusBreakdown.overall.scheduled}</td>
+                    <td className="text-right py-1.5 px-3 text-slate-400">{statusBreakdown.overall.ignored}</td>
+                    <td className="text-right py-1.5 px-3 text-emerald-700">{statusBreakdown.overall.paid}</td>
+                    <td className="text-right py-1.5 pl-3">{statusBreakdown.overall.conversionRate}%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        );
+      })()}
     </div>
   );
 }
