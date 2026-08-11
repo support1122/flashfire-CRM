@@ -46,6 +46,7 @@ import { formatRelativeTime } from '../utils/relativeTime';
 import CallButton from './CallButton';
 import CallerIdSelector from './CallerIdSelector';
 import { isStatusLockedForUser, statusLockMessage } from '../utils/statusLock';
+import { currencySymbol, formatPlanPrice } from '../utils/currency';
 
 const QualifiedLeadsGraphs = lazy(() => import('./QualifiedLeadsGraphs'));
 
@@ -2158,29 +2159,14 @@ export default function LeadsView({
                     <td className="px-1 py-1.5">
                       {row.paymentPlan ? (
                         <div className="space-y-0.5">
+                          {/* No currency icon here: the label already carries the client's own
+                              symbol (€, CA$, $). A hardcoded DollarSign rendered "$ $349" and
+                              was wrong outright for anyone who did not pay in USD. */}
                           <div className="flex items-center w-fit gap-0.5 rounded border border-orange-100 bg-orange-50 px-1 py-0.5 text-[9px] font-semibold text-orange-800">
-                            <DollarSign size={8} className="text-orange-600 flex-shrink-0" />
                             <span className="truncate text-[8px]">{row.paymentPlan.name}</span>
-                            {(() => {
-                              const rawDisplay = row.paymentPlan.displayPrice?.toString().trim() ?? '';
-                              const lower = rawDisplay.toLowerCase();
-                              const hasValidDisplay =
-                                !!rawDisplay &&
-                                lower !== 'null' &&
-                                lower !== 'undefined' &&
-                                lower !== '$null' &&
-                                lower !== '$undefined';
-                              const safeDisplay = hasValidDisplay
-                                ? rawDisplay
-                                : (row.paymentPlan.price && row.paymentPlan.price > 0
-                                  ? `$${row.paymentPlan.price}`
-                                  : '$349');
-                              return (
-                                <span className="text-orange-700 truncate text-[8px]">
-                                  {safeDisplay}
-                                </span>
-                              );
-                            })()}
+                            <span className="text-orange-700 truncate text-[8px]">
+                              {formatPlanPrice(row.paymentPlan)}
+                            </span>
                           </div>
                           {row.status === 'paid' && (
                             <>
@@ -2204,7 +2190,7 @@ export default function LeadsView({
                               </select>
                               <input
                                 type="number"
-                                placeholder="Custom $"
+                                placeholder={`Custom ${currencySymbol(row.paymentPlan.currency)}`}
                                 defaultValue={row.paymentPlan.price}
                                 onBlur={(e) => {
                                   const amount = parseFloat(e.target.value);

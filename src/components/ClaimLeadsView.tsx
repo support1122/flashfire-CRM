@@ -8,6 +8,7 @@ import { validatePostMeetingBookingStatus } from '../utils/postMeetingStatus';
 import { isStatusLockedForUser, statusLockMessage } from '../utils/statusLock';
 import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPopover';
 import { formatRelativeTime } from '../utils/relativeTime';
+import { currencySymbol, formatMoney, normalizeCurrency, CURRENCY_OPTIONS, CURRENCY_SYMBOLS } from '../utils/currency';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -227,7 +228,7 @@ export default function ClaimLeadsView() {
         ? lead.paymentBreakdown
         : null;
       const primary = breakdown
-        ? { name: breakdown[0].planName, price: breakdown[0].amount, currency: breakdown[0].currency, displayPrice: `${breakdown[0].currency === 'CAD' ? 'CA$' : '$'}${breakdown[0].amount}` }
+        ? { name: breakdown[0].planName, price: breakdown[0].amount, currency: breakdown[0].currency, displayPrice: formatMoney(breakdown[0].amount, breakdown[0].currency) }
         : lead.paymentPlan || undefined;
       setFormData({
         clientName: lead.clientName,
@@ -356,7 +357,7 @@ export default function ClaimLeadsView() {
         name: formData.paymentPlan?.name || allLines[0]?.planName || 'PRIME',
         price: totalAmt,
         currency,
-        displayPrice: `${currency === 'CAD' ? 'CA$' : '$'}${totalAmt}`,
+        displayPrice: formatMoney(totalAmt, currency),
       };
       if (allLines.length > 0) body.paymentBreakdown = allLines;
 
@@ -428,7 +429,7 @@ export default function ClaimLeadsView() {
         name: formData.paymentPlan.name,
         price: totalAmt,
         currency,
-        displayPrice: formData.paymentPlan.displayPrice || `${currency === 'CAD' ? 'CA$' : '$'}${totalAmt}`,
+        displayPrice: formData.paymentPlan.displayPrice || formatMoney(totalAmt, currency),
       } : undefined;
 
       const requestBody: Record<string, unknown> = {
@@ -501,7 +502,7 @@ export default function ClaimLeadsView() {
       const payload: Partial<Lead> = {
         ...formData,
         paymentPlan: formData.paymentPlan
-          ? { ...formData.paymentPlan, price: totalAmt, displayPrice: `${currency === 'CAD' ? 'CA$' : '$'}${totalAmt}` }
+          ? { ...formData.paymentPlan, price: totalAmt, displayPrice: formatMoney(totalAmt, currency) }
           : formData.paymentPlan,
         paymentBreakdown: allLines.length > 0 ? allLines : undefined,
       };
@@ -800,8 +801,8 @@ export default function ClaimLeadsView() {
                             } else {
                               const plan = planOptions.find(p => p.key === selectedValue);
                               if (plan) {
-                                const existingCurrency = formData.paymentPlan?.currency || 'USD';
-                                const currencySymbol = existingCurrency === 'CAD' ? 'CA$' : '$';
+                                const existingCurrency = normalizeCurrency(formData.paymentPlan?.currency);
+                                const planSymbol = currencySymbol(existingCurrency);
                                 const existingPrice = formData.paymentPlan?.price ?? plan.price;
                                 setFormData({
                                   ...formData,
@@ -809,7 +810,7 @@ export default function ClaimLeadsView() {
                                     name: plan.key,
                                     price: existingPrice,
                                     currency: existingCurrency,
-                                    displayPrice: `${currencySymbol}${existingPrice.toFixed(2)}`,
+                                    displayPrice: `${planSymbol}${existingPrice.toFixed(2)}`,
                                   },
                                 });
                               }
@@ -838,21 +839,24 @@ export default function ClaimLeadsView() {
                             onChange={(e) => {
                               const currency = e.target.value;
                               const currentPlan = formData.paymentPlan || { name: 'PRIME' as PlanName, price: 0, currency: 'USD', displayPrice: '' };
-                              const currencySymbol = currency === 'CAD' ? 'CA$' : currency === 'USD' ? '$' : currency;
+                              const planSymbol = currencySymbol(currency);
                               setFormData({
                                 ...formData,
                                 paymentPlan: {
                                   ...currentPlan,
                                   currency,
-                                  displayPrice: currentPlan.price > 0 ? `${currencySymbol}${currentPlan.price.toFixed(2)}` : '',
+                                  displayPrice: currentPlan.price > 0 ? `${planSymbol}${currentPlan.price.toFixed(2)}` : '',
                                 },
                               });
                             }}
                             className="w-full border border-slate-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white cursor-pointer"
                             disabled={saving || !editable}
                           >
-                            <option value="USD">USD ($)</option>
-                            <option value="CAD">CAD (CA$)</option>
+                            {CURRENCY_OPTIONS.map((code) => (
+                              <option key={code} value={code}>
+                                {code} ({CURRENCY_SYMBOLS[code]})
+                              </option>
+                            ))}
                           </select>
                         </div>
                       )}
@@ -883,14 +887,14 @@ export default function ClaimLeadsView() {
                               const price = parseFloat(value);
                               if (!isNaN(price) && price >= 0) {
                                 const currentPlan = formData.paymentPlan || { name: 'PRIME' as PlanName, price: 0, currency: 'USD', displayPrice: '' };
-                                const currency = currentPlan.currency || 'USD';
-                                const currencySymbol = currency === 'CAD' ? 'CA$' : '$';
+                                const currency = normalizeCurrency(currentPlan.currency);
+                                const planSymbol = currencySymbol(currency);
                                 setFormData({
                                   ...formData,
                                   paymentPlan: {
                                     ...currentPlan,
                                     price,
-                                    displayPrice: `${currencySymbol}${price.toFixed(2)}`,
+                                    displayPrice: `${planSymbol}${price.toFixed(2)}`,
                                   },
                                 });
                               }
@@ -967,7 +971,7 @@ export default function ClaimLeadsView() {
                           ))}
                           <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-slate-200">
                             <span className="text-sm font-semibold text-slate-700">
-                              Total amount paid: {formData.paymentPlan?.currency === 'CAD' ? 'CA$' : '$'}{totalAmountPaid.toFixed(0)}
+                              Total amount paid: {currencySymbol(formData.paymentPlan?.currency)}{totalAmountPaid.toFixed(0)}
                             </span>
                             <span className="text-sm font-semibold text-emerald-700">
                               Total incentive (INR): ₹{totalIncentiveInr.toFixed(0)}
@@ -1355,7 +1359,7 @@ export default function ClaimLeadsView() {
                     </>
                   ) : (
                     <>
-                      <div className="text-sm text-slate-600 mb-1">Total amount paid by client: <span className="font-semibold text-emerald-600">{formData.paymentPlan?.currency === 'CAD' ? 'CA$' : '$'}{totalAmountPaid.toFixed(0)}</span></div>
+                      <div className="text-sm text-slate-600 mb-1">Total amount paid by client: <span className="font-semibold text-emerald-600">{currencySymbol(formData.paymentPlan?.currency)}{totalAmountPaid.toFixed(0)}</span></div>
                       <div className="text-sm text-slate-600">Total incentive (INR): <span className="font-semibold text-emerald-700">₹{totalIncentiveInr.toFixed(0)}</span> <span className="text-slate-500">({1 + referralPayments.filter(r => r.amount > 0).length} payments)</span></div>
                     </>
                   )}
