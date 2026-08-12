@@ -27,6 +27,7 @@ import {
   DollarSign,
   ChevronUp,
   Lock,
+  Star,
 } from 'lucide-react';
 import {
   format,
@@ -42,6 +43,8 @@ import NotesModal from './NotesModal';
 import InsertDataModal, { type InsertDataFormData } from './InsertDataModal';
 import FollowUpModal, { type FollowUpData } from './FollowUpModal';
 import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
+import LeadRatingPanel from './LeadRatingPanel';
+import { TEMPERATURE_OPTIONS, temperatureOption, type LeadTemperature } from '../utils/leadTemperature';
 import { usePlanConfig, type PlanOption, type PlanName } from '../context/PlanConfigContext';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 import CallButton from './CallButton';
@@ -101,6 +104,12 @@ interface Booking {
   statusChangedAt?: string | null;
   statusChangeSource?: string | null;
   statusHistory?: StatusHistoryEntry[];
+  leadTemperature?: {
+    value?: LeadTemperature | null;
+    ratedByEmail?: string | null;
+    ratedByName?: string | null;
+    ratedAt?: string | null;
+  } | null;
   calendlyHost?: {
     email?: string | null;
     name?: string | null;
@@ -149,6 +158,12 @@ interface UnifiedRow {
     name?: string | null;
     calendlyUserUri?: string | null;
     matchedCrmUser?: boolean;
+  } | null;
+  leadTemperature?: {
+    value?: LeadTemperature | null;
+    ratedByEmail?: string | null;
+    ratedByName?: string | null;
+    ratedAt?: string | null;
   } | null;
 }
 
@@ -248,6 +263,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [expandedNotes, setExpandedNotes] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
+  const [temperatureFilter, setTemperatureFilter] = useState<'all' | LeadTemperature | 'unrated'>('all');
   const [planFilter, setPlanFilter] = useState<PlanName | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | 'booking' | 'user'>('all');
   const [search, setSearch] = useState('');
@@ -279,6 +295,11 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const [planPickerFor, setPlanPickerFor] = useState<string | null>(null);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [selectedBookingForFollowUp, setSelectedBookingForFollowUp] = useState<Booking | null>(null);
+  // Post-meeting rating. `pendingFollowUpBooking` parks the follow-up until the rating
+  // panel is dismissed: the follow-up modal has a full-screen backdrop that would cover
+  // the side panel, so the two surfaces are shown one after the other, never together.
+  const [bookingForRating, setBookingForRating] = useState<Booking | null>(null);
+  const [pendingFollowUpBooking, setPendingFollowUpBooking] = useState<Booking | null>(null);
   const [isPlanDetailsModalOpen, setIsPlanDetailsModalOpen] = useState(false);
   const [selectedBookingForPlanDetails, setSelectedBookingForPlanDetails] = useState<{ bookingId: string; status: BookingStatus; booking: Booking } | null>(null);
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{ bookingId: string; status: BookingStatus; plan?: PlanOption } | null>(null);
@@ -314,6 +335,9 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       if (statusFilter !== 'all') {
         params.append('status', statusFilter);
       }
+      if (temperatureFilter !== 'all') {
+        params.append('temperature', temperatureFilter);
+      }
       if (utmFilter !== 'all') {
         params.append('utmSource', utmFilter);
       }
@@ -347,7 +371,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       setRefreshing(false);
       setLoading(false);
     }
-  }, [statusFilter, utmFilter, planFilter, search, fromDate, toDate]);
+  }, [statusFilter, temperatureFilter, utmFilter, planFilter, search, fromDate, toDate]);
 
   const fetchUsers = useCallback(async (page: number = 1) => {
     try {
@@ -438,7 +462,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
       setBookingsPage(page);
       fetchBookings(page);
     }
-  }, [statusFilter, planFilter, utmFilter, search, fromDate, toDate, typeFilter, fetchBookings]);
+  }, [statusFilter, temperatureFilter, planFilter, utmFilter, search, fromDate, toDate, typeFilter, fetchBookings]);
 
   useEffect(() => {
     const handleBookingUpdate = (event: CustomEvent) => {
@@ -514,6 +538,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           statusChangeSource: booking.statusChangeSource,
           statusHistory: booking.statusHistory,
           calendlyHost: booking.calendlyHost,
+          leadTemperature: booking.leadTemperature,
         });
       });
       return rows;
@@ -543,6 +568,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           statusChangeSource: booking.statusChangeSource,
           statusHistory: booking.statusHistory,
           calendlyHost: booking.calendlyHost,
+          leadTemperature: booking.leadTemperature,
         });
       });
     }
@@ -951,16 +977,17 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         showToast(`Workflow triggered for ${status} action`, 'success');
       }
 
-      // If status is "completed", show follow-up modal
+      // Completed opens the post-meeting flow: rate the lead, then schedule the follow-up.
       if (status === 'completed') {
         const booking = bookings.find(b => b.bookingId === bookingId);
         if (booking) {
-          setSelectedBookingForFollowUp({
+          const updated = {
             ...booking,
             bookingStatus: status,
             paymentPlan: updatedBooking?.paymentPlan || planPayload || booking.paymentPlan,
-          });
-          setIsFollowUpModalOpen(true);
+          };
+          setBookingForRating(updated);
+          setPendingFollowUpBooking(updated);
         }
       }
     } catch (err) {
@@ -984,6 +1011,50 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
     
     setPendingStatusUpdate(null);
     setSelectedBookingForPlanDetails(null);
+  };
+
+  /** Save the post-meeting rating, then hand off to the follow-up modal. */
+  const handleRateLead = async (temperature: LeadTemperature) => {
+    if (!bookingForRating) return;
+    const { bookingId } = bookingForRating;
+
+    // Errors propagate to the panel so it can show them and stay open.
+    const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${bookingId}/temperature`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ temperature, ratedByEmail: user?.email, ratedByName: user?.name }),
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to save rating');
+    }
+
+    const saved = data.data?.leadTemperature ?? {
+      value: temperature,
+      ratedByEmail: user?.email ?? null,
+      ratedByName: user?.name ?? null,
+      ratedAt: new Date().toISOString(),
+    };
+    setBookings((prev) =>
+      prev.map((b) => (b.bookingId === bookingId ? { ...b, leadTemperature: saved } : b))
+    );
+
+    showToast(`Lead rated ${temperature}`, 'success');
+    closeRatingPanel();
+  };
+
+  /** Dismiss the rating panel (saved or skipped) and open the parked follow-up modal. */
+  const closeRatingPanel = () => {
+    setBookingForRating(null);
+    if (pendingFollowUpBooking) {
+      setSelectedBookingForFollowUp(pendingFollowUpBooking);
+      setIsFollowUpModalOpen(true);
+      setPendingFollowUpBooking(null);
+    }
   };
 
   const handleScheduleFollowUp = async (followUpData: FollowUpData) => {
@@ -1618,6 +1689,17 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           ))}
         </select>
         <select
+          value={temperatureFilter}
+          onChange={(e) => setTemperatureFilter(e.target.value as 'all' | LeadTemperature | 'unrated')}
+          className="text-[10px] border border-slate-200  px-1 py-1.5 text-[11px] bg-white"
+        >
+          <option value="all">All ratings</option>
+          {TEMPERATURE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+          <option value="unrated">Not rated</option>
+        </select>
+        <select
           value={planFilter}
           onChange={(e) => setPlanFilter(e.target.value as PlanName | 'all')}
           className="text-[10px] border border-slate-200  px-3 py-2 bg-white"
@@ -1882,6 +1964,46 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                 {row.statusChangedAt && <> · {formatRelativeTime(row.statusChangedAt)}</>}
                               </div>
                             )}
+
+                            {/* Post-meeting rating, editable at any time. Shown for completed
+                                leads even when unrated, so an unrated one is visibly actionable. */}
+                            {(() => {
+                              const temp = temperatureOption(row.leadTemperature?.value);
+                              if (!temp && row.status !== 'completed') return null;
+
+                              const openRating = () => {
+                                if (!row.bookingId) return;
+                                const booking = bookings.find((b) => b.bookingId === row.bookingId);
+                                if (booking) setBookingForRating(booking);
+                              };
+
+                              if (!temp) {
+                                return (
+                                  <button
+                                    onClick={openRating}
+                                    className="mt-0.5 inline-flex items-center gap-0.5 w-fit px-1 py-0.5 rounded border border-dashed border-slate-300 text-[9px] font-semibold text-slate-400 hover:text-slate-600 hover:border-slate-400 transition"
+                                    title="Rate this lead"
+                                  >
+                                    <Star size={8} className="flex-shrink-0" />
+                                    <span>Rate</span>
+                                  </button>
+                                );
+                              }
+
+                              const TempIcon = temp.icon;
+                              const ratedBy = row.leadTemperature?.ratedByName;
+                              const ratedTitle = ratedBy ? `Rated ${temp.label} by ${ratedBy}` : `Rated ${temp.label}`;
+                              return (
+                                <button
+                                  onClick={openRating}
+                                  className={`mt-0.5 inline-flex items-center gap-0.5 w-fit px-1 py-0.5 rounded border text-[9px] font-semibold transition hover:brightness-95 ${temp.badge}`}
+                                  title={`${ratedTitle} — click to change`}
+                                >
+                                  <TempIcon size={8} className="flex-shrink-0" />
+                                  <span>{temp.label}</span>
+                                </button>
+                              );
+                            })()}
                             {openStatusDropdown === row.bookingId && (
                               <>
                                 <div className="fixed inset-0 z-10" onClick={() => setOpenStatusDropdown(null)} />
@@ -2258,7 +2380,29 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                 {filteredData.length === 0 && (
                   <tr>
                     <td colSpan={11} className="text-center py-12 text-[10px] text-slate-500">
-                      No data matches your filters. Try adjusting the criteria.
+                      {/* Name the rating when one is selected: "no results" is ambiguous when
+                          the filter itself is the reason. */}
+                      {temperatureFilter !== 'all' ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span>
+                            No{' '}
+                            <span className="font-semibold">
+                              {temperatureFilter === 'unrated'
+                                ? 'unrated'
+                                : temperatureOption(temperatureFilter)?.label.toLowerCase()}
+                            </span>{' '}
+                            leads present for the current filters.
+                          </span>
+                          <button
+                            onClick={() => setTemperatureFilter('all')}
+                            className="font-semibold text-orange-600 hover:text-orange-700 underline"
+                          >
+                            Clear rating filter
+                          </button>
+                        </span>
+                      ) : (
+                        'No data matches your filters. Try adjusting the criteria.'
+                      )}
                     </td>
                   </tr>
                 )}
@@ -2772,6 +2916,17 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         onClose={() => setIsInsertModalOpen(false)}
         onSave={handleInsertData}
       />
+      {/* Post-meeting lead rating — side panel, no backdrop */}
+      {bookingForRating && (
+        <LeadRatingPanel
+          isOpen
+          clientName={bookingForRating.clientName}
+          currentValue={bookingForRating.leadTemperature?.value ?? null}
+          onSelect={handleRateLead}
+          onClose={closeRatingPanel}
+        />
+      )}
+
       {/* Follow-Up Modal */}
       {selectedBookingForFollowUp && (
         <FollowUpModal

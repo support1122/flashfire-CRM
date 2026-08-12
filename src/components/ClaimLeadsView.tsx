@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader2, Search, Save, CheckCircle2, AlertCircle, X, Calendar, Phone, Mail, User, DollarSign, UserCheck, List, BarChart3, Filter, UserPlus, Trash2, XCircle } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
+import LeadRatingPanel from './LeadRatingPanel';
+import type { LeadTemperature } from '../utils/leadTemperature';
 import { usePlanConfig, type PlanName } from '../context/PlanConfigContext';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import BdaPerformanceView from './BdaPerformanceView';
@@ -38,6 +40,12 @@ interface Lead {
     name: string | null;
     claimedAt: string | null;
   } | null;
+  leadTemperature?: {
+    value?: LeadTemperature | null;
+    ratedByEmail?: string | null;
+    ratedByName?: string | null;
+    ratedAt?: string | null;
+  } | null;
   bdaApprovalStatus?: 'pending' | 'approved' | 'denied' | null;
   statusChangedBy?: string | null;
   statusChangedByName?: string | null;
@@ -62,6 +70,8 @@ export default function ClaimLeadsView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [lead, setLead] = useState<Lead | null>(null);
+  // Post-meeting rating, opened right after a lead is marked completed here.
+  const [bookingForRating, setBookingForRating] = useState<Lead | null>(null);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<Partial<Lead>>({});
   const [showPaidConfirmModal, setShowPaidConfirmModal] = useState(false);
@@ -462,6 +472,9 @@ export default function ClaimLeadsView() {
 
       setSuccess('Status updated successfully!');
       setLead(data.data);
+      if (newStatus === 'completed') {
+        setBookingForRating(data.data ?? lead);
+      }
       if (activeTab === 'my_leads') {
         fetchMyLeads();
       }
@@ -472,6 +485,31 @@ export default function ClaimLeadsView() {
     } finally {
       setSaving(false);
     }
+  };
+
+  /** Save the post-meeting rating for the lead just marked completed. */
+  const handleRateLead = async (temperature: LeadTemperature) => {
+    if (!bookingForRating) return;
+
+    // Errors propagate to the panel so it can show them and stay open.
+    const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${bookingForRating.bookingId}/temperature`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ temperature, ratedByEmail: user?.email, ratedByName: user?.name }),
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to save rating');
+    }
+
+    const saved = data.data?.leadTemperature ?? { value: temperature };
+    setLead((prev) => (prev && prev.bookingId === bookingForRating.bookingId ? { ...prev, leadTemperature: saved } : prev));
+    setSuccess(`Lead rated ${temperature}`);
+    setBookingForRating(null);
   };
 
   const handleSave = async () => {
@@ -1391,6 +1429,16 @@ export default function ClaimLeadsView() {
             </div>
           </div>
         </div>
+      )}
+
+      {bookingForRating && (
+        <LeadRatingPanel
+          isOpen
+          clientName={bookingForRating.clientName}
+          currentValue={bookingForRating.leadTemperature?.value ?? null}
+          onSelect={handleRateLead}
+          onClose={() => setBookingForRating(null)}
+        />
       )}
     </div>
   );
