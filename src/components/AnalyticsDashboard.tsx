@@ -1721,7 +1721,6 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
           clientName={bookingForRating.clientName}
           currentValue={bookingForRating.leadTemperature?.value ?? null}
           onSelect={handleRateLead}
-          onClose={() => setBookingForRating(null)}
         />
       )}
     </div>

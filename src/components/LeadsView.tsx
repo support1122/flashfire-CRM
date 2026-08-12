@@ -2611,7 +2611,6 @@ export default function LeadsView({
           clientName={bookingForRating.clientName}
           currentValue={bookingForRating.leadTemperature?.value ?? null}
           onSelect={handleRateLead}
-          onClose={closeRatingPanel}
         />
       )}
 
