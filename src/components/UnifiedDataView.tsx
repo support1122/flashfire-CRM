@@ -1738,12 +1738,13 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
             className="border border-slate-200  px-1.5 py-1 text-[11px] bg-white"
           />
         </div>
-        {(fromDate || toDate || search || statusFilter !== 'all' || planFilter !== 'all' || utmFilter !== 'all' || typeFilter !== 'all' || showMeetingsToday) && (
+        {(fromDate || toDate || search || statusFilter !== 'all' || temperatureFilter !== 'all' || planFilter !== 'all' || utmFilter !== 'all' || typeFilter !== 'all' || showMeetingsToday) && (
           <button
             onClick={() => {
               setFromDate('');
               setToDate('');
               setStatusFilter('all');
+              setTemperatureFilter('all');
               setTypeFilter('all');
               setPlanFilter('all');
               setUtmFilter('all');
@@ -2923,7 +2924,6 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           clientName={bookingForRating.clientName}
           currentValue={bookingForRating.leadTemperature?.value ?? null}
           onSelect={handleRateLead}
-          onClose={closeRatingPanel}
         />
       )}
 

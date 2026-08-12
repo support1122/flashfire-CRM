@@ -1437,7 +1437,6 @@ export default function ClaimLeadsView() {
           clientName={bookingForRating.clientName}
           currentValue={bookingForRating.leadTemperature?.value ?? null}
           onSelect={handleRateLead}
-          onClose={() => setBookingForRating(null)}
         />
       )}
     </div>
