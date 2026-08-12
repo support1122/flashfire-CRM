@@ -28,6 +28,7 @@ import {
   Plus,
   SlidersHorizontal,
   Lock,
+  Star,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, Legend, CartesianGrid } from 'recharts';
@@ -41,6 +42,8 @@ import NotesModal from './NotesModal';
 import FollowUpModal, { type FollowUpData } from './FollowUpModal';
 import PlanDetailsModal, { type PlanDetailsData } from './PlanDetailsModal';
 import CustomWorkflowsModal from './CustomWorkflowsModal';
+import LeadRatingPanel from './LeadRatingPanel';
+import { TEMPERATURE_OPTIONS, temperatureOption, type LeadTemperature } from '../utils/leadTemperature';
 import StatusHistoryPopover, { type StatusHistoryEntry } from './StatusHistoryPopover';
 import { formatRelativeTime } from '../utils/relativeTime';
 import CallButton from './CallButton';
@@ -170,6 +173,12 @@ interface Booking {
     calendlyUserUri?: string | null;
     matchedCrmUser?: boolean;
   } | null;
+  leadTemperature?: {
+    value?: LeadTemperature | null;
+    ratedByEmail?: string | null;
+    ratedByName?: string | null;
+    ratedAt?: string | null;
+  } | null;
 }
 
 interface LeadsViewProps {
@@ -203,6 +212,7 @@ export default function LeadsView({
   const [planFilter, setPlanFilter] = useState<PlanName | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'all'>('all');
   const [qualificationFilter, setQualificationFilter] = useState<'all' | 'mql' | 'sql' | 'converted'>('all');
+  const [temperatureFilter, setTemperatureFilter] = useState<'all' | LeadTemperature | 'unrated'>('all');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState<string>('');
@@ -242,6 +252,11 @@ export default function LeadsView({
   const [deletingLead, setDeletingLead] = useState(false);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [selectedBookingForFollowUp, setSelectedBookingForFollowUp] = useState<Booking | null>(null);
+  // Post-meeting rating. `pendingFollowUpBooking` parks the follow-up until the rating
+  // panel is dismissed: the follow-up modal has a full-screen backdrop that would cover
+  // the side panel, so the two surfaces are shown one after the other, never together.
+  const [bookingForRating, setBookingForRating] = useState<Booking | null>(null);
+  const [pendingFollowUpBooking, setPendingFollowUpBooking] = useState<Booking | null>(null);
   const [isPlanDetailsModalOpen, setIsPlanDetailsModalOpen] = useState(false);
   const [selectedBookingForPlanDetails, setSelectedBookingForPlanDetails] = useState<{ bookingId: string; status: BookingStatus; booking: Booking } | null>(null);
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{ bookingId: string; status: BookingStatus; plan?: PlanOption } | null>(null);
@@ -351,6 +366,7 @@ export default function LeadsView({
           if (variant === 'qualified' && qualificationFilter !== 'all') {
             params.append('qualification', qualificationFilter);
           }
+          if (temperatureFilter !== 'all') params.append('temperature', temperatureFilter);
           if (statusFilter !== 'all') params.append('status', statusFilter);
           if (search) params.append('search', search);
           if (minAmount) params.append('minAmount', minAmount);
@@ -500,7 +516,7 @@ export default function LeadsView({
       setRefreshing(false);
       setLoading(false);
     }
-  }, [token, variant, planFilter, statusFilter, qualificationFilter, utmFilter, mediumFilter, campaignFilter, search, fromDate, toDate, bookedFromDate, bookedToDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
+  }, [token, variant, planFilter, statusFilter, qualificationFilter, temperatureFilter, utmFilter, mediumFilter, campaignFilter, search, fromDate, toDate, bookedFromDate, bookedToDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -607,7 +623,7 @@ export default function LeadsView({
     }, 250);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [variant, planFilter, statusFilter, qualificationFilter, utmFilter, mediumFilter, campaignFilter, search, fromDate, toDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
+  }, [variant, planFilter, statusFilter, qualificationFilter, temperatureFilter, utmFilter, mediumFilter, campaignFilter, search, fromDate, toDate, minAmount, maxAmount, dateRangeOnBookingCreatedAt]);
 
   useEffect(() => {
     const handleBookingUpdate = (event: CustomEvent) => {
@@ -697,6 +713,7 @@ export default function LeadsView({
         statusChangeSource: booking.statusChangeSource,
         statusHistory: booking.statusHistory,
         calendlyHost: booking.calendlyHost,
+        leadTemperature: booking.leadTemperature,
       };
     }).filter((row) => {
       if (row.name === 'Unknown Client' && row.email.includes('calendly.placeholder')) {
@@ -828,6 +845,7 @@ export default function LeadsView({
       if (campaignFilter !== 'all') params.append('utmCampaign', campaignFilter);
       if (planFilter !== 'all') params.append('planName', planFilter);
       if (variant === 'qualified' && qualificationFilter !== 'all') params.append('qualification', qualificationFilter);
+      if (temperatureFilter !== 'all') params.append('temperature', temperatureFilter);
       if (statusFilter !== 'all') params.append('status', statusFilter);
       if (search) params.append('search', search);
       if (fromDate) params.append('fromDate', fromDate);
@@ -851,7 +869,7 @@ export default function LeadsView({
     } finally {
       setSelectAllLoading(false);
     }
-  }, [token, utmFilter, mediumFilter, campaignFilter, planFilter, qualificationFilter, statusFilter, search, fromDate, toDate, bookedFromDate, bookedToDate, minAmount, maxAmount, variant, allSelectedBookingIds, dateRangeOnBookingCreatedAt]);
+  }, [token, utmFilter, mediumFilter, campaignFilter, planFilter, qualificationFilter, temperatureFilter, statusFilter, search, fromDate, toDate, bookedFromDate, bookedToDate, minAmount, maxAmount, variant, allSelectedBookingIds, dateRangeOnBookingCreatedAt]);
 
   const handleSelectRow = useCallback((id: string) => {
     setSelectedRows((prev) => {
@@ -1170,16 +1188,16 @@ export default function LeadsView({
         showToast(`Workflow triggered for ${status} action`, 'success');
       }
 
-      // Marking a meeting completed is what schedules the follow-up (email + call and
-      // WhatsApp reminders), so the modal has to open every time. Resolve the booking
-      // here rather than from inside the setBookings updater above: React runs that
-      // updater during the next render, so anything it assigns is still unset on this
-      // line and the modal would silently never open.
+      // Marking a meeting completed opens the post-meeting flow: rate the lead, then
+      // schedule the follow-up. Resolve the booking here rather than from inside the
+      // setBookings updater above: React runs that updater during the next render, so
+      // anything it assigns is still unset on this line and nothing would ever open.
       if (status === 'completed') {
         const current = bookingsById.get(bookingId) ?? bookings.find((b) => b.bookingId === bookingId);
         if (current) {
-          setSelectedBookingForFollowUp(applyUpdate(current));
-          setIsFollowUpModalOpen(true);
+          const updated = applyUpdate(current);
+          setBookingForRating(updated);
+          setPendingFollowUpBooking(updated);
         }
       }
 
@@ -1206,6 +1224,50 @@ export default function LeadsView({
 
     setPendingStatusUpdate(null);
     setSelectedBookingForPlanDetails(null);
+  };
+
+  /** Save the post-meeting rating, then hand off to the follow-up modal. */
+  const handleRateLead = async (temperature: LeadTemperature) => {
+    if (!bookingForRating) return;
+    const { bookingId } = bookingForRating;
+
+    // Errors propagate to the panel so it can show them and stay open.
+    const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${bookingId}/temperature`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ temperature, ratedByEmail: user?.email, ratedByName: user?.name }),
+    });
+
+    const data = await safeJsonParse(response);
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to save rating');
+    }
+
+    const saved = data.data?.leadTemperature ?? {
+      value: temperature,
+      ratedByEmail: user?.email ?? null,
+      ratedByName: user?.name ?? null,
+      ratedAt: new Date().toISOString(),
+    };
+    setBookings((prev) =>
+      prev.map((b) => (b.bookingId === bookingId ? { ...b, leadTemperature: saved } : b))
+    );
+
+    showToast(`Lead rated ${temperature}`, 'success');
+    closeRatingPanel();
+  };
+
+  /** Dismiss the rating panel (saved or skipped) and open the parked follow-up modal. */
+  const closeRatingPanel = () => {
+    setBookingForRating(null);
+    if (pendingFollowUpBooking) {
+      setSelectedBookingForFollowUp(pendingFollowUpBooking);
+      setIsFollowUpModalOpen(true);
+      setPendingFollowUpBooking(null);
+    }
   };
 
   const handleScheduleFollowUp = async (followUpData: FollowUpData) => {
@@ -1661,6 +1723,23 @@ export default function LeadsView({
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
+              <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Rating</label>
+              <select
+                value={temperatureFilter}
+                onChange={(e) => {
+                  setTemperatureFilter(e.target.value as 'all' | LeadTemperature | 'unrated');
+                  setBookingsPage(1);
+                }}
+                className="h-9 px-3 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 min-w-[130px] focus:ring-2 focus:ring-orange-500/20 focus:border-orange-400"
+              >
+                <option value="all">All ratings</option>
+                {TEMPERATURE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+                <option value="unrated">Not rated</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
               <label className="text-[11px] font-medium text-slate-500 uppercase tracking-wide">Plan</label>
               <select
                 value={planFilter}
@@ -1807,7 +1886,7 @@ export default function LeadsView({
               </div>
             </div>
             <div className="flex items-center gap-2 ml-auto">
-              {(fromDate || toDate || bookedFromDate || bookedToDate || searchInput || planFilter !== 'all' || (utmFilter !== 'all' && !hideSourceFilter) || mediumFilter !== 'all' || campaignFilter !== 'all' || statusFilter !== 'all' || qualificationFilter !== 'all' || minAmount || maxAmount) && (
+              {(fromDate || toDate || bookedFromDate || bookedToDate || searchInput || planFilter !== 'all' || (utmFilter !== 'all' && !hideSourceFilter) || mediumFilter !== 'all' || campaignFilter !== 'all' || statusFilter !== 'all' || qualificationFilter !== 'all' || temperatureFilter !== 'all' || minAmount || maxAmount) && (
                 <button
                   onClick={() => {
                     metaDateFilteredFullRef.current = null;
@@ -1822,6 +1901,7 @@ export default function LeadsView({
                     setCampaignFilter('all');
                     setStatusFilter('all');
                     setQualificationFilter('all');
+                    setTemperatureFilter('all');
                     setSearchInput('');
                     setSearch('');
                     setMinAmount('');
@@ -2165,6 +2245,50 @@ export default function LeadsView({
                           </div>
                         )}
 
+                        {/* Post-meeting rating, editable at any time — the BDA's read on a
+                            lead changes after a follow-up call, not only right after the
+                            meeting. Shown for completed leads even when unrated, so an
+                            unrated one is visibly actionable rather than just blank. */}
+                        {(() => {
+                          const temp = temperatureOption(row.leadTemperature?.value);
+                          if (!temp && row.status !== 'completed') return null;
+
+                          const openRating = () => {
+                            if (!editable || !row.bookingId) return;
+                            const booking = bookingsById.get(row.bookingId);
+                            if (booking) setBookingForRating(booking);
+                          };
+
+                          if (!temp) {
+                            return (
+                              <button
+                                onClick={openRating}
+                                disabled={!editable}
+                                className="mt-0.5 inline-flex items-center gap-0.5 w-fit px-1 py-0.5 rounded border border-dashed border-slate-300 text-[9px] font-semibold text-slate-400 hover:text-slate-600 hover:border-slate-400 transition disabled:cursor-default disabled:hover:text-slate-400"
+                                title={editable ? 'Rate this lead' : 'Not rated'}
+                              >
+                                <Star size={8} className="flex-shrink-0" />
+                                <span>Rate</span>
+                              </button>
+                            );
+                          }
+
+                          const TempIcon = temp.icon;
+                          const ratedBy = row.leadTemperature?.ratedByName;
+                          const ratedTitle = ratedBy ? `Rated ${temp.label} by ${ratedBy}` : `Rated ${temp.label}`;
+                          return (
+                            <button
+                              onClick={openRating}
+                              disabled={!editable}
+                              className={`mt-0.5 inline-flex items-center gap-0.5 w-fit px-1 py-0.5 rounded border text-[9px] font-semibold transition ${temp.badge} ${editable ? 'hover:brightness-95' : 'cursor-default'}`}
+                              title={editable ? `${ratedTitle} — click to change` : ratedTitle}
+                            >
+                              <TempIcon size={8} className="flex-shrink-0" />
+                              <span>{temp.label}</span>
+                            </button>
+                          );
+                        })()}
+
                         {openStatusDropdown === row.bookingId && (
                           <div
                             className="fixed inset-0 z-10"
@@ -2447,6 +2571,17 @@ export default function LeadsView({
           clientName={selectedBookingForNotes.name}
           initialNotes={selectedBookingForNotes.notes}
           onSave={handleSaveNotes}
+        />
+      )}
+
+      {/* Post-meeting lead rating — side panel, no backdrop */}
+      {bookingForRating && (
+        <LeadRatingPanel
+          isOpen
+          clientName={bookingForRating.clientName}
+          currentValue={bookingForRating.leadTemperature?.value ?? null}
+          onSelect={handleRateLead}
+          onClose={closeRatingPanel}
         />
       )}
 
