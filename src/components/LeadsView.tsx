@@ -325,6 +325,7 @@ export default function LeadsView({
           statusFilter,
           planFilter,
           qualificationFilter,
+          temperatureFilter,
           variant,
           minAmount,
           maxAmount,
@@ -458,6 +459,9 @@ export default function LeadsView({
         }
         if (variant === 'qualified' && qualificationFilter !== 'all') {
           params.append('qualification', qualificationFilter);
+        }
+        if (temperatureFilter !== 'all') {
+          params.append('temperature', temperatureFilter);
         }
         if (statusFilter !== 'all') {
           params.append('status', statusFilter);
@@ -2513,7 +2517,33 @@ export default function LeadsView({
               {filteredData.length === 0 && (
                 <tr>
                   <td colSpan={10} className="text-center py-8 text-[10px] text-slate-500">
-                    No leads found. Try adjusting the filters.
+                    {/* Name the rating when one is selected: "no results" is ambiguous when
+                        the filter itself is the reason, and the rating is the filter people
+                        forget is on. */}
+                    {temperatureFilter !== 'all' ? (
+                      <span className="inline-flex items-center gap-2">
+                        <span>
+                          No{' '}
+                          <span className="font-semibold">
+                            {temperatureFilter === 'unrated'
+                              ? 'unrated'
+                              : temperatureOption(temperatureFilter)?.label.toLowerCase()}
+                          </span>{' '}
+                          leads present for the current filters.
+                        </span>
+                        <button
+                          onClick={() => {
+                            setTemperatureFilter('all');
+                            setBookingsPage(1);
+                          }}
+                          className="font-semibold text-orange-600 hover:text-orange-700 underline"
+                        >
+                          Clear rating filter
+                        </button>
+                      </span>
+                    ) : (
+                      'No leads found. Try adjusting the filters.'
+                    )}
                   </td>
                 </tr>
               )}

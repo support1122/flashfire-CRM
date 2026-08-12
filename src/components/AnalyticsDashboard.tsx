@@ -54,6 +54,8 @@ import {
 } from '../utils/dataCache';
 import { usePlanConfig, type PlanOption, type PlanName } from '../context/PlanConfigContext';
 import { useCrmAuth } from '../auth/CrmAuthContext';
+import LeadRatingPanel from './LeadRatingPanel';
+import type { LeadTemperature } from '../utils/leadTemperature';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
@@ -81,6 +83,12 @@ interface Booking {
   anythingToKnow?: string;
   meetingNotes?: string;
   paymentPlan?: PaymentPlan;
+  leadTemperature?: {
+    value?: LeadTemperature | null;
+    ratedByEmail?: string | null;
+    ratedByName?: string | null;
+    ratedAt?: string | null;
+  } | null;
 }
 
 interface CampaignStats {
@@ -121,6 +129,8 @@ interface AnalyticsDashboardProps {
 export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDashboardProps) {
   const { planOptions } = usePlanConfig();
   const { user, token } = useCrmAuth();
+  // Post-meeting rating, opened right after a booking is marked completed here.
+  const [bookingForRating, setBookingForRating] = useState<Booking | null>(null);
   const [bookings, setBookings] = useState<Booking[]>(() => {
     const cached = getCachedBookings<Booking>();
     return cached || [];
@@ -560,6 +570,11 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
       if (data.workflowTriggered) {
         showToast(`Workflow triggered for ${status} action`, 'success');
       }
+
+      if (status === 'completed') {
+        const current = bookings.find((b) => b.bookingId === bookingId);
+        if (current) setBookingForRating({ ...current, bookingStatus: status });
+      }
     } catch (err) {
       console.error(err);
       showToast(err instanceof Error ? err.message : 'Failed to update booking status', 'error');
@@ -567,6 +582,32 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
       setUpdatingBookingId(null);
       setPlanPickerFor(null);
     }
+  };
+
+  /** Save the post-meeting rating for the booking just marked completed. */
+  const handleRateLead = async (temperature: LeadTemperature) => {
+    if (!bookingForRating) return;
+    const { bookingId } = bookingForRating;
+
+    // Errors propagate to the panel so it can show them and stay open.
+    const response = await fetch(`${API_BASE_URL}/api/campaign-bookings/${bookingId}/temperature`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ temperature, ratedByEmail: user?.email, ratedByName: user?.name }),
+    });
+
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Failed to save rating');
+    }
+
+    const saved = data.data?.leadTemperature ?? { value: temperature };
+    setBookings((prev) => prev.map((b) => (b.bookingId === bookingId ? { ...b, leadTemperature: saved } : b)));
+    showToast(`Lead rated ${temperature}`, 'success');
+    setBookingForRating(null);
   };
 
   const handleSaveNotes = async (notes: string) => {
@@ -1673,9 +1714,17 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
           </div>
         </div>
       )}
+
+      {bookingForRating && (
+        <LeadRatingPanel
+          isOpen
+          clientName={bookingForRating.clientName}
+          currentValue={bookingForRating.leadTemperature?.value ?? null}
+          onSelect={handleRateLead}
+          onClose={() => setBookingForRating(null)}
+        />
+      )}
     </div>
     </>
   );
 }
-
-
