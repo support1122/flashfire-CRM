@@ -5,6 +5,7 @@ import { useCrmAuth } from '../auth/CrmAuthContext';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
 type Plan = 'professional' | 'executive';
+type Region = 'us' | 'uk' | 'ca';
 
 interface PlanConfig {
   id: Plan;
@@ -13,18 +14,40 @@ interface PlanConfig {
   originalPrice: number;
 }
 
-const PLANS: PlanConfig[] = [
+interface RegionConfig {
+  id: Region;
+  label: string;
+  symbol: string;
+  plans: PlanConfig[];
+}
+
+const REGIONS: RegionConfig[] = [
   {
-    id: 'professional',
-    name: 'Professional Plan',
-    description: 'Professional Plan – Mid-Level Professionals',
-    originalPrice: 349,
+    id: 'us',
+    label: 'United States (USD)',
+    symbol: '$',
+    plans: [
+      { id: 'professional', name: 'Professional Plan', description: 'Professional Plan – Mid-Level Professionals', originalPrice: 349 },
+      { id: 'executive', name: 'Executive Plan', description: 'Executive Plan – 1200+ Applications', originalPrice: 599 },
+    ],
   },
   {
-    id: 'executive',
-    name: 'Executive Plan',
-    description: 'Executive Plan – 1200+ Applications',
-    originalPrice: 599,
+    id: 'uk',
+    label: 'United Kingdom (GBP)',
+    symbol: '£',
+    plans: [
+      { id: 'professional', name: 'Professional Plan', description: 'Professional Plan – Mid-Level Professionals', originalPrice: 299 },
+      { id: 'executive', name: 'Executive Plan', description: 'Executive Plan – 1200+ Applications', originalPrice: 499 },
+    ],
+  },
+  {
+    id: 'ca',
+    label: 'Canada (CAD)',
+    symbol: 'CA$',
+    plans: [
+      { id: 'professional', name: 'Professional Plan', description: 'Professional Plan – Mid-Level Professionals', originalPrice: 409 },
+      { id: 'executive', name: 'Executive Plan', description: 'Executive Plan – 1200+ Applications', originalPrice: 799 },
+    ],
   },
 ];
 
@@ -36,6 +59,7 @@ interface GeneratedLink {
 
 export default function PaymentLinkGeneratorView() {
   const { token } = useCrmAuth();
+  const [selectedRegion, setSelectedRegion] = useState<Region>('us');
   const [selectedPlan, setSelectedPlan] = useState<Plan>('professional');
   const [discountInput, setDiscountInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,22 +67,23 @@ export default function PaymentLinkGeneratorView() {
   const [generatedLink, setGeneratedLink] = useState<GeneratedLink | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const plan = PLANS.find((p) => p.id === selectedPlan)!;
+  const region = REGIONS.find((r) => r.id === selectedRegion)!;
+  const plan = region.plans.find((p) => p.id === selectedPlan)!;
   const discount = parseFloat(discountInput) || 0;
   const finalPrice = plan.originalPrice - discount;
 
-  // Reset generated link when plan or discount changes
+  // Reset generated link when region, plan, or discount changes
   useEffect(() => {
     setGeneratedLink(null);
     setError(null);
-  }, [selectedPlan, discountInput]);
+  }, [selectedRegion, selectedPlan, discountInput]);
 
   const validateDiscount = (): string | null => {
     if (discountInput === '') return 'Please enter a discount amount (0 for no discount).';
     if (discount < 0) return 'Discount cannot be negative.';
     if (discount >= plan.originalPrice) return 'Discount exceeds original price.';
     // Prevent more than 2 decimal places
-    if (!/^\d+(\.\d{0,2})?$/.test(discountInput)) return 'Enter a valid dollar amount.';
+    if (!/^\d+(\.\d{0,2})?$/.test(discountInput)) return `Enter a valid ${region.symbol} amount.`;
     return null;
   };
 
@@ -80,7 +105,7 @@ export default function PaymentLinkGeneratorView() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ plan: selectedPlan, discount }),
+        body: JSON.stringify({ plan: selectedPlan, discount, region: selectedRegion }),
       });
       const data = await res.json();
       if (!data.success) {
@@ -93,7 +118,7 @@ export default function PaymentLinkGeneratorView() {
     } finally {
       setLoading(false);
     }
-  }, [selectedPlan, discount, discountInput]);
+  }, [selectedPlan, selectedRegion, discount, discountInput]);
 
   const handleCopy = async () => {
     if (!generatedLink) return;
@@ -121,11 +146,44 @@ export default function PaymentLinkGeneratorView() {
           <p className="text-sm text-gray-400 mt-1">Generate discounted Stripe Checkout links for clients</p>
         </div>
 
+        {/* Region Selection */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Select Region</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {REGIONS.map((r) => {
+              const isSelected = selectedRegion === r.id;
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setSelectedRegion(r.id)}
+                  className={`relative text-left p-4 rounded-xl border-2 transition-all ${
+                    isSelected
+                      ? 'border-blue-500 bg-blue-50 shadow-sm'
+                      : 'border-gray-200 bg-white hover:border-blue-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-bold text-gray-900 text-sm">{r.label}</p>
+                    <div
+                      className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                        isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                      }`}
+                    >
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Plan Selection */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Select Plan</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {PLANS.map((p) => {
+            {region.plans.map((p) => {
               const isSelected = selectedPlan === p.id;
               return (
                 <button
@@ -142,7 +200,7 @@ export default function PaymentLinkGeneratorView() {
                     <div>
                       <p className="font-bold text-gray-900 text-base">{p.name}</p>
                       <p className="text-xs text-gray-500 mt-1">{p.description}</p>
-                      <p className="text-2xl font-extrabold text-gray-900 mt-3">${p.originalPrice}</p>
+                      <p className="text-2xl font-extrabold text-gray-900 mt-3">{region.symbol}{p.originalPrice}</p>
                       <p className="text-xs text-gray-400">Original Price</p>
                     </div>
                     <div
@@ -163,7 +221,7 @@ export default function PaymentLinkGeneratorView() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Discount Amount</h2>
           <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-lg">$</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-lg">{region.symbol}</span>
             <input
               type="number"
               min="0"
@@ -178,7 +236,7 @@ export default function PaymentLinkGeneratorView() {
                   setDiscountInput(val);
                 }
               }}
-              className="w-full pl-8 pr-4 py-3 text-lg border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-12 pr-4 py-3 text-lg border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
@@ -186,11 +244,11 @@ export default function PaymentLinkGeneratorView() {
           <div className="mt-5 bg-gray-50 rounded-xl p-4 space-y-2">
             <div className="flex justify-between text-sm text-gray-600">
               <span>Original Price</span>
-              <span className="font-semibold">${plan.originalPrice.toFixed(2)}</span>
+              <span className="font-semibold">{region.symbol}{plan.originalPrice.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm text-gray-600">
               <span>Discount</span>
-              <span className="font-semibold text-red-500">- ${discount > 0 ? discount.toFixed(2) : '0.00'}</span>
+              <span className="font-semibold text-red-500">- {region.symbol}{discount > 0 ? discount.toFixed(2) : '0.00'}</span>
             </div>
             <div className="border-t border-gray-200 pt-2 flex justify-between">
               <span className="font-bold text-gray-900">Final Price</span>
@@ -199,7 +257,7 @@ export default function PaymentLinkGeneratorView() {
                   finalPrice <= 0 ? 'text-red-500' : 'text-green-600'
                 }`}
               >
-                ${finalPrice > 0 ? finalPrice.toFixed(2) : '0.00'}
+                {region.symbol}{finalPrice > 0 ? finalPrice.toFixed(2) : '0.00'}
               </span>
             </div>
           </div>
@@ -249,7 +307,7 @@ export default function PaymentLinkGeneratorView() {
               </div>
               <div className="bg-gray-50 rounded-xl py-3 px-2">
                 <p className="text-xs text-gray-400 mb-1">Final Price</p>
-                <p className="font-bold text-green-600 text-lg">${generatedLink.finalPrice.toFixed(2)}</p>
+                <p className="font-bold text-green-600 text-lg">{region.symbol}{generatedLink.finalPrice.toFixed(2)}</p>
               </div>
               <div className="bg-orange-50 rounded-xl py-3 px-2">
                 <p className="text-xs text-orange-400 mb-1">Expires At</p>
