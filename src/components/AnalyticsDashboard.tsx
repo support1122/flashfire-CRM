@@ -129,8 +129,13 @@ interface AnalyticsDashboardProps {
 export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDashboardProps) {
   const { planOptions } = usePlanConfig();
   const { user, token } = useCrmAuth();
-  // Post-meeting rating, opened right after a booking is marked completed here.
+  // Post-meeting rating. `pendingCompletion` holds the status change waiting on a
+  // rating: it is applied only once the rating saves, so a booking can never be
+  // completed without one.
   const [bookingForRating, setBookingForRating] = useState<Booking | null>(null);
+  const [pendingCompletion, setPendingCompletion] = useState<
+    { bookingId: string; status: BookingStatus; plan?: PlanOption } | null
+  >(null);
   const [bookings, setBookings] = useState<Booking[]>(() => {
     const cached = getCachedBookings<Booking>();
     return cached || [];
@@ -509,7 +514,13 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
     return planOptions.find((p) => p.key === name) || undefined;
   };
 
-  const handleStatusUpdate = async (bookingId: string, status: BookingStatus, plan?: PlanOption) => {
+  const handleStatusUpdate = async (
+    bookingId: string,
+    status: BookingStatus,
+    plan?: PlanOption,
+    /** Set once the rating has been saved, so the completion gate below runs only once. */
+    ratingSaved = false,
+  ) => {
     try {
       setUpdatingBookingId(bookingId);
 
@@ -523,6 +534,20 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
         setUpdatingBookingId(null);
         setPlanPickerFor(null);
         return;
+      }
+
+      // A completed meeting must always carry a hot/warm/cold rating. Ask BEFORE writing
+      // the status: if the rating is never given the status was never changed, so the
+      // lead stays on its previous status and there is nothing to roll back.
+      if (status === 'completed' && !ratingSaved) {
+        const booking = bookings.find((b) => b.bookingId === bookingId);
+        if (booking) {
+          setPendingCompletion({ bookingId, status, plan });
+          setBookingForRating(booking);
+          setUpdatingBookingId(null);
+          setPlanPickerFor(null);
+          return;
+        }
       }
 
       const planPayload = plan
@@ -571,10 +596,6 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
         showToast(`Workflow triggered for ${status} action`, 'success');
       }
 
-      if (status === 'completed') {
-        const current = bookings.find((b) => b.bookingId === bookingId);
-        if (current) setBookingForRating({ ...current, bookingStatus: status });
-      }
     } catch (err) {
       console.error(err);
       showToast(err instanceof Error ? err.message : 'Failed to update booking status', 'error');
@@ -608,6 +629,13 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
     setBookings((prev) => prev.map((b) => (b.bookingId === bookingId ? { ...b, leadTemperature: saved } : b)));
     showToast(`Lead rated ${temperature}`, 'success');
     setBookingForRating(null);
+
+    // Apply the completion this rating was gating, if any.
+    if (pendingCompletion) {
+      const pending = pendingCompletion;
+      setPendingCompletion(null);
+      await handleStatusUpdate(pending.bookingId, pending.status, pending.plan, true);
+    }
   };
 
   const handleSaveNotes = async (notes: string) => {
