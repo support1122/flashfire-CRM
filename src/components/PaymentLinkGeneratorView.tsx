@@ -312,7 +312,7 @@ export default function PaymentLinkGeneratorView() {
               <div className="bg-orange-50 rounded-xl py-3 px-2">
                 <p className="text-xs text-orange-400 mb-1">Expires At</p>
                 <p className="font-bold text-orange-600 text-sm">{expiryLabel}</p>
-                <p className="text-[10px] text-orange-400">(5 hours)</p>
+                <p className="text-[10px] text-orange-400">(6 hours)</p>
               </div>
             </div>
 
