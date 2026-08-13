@@ -70,8 +70,11 @@ export default function ClaimLeadsView() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [lead, setLead] = useState<Lead | null>(null);
-  // Post-meeting rating, opened right after a lead is marked completed here.
+  // Post-meeting rating. `pendingCompletion` marks that a completion is waiting on the
+  // rating: it is applied only once the rating saves, so a lead can never be completed
+  // without one. False when the panel was opened to re-rate an already-completed lead.
   const [bookingForRating, setBookingForRating] = useState<Lead | null>(null);
+  const [pendingCompletion, setPendingCompletion] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<Partial<Lead>>({});
   const [showPaidConfirmModal, setShowPaidConfirmModal] = useState(false);
@@ -404,7 +407,11 @@ export default function ClaimLeadsView() {
     }
   };
 
-  const handleStatusUpdate = async (newStatus: 'paid' | 'scheduled' | 'completed' | 'rescheduled') => {
+  const handleStatusUpdate = async (
+    newStatus: 'paid' | 'scheduled' | 'completed' | 'rescheduled',
+    /** Set once the rating has been saved, so the completion gate below runs only once. */
+    ratingSaved = false,
+  ) => {
     if (!lead) return;
 
     setSaving(true);
@@ -416,6 +423,16 @@ export default function ClaimLeadsView() {
         const timeRule = validatePostMeetingBookingStatus(lead.scheduledEventStartTime, newStatus);
         if (!timeRule.ok) {
           setError(timeRule.message);
+          return;
+        }
+
+        // A completed meeting must always carry a hot/warm/cold rating. Ask BEFORE
+        // writing the status: if the rating is never given the status was never changed,
+        // so the lead stays on its previous status and there is nothing to roll back.
+        if (!ratingSaved) {
+          setPendingCompletion(true);
+          setBookingForRating(lead);
+          setSaving(false);
           return;
         }
       }
@@ -472,9 +489,6 @@ export default function ClaimLeadsView() {
 
       setSuccess('Status updated successfully!');
       setLead(data.data);
-      if (newStatus === 'completed') {
-        setBookingForRating(data.data ?? lead);
-      }
       if (activeTab === 'my_leads') {
         fetchMyLeads();
       }
@@ -510,6 +524,13 @@ export default function ClaimLeadsView() {
     setLead((prev) => (prev && prev.bookingId === bookingForRating.bookingId ? { ...prev, leadTemperature: saved } : prev));
     setSuccess(`Lead rated ${temperature}`);
     setBookingForRating(null);
+
+    // Apply the completion this rating was gating, if any. Rating first means a failure
+    // here leaves the lead on its previous status WITH a rating recorded.
+    if (pendingCompletion) {
+      setPendingCompletion(false);
+      await handleStatusUpdate('completed', true);
+    }
   };
 
   const handleSave = async () => {

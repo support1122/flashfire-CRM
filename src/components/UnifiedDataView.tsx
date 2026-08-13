@@ -295,11 +295,13 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
   const [planPickerFor, setPlanPickerFor] = useState<string | null>(null);
   const [isFollowUpModalOpen, setIsFollowUpModalOpen] = useState(false);
   const [selectedBookingForFollowUp, setSelectedBookingForFollowUp] = useState<Booking | null>(null);
-  // Post-meeting rating. `pendingFollowUpBooking` parks the follow-up until the rating
-  // panel is dismissed: the follow-up modal has a full-screen backdrop that would cover
-  // the side panel, so the two surfaces are shown one after the other, never together.
+  // Post-meeting rating. `pendingCompletion` holds the status change that is waiting on
+  // a rating: it is applied only once the rating saves, so a lead can never be completed
+  // without one. Null when the panel was opened to re-rate an already-completed lead.
   const [bookingForRating, setBookingForRating] = useState<Booking | null>(null);
-  const [pendingFollowUpBooking, setPendingFollowUpBooking] = useState<Booking | null>(null);
+  const [pendingCompletion, setPendingCompletion] = useState<
+    { bookingId: string; status: BookingStatus; plan?: PlanOption; planDetails?: PlanDetailsData } | null
+  >(null);
   const [isPlanDetailsModalOpen, setIsPlanDetailsModalOpen] = useState(false);
   const [selectedBookingForPlanDetails, setSelectedBookingForPlanDetails] = useState<{ bookingId: string; status: BookingStatus; booking: Booking } | null>(null);
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{ bookingId: string; status: BookingStatus; plan?: PlanOption } | null>(null);
@@ -890,7 +892,14 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
     }
   };
 
-  const performStatusUpdate = async (bookingId: string, status: BookingStatus, plan?: PlanOption, planDetails?: PlanDetailsData) => {
+  const performStatusUpdate = async (
+    bookingId: string,
+    status: BookingStatus,
+    plan?: PlanOption,
+    planDetails?: PlanDetailsData,
+    /** Set once the rating has been saved, so the completion gate below runs only once. */
+    ratingSaved = false,
+  ) => {
     try {
       setUpdatingBookingId(bookingId);
 
@@ -907,6 +916,22 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         return;
       }
       
+      // A completed meeting must always carry a hot/warm/cold rating. Ask BEFORE writing
+      // the status rather than after: if the rating is never given the status was never
+      // changed, so the lead simply stays on its previous status — there is no window in
+      // which a completed-but-unrated lead can exist, and nothing to roll back.
+      if (status === 'completed' && !ratingSaved) {
+        const booking = bookings.find((b) => b.bookingId === bookingId);
+        if (booking) {
+          setPendingCompletion({ bookingId, status, plan, planDetails });
+          setBookingForRating(booking);
+          setUpdatingBookingId(null);
+          setPlanPickerFor(null);
+          setOpenStatusDropdown(null);
+          return;
+        }
+      }
+
       // Use planDetails if provided, otherwise use plan
       const planPayload = planDetails
         ? {
@@ -977,17 +1002,17 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
         showToast(`Workflow triggered for ${status} action`, 'success');
       }
 
-      // Completed opens the post-meeting flow: rate the lead, then schedule the follow-up.
+      // The rating is already saved by the time we get here (the gate above), so the
+      // only remaining post-meeting step is the follow-up.
       if (status === 'completed') {
         const booking = bookings.find(b => b.bookingId === bookingId);
         if (booking) {
-          const updated = {
+          setSelectedBookingForFollowUp({
             ...booking,
             bookingStatus: status,
             paymentPlan: updatedBooking?.paymentPlan || planPayload || booking.paymentPlan,
-          };
-          setBookingForRating(updated);
-          setPendingFollowUpBooking(updated);
+          });
+          setIsFollowUpModalOpen(true);
         }
       }
     } catch (err) {
@@ -1044,16 +1069,15 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
     );
 
     showToast(`Lead rated ${temperature}`, 'success');
-    closeRatingPanel();
-  };
-
-  /** Dismiss the rating panel (saved or skipped) and open the parked follow-up modal. */
-  const closeRatingPanel = () => {
     setBookingForRating(null);
-    if (pendingFollowUpBooking) {
-      setSelectedBookingForFollowUp(pendingFollowUpBooking);
-      setIsFollowUpModalOpen(true);
-      setPendingFollowUpBooking(null);
+
+    // Apply the completion this rating was gating, if any. Rating first means a failure
+    // here leaves the lead on its previous status WITH a rating recorded — never the
+    // other way round.
+    if (pendingCompletion) {
+      const pending = pendingCompletion;
+      setPendingCompletion(null);
+      await performStatusUpdate(pending.bookingId, pending.status, pending.plan, pending.planDetails, true);
     }
   };
 
