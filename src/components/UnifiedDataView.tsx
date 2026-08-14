@@ -2039,7 +2039,10 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                   <div className="px-2 py-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wide border-b border-slate-100">
                                     Change Status
                                   </div>
-                                  {(['scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
+                                  {/* 'rescheduled' is deliberately absent: it is set by Calendly when a
+                                      client actually reschedules, never by hand. Leads already in that
+                                      status keep showing it, and the Status filter still lists it. */}
+                                  {(['scheduled', 'completed', 'no-show', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
                                     if (status === row.status) return null;
                                     const StatusIcon =
                                       status === 'completed'
