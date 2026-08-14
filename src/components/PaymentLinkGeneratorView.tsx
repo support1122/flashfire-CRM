@@ -5,7 +5,7 @@ import { useCrmAuth } from '../auth/CrmAuthContext';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 
 type Plan = 'professional' | 'executive';
-type Currency = 'USD' | 'CAD' | 'GBP';
+type Region = 'us' | 'uk' | 'ca';
 
 interface PlanConfig {
   id: Plan;
@@ -14,25 +14,41 @@ interface PlanConfig {
   originalPrice: number;
 }
 
-const PLANS: PlanConfig[] = [
-  {
-    id: 'professional',
-    name: 'Professional Plan',
-    description: 'Professional Plan – Mid-Level Professionals',
-    originalPrice: 349,
-  },
-  {
-    id: 'executive',
-    name: 'Executive Plan',
-    description: 'Executive Plan – 1200+ Applications',
-    originalPrice: 599,
-  },
-];
+interface RegionConfig {
+  id: Region;
+  label: string;
+  symbol: string;
+  plans: PlanConfig[];
+}
 
-const CURRENCIES: { id: Currency; symbol: string }[] = [
-  { id: 'USD', symbol: '$' },
-  { id: 'CAD', symbol: 'CA$' },
-  { id: 'GBP', symbol: '£' },
+const REGIONS: RegionConfig[] = [
+  {
+    id: 'us',
+    label: 'United States (USD)',
+    symbol: '$',
+    plans: [
+      { id: 'professional', name: 'Professional Plan', description: 'Professional Plan – Mid-Level Professionals', originalPrice: 349 },
+      { id: 'executive', name: 'Executive Plan', description: 'Executive Plan – 1200+ Applications', originalPrice: 599 },
+    ],
+  },
+  {
+    id: 'uk',
+    label: 'United Kingdom (GBP)',
+    symbol: '£',
+    plans: [
+      { id: 'professional', name: 'Professional Plan', description: 'Professional Plan – Mid-Level Professionals', originalPrice: 299 },
+      { id: 'executive', name: 'Executive Plan', description: 'Executive Plan – 1200+ Applications', originalPrice: 499 },
+    ],
+  },
+  {
+    id: 'ca',
+    label: 'Canada (CAD)',
+    symbol: 'CA$',
+    plans: [
+      { id: 'professional', name: 'Professional Plan', description: 'Professional Plan – Mid-Level Professionals', originalPrice: 409 },
+      { id: 'executive', name: 'Executive Plan', description: 'Executive Plan – 1200+ Applications', originalPrice: 799 },
+    ],
+  },
 ];
 
 const MAX_DISCOUNT = 100;
@@ -45,32 +61,32 @@ interface GeneratedLink {
 
 export default function PaymentLinkGeneratorView() {
   const { token } = useCrmAuth();
+  const [selectedRegion, setSelectedRegion] = useState<Region>('us');
   const [selectedPlan, setSelectedPlan] = useState<Plan>('professional');
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency>('USD');
   const [discountInput, setDiscountInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedLink, setGeneratedLink] = useState<GeneratedLink | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const plan = PLANS.find((p) => p.id === selectedPlan)!;
-  const currency = CURRENCIES.find((c) => c.id === selectedCurrency)!;
+  const region = REGIONS.find((r) => r.id === selectedRegion)!;
+  const plan = region.plans.find((p) => p.id === selectedPlan)!;
   const discount = parseFloat(discountInput) || 0;
   const finalPrice = plan.originalPrice - discount;
 
-  // Reset generated link when plan, currency, or discount changes
+  // Reset generated link when region, plan, or discount changes
   useEffect(() => {
     setGeneratedLink(null);
     setError(null);
-  }, [selectedPlan, selectedCurrency, discountInput]);
+  }, [selectedRegion, selectedPlan, discountInput]);
 
   const validateDiscount = (): string | null => {
     if (discountInput === '') return 'Please enter a discount amount (0 for no discount).';
     if (discount < 0) return 'Discount cannot be negative.';
-    if (discount > MAX_DISCOUNT) return `Discount cannot exceed ${currency.symbol}${MAX_DISCOUNT}.`;
+    if (discount > MAX_DISCOUNT) return `Discount cannot exceed ${region.symbol}${MAX_DISCOUNT}.`;
     if (discount >= plan.originalPrice) return 'Discount exceeds original price.';
     // Prevent more than 2 decimal places
-    if (!/^\d+(\.\d{0,2})?$/.test(discountInput)) return 'Enter a valid amount.';
+    if (!/^\d+(\.\d{0,2})?$/.test(discountInput)) return `Enter a valid ${region.symbol} amount.`;
     return null;
   };
 
@@ -92,7 +108,7 @@ export default function PaymentLinkGeneratorView() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ plan: selectedPlan, currency: selectedCurrency, discount }),
+        body: JSON.stringify({ plan: selectedPlan, discount, region: selectedRegion }),
       });
       const data = await res.json();
       if (!data.success) {
@@ -105,7 +121,7 @@ export default function PaymentLinkGeneratorView() {
     } finally {
       setLoading(false);
     }
-  }, [selectedPlan, selectedCurrency, discount, discountInput]);
+  }, [selectedPlan, selectedRegion, discount, discountInput]);
 
   const handleCopy = async () => {
     if (!generatedLink) return;
@@ -133,24 +149,33 @@ export default function PaymentLinkGeneratorView() {
           <p className="text-sm text-gray-400 mt-1">Generate discounted Stripe Checkout links for clients</p>
         </div>
 
-        {/* Currency Selection */}
+        {/* Region Selection */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Select Currency</h2>
-          <div className="grid grid-cols-3 gap-3">
-            {CURRENCIES.map((c) => {
-              const isSelected = selectedCurrency === c.id;
+          <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Select Region</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {REGIONS.map((r) => {
+              const isSelected = selectedRegion === r.id;
               return (
                 <button
-                  key={c.id}
+                  key={r.id}
                   type="button"
-                  onClick={() => setSelectedCurrency(c.id)}
-                  className={`text-center py-3 rounded-xl border-2 font-bold text-sm transition-all ${
+                  onClick={() => setSelectedRegion(r.id)}
+                  className={`relative text-left p-4 rounded-xl border-2 transition-all ${
                     isSelected
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'
+                      ? 'border-blue-500 bg-blue-50 shadow-sm'
+                      : 'border-gray-200 bg-white hover:border-blue-300'
                   }`}
                 >
-                  {c.symbol} {c.id}
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-bold text-gray-900 text-sm">{r.label}</p>
+                    <div
+                      className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                        isSelected ? 'border-blue-500 bg-blue-500' : 'border-gray-300'
+                      }`}
+                    >
+                      {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </div>
                 </button>
               );
             })}
@@ -161,7 +186,7 @@ export default function PaymentLinkGeneratorView() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">Select Plan</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {PLANS.map((p) => {
+            {region.plans.map((p) => {
               const isSelected = selectedPlan === p.id;
               return (
                 <button
@@ -178,7 +203,7 @@ export default function PaymentLinkGeneratorView() {
                     <div>
                       <p className="font-bold text-gray-900 text-base">{p.name}</p>
                       <p className="text-xs text-gray-500 mt-1">{p.description}</p>
-                      <p className="text-2xl font-extrabold text-gray-900 mt-3">{currency.symbol}{p.originalPrice}</p>
+                      <p className="text-2xl font-extrabold text-gray-900 mt-3">{region.symbol}{p.originalPrice}</p>
                       <p className="text-xs text-gray-400">Original Price</p>
                     </div>
                     <div
@@ -198,10 +223,10 @@ export default function PaymentLinkGeneratorView() {
         {/* Discount Input */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4">
-            Discount Amount <span className="text-gray-400 font-normal normal-case">(max {currency.symbol}{MAX_DISCOUNT})</span>
+            Discount Amount <span className="text-gray-400 font-normal normal-case">(max {region.symbol}{MAX_DISCOUNT})</span>
           </h2>
           <div className="relative">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-lg">{currency.symbol}</span>
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-semibold text-lg">{region.symbol}</span>
             <input
               type="number"
               min="0"
@@ -216,7 +241,7 @@ export default function PaymentLinkGeneratorView() {
                   setDiscountInput(val);
                 }
               }}
-              className="w-full pl-8 pr-4 py-3 text-lg border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-12 pr-4 py-3 text-lg border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
@@ -224,11 +249,11 @@ export default function PaymentLinkGeneratorView() {
           <div className="mt-5 bg-gray-50 rounded-xl p-4 space-y-2">
             <div className="flex justify-between text-sm text-gray-600">
               <span>Original Price</span>
-              <span className="font-semibold">{currency.symbol}{plan.originalPrice.toFixed(2)}</span>
+              <span className="font-semibold">{region.symbol}{plan.originalPrice.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm text-gray-600">
               <span>Discount</span>
-              <span className="font-semibold text-red-500">- {currency.symbol}{discount > 0 ? discount.toFixed(2) : '0.00'}</span>
+              <span className="font-semibold text-red-500">- {region.symbol}{discount > 0 ? discount.toFixed(2) : '0.00'}</span>
             </div>
             <div className="border-t border-gray-200 pt-2 flex justify-between">
               <span className="font-bold text-gray-900">Final Price</span>
@@ -237,7 +262,7 @@ export default function PaymentLinkGeneratorView() {
                   finalPrice <= 0 ? 'text-red-500' : 'text-green-600'
                 }`}
               >
-                {currency.symbol}{finalPrice > 0 ? finalPrice.toFixed(2) : '0.00'}
+                {region.symbol}{finalPrice > 0 ? finalPrice.toFixed(2) : '0.00'}
               </span>
             </div>
           </div>
@@ -287,12 +312,12 @@ export default function PaymentLinkGeneratorView() {
               </div>
               <div className="bg-gray-50 rounded-xl py-3 px-2">
                 <p className="text-xs text-gray-400 mb-1">Final Price</p>
-                <p className="font-bold text-green-600 text-lg">{currency.symbol}{generatedLink.finalPrice.toFixed(2)}</p>
+                <p className="font-bold text-green-600 text-lg">{region.symbol}{generatedLink.finalPrice.toFixed(2)}</p>
               </div>
               <div className="bg-orange-50 rounded-xl py-3 px-2">
                 <p className="text-xs text-orange-400 mb-1">Expires At</p>
                 <p className="font-bold text-orange-600 text-sm">{expiryLabel}</p>
-                <p className="text-[10px] text-orange-400">(5 hours)</p>
+                <p className="text-[10px] text-orange-400">(6 hours)</p>
               </div>
             </div>
 
