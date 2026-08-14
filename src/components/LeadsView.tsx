@@ -2845,7 +2845,10 @@ export default function LeadsView({
               Change Status
             </div>
             <div className="py-1">
-              {(['not-scheduled', 'scheduled', 'completed', 'no-show', 'rescheduled', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
+              {/* 'rescheduled' is deliberately absent: it is set by Calendly when a client
+                  actually reschedules, never by hand. Leads already in that status keep
+                  showing it, and the Rating/Status filters still list it. */}
+              {(['not-scheduled', 'scheduled', 'completed', 'no-show', 'paid', 'canceled', 'ignored'] as BookingStatus[]).map((status) => {
                 if (status === openRow.status) return null;
                 const statusIcon = status === 'not-scheduled' ? Clock : status === 'completed' ? CheckCircle2 : status === 'no-show' ? AlertTriangle : status === 'paid' ? DollarSign : status === 'rescheduled' ? Clock : status === 'canceled' ? X : status === 'ignored' ? X : Calendar;
                 const StatusIcon = statusIcon;
