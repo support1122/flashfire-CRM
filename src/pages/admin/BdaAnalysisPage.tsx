@@ -3,6 +3,7 @@ import { Loader2, TrendingUp, Users, CheckCircle2, BarChart3, ArrowLeft, X, Mail
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { validatePostMeetingBookingStatus } from '../../utils/postMeetingStatus';
+import { currencySymbol } from '../../utils/currency';
 import StatusHistoryPopover, { type StatusHistoryEntry } from '../../components/StatusHistoryPopover';
 import { formatRelativeTime } from '../../utils/relativeTime';
 
@@ -1384,7 +1385,7 @@ export default function BdaAnalysisPage() {
                                   <span>
                                     {lead.paymentBreakdown && lead.paymentBreakdown.length > 1 ? (
                                       <>
-                                        Total amount paid: {((lead.paymentPlan?.currency || lead.paymentBreakdown?.[0]?.currency) === 'CAD' ? 'CA$' : '$')}{getTotalAmountForLead(lead).toFixed(0)}
+                                        Total amount paid: {currencySymbol(lead.paymentPlan?.currency || lead.paymentBreakdown?.[0]?.currency)}{getTotalAmountForLead(lead).toFixed(0)}
                                         <span className="text-slate-500 ml-1">+{lead.paymentBreakdown.length - 1} more referral</span>
                                       </>
                                     ) : (

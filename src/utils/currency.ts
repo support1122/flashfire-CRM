@@ -16,7 +16,7 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
 };
 
 /** Currencies offered in the CRM's currency pickers. */
-export const CURRENCY_OPTIONS = ['USD', 'CAD', 'EUR'] as const;
+export const CURRENCY_OPTIONS = ['USD', 'CAD', 'EUR', 'GBP'] as const;
 
 /** Legacy rows store the symbol itself instead of an ISO code — map those back. */
 const LEGACY_SYMBOL_TO_CODE: Record<string, string> = {

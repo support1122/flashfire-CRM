@@ -922,7 +922,7 @@ export default function ClaimLeadsView() {
 
                       <div>
                         <label className="block text-sm font-semibold text-slate-700 mb-2">
-                          Amount paid by client {formData.paymentPlan?.currency === 'CAD' ? '(CA$)' : '($)'} <span className="text-red-600">*</span>
+                          Amount paid by client ({currencySymbol(formData.paymentPlan?.currency)}) <span className="text-red-600">*</span>
                         </label>
                         <input
                           type="number"
