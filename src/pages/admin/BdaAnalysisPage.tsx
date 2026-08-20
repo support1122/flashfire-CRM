@@ -232,9 +232,9 @@ export default function BdaAnalysisPage() {
       if (!hasGbpConfigs) {
         const gbpDefaults: Array<{ planName: PlanName; basePrice: number; currency: string; incentivePerLeadInr: number }> = [
           { planName: 'PRIME', basePrice: 79, currency: 'GBP', incentivePerLeadInr: 400 },
-          { planName: 'IGNITE', basePrice: 159, currency: 'GBP', incentivePerLeadInr: 600 },
-          { planName: 'PROFESSIONAL', basePrice: 279, currency: 'GBP', incentivePerLeadInr: 1200 },
-          { planName: 'EXECUTIVE', basePrice: 479, currency: 'GBP', incentivePerLeadInr: 2200 },
+          { planName: 'IGNITE', basePrice: 149, currency: 'GBP', incentivePerLeadInr: 600 },
+          { planName: 'PROFESSIONAL', basePrice: 299, currency: 'GBP', incentivePerLeadInr: 1200 },
+          { planName: 'EXECUTIVE', basePrice: 499, currency: 'GBP', incentivePerLeadInr: 2200 },
         ];
         mappedConfigs.push(...gbpDefaults);
       }
