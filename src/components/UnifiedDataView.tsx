@@ -116,6 +116,13 @@ interface Booking {
     calendlyUserUri?: string | null;
     matchedCrmUser?: boolean;
   } | null;
+  /** The BDA credited with this lead — the first one assigned, unchanged by rebooking. */
+  originalBda?: {
+    email?: string | null;
+    name?: string | null;
+    source?: string | null;
+    assignedAt?: string | null;
+  } | null;
 }
 
 interface UserWithoutBooking {
@@ -158,6 +165,13 @@ interface UnifiedRow {
     name?: string | null;
     calendlyUserUri?: string | null;
     matchedCrmUser?: boolean;
+  } | null;
+  /** The BDA credited with this lead — the first one assigned, unchanged by rebooking. */
+  originalBda?: {
+    email?: string | null;
+    name?: string | null;
+    source?: string | null;
+    assignedAt?: string | null;
   } | null;
   leadTemperature?: {
     value?: LeadTemperature | null;
@@ -540,6 +554,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           statusChangeSource: booking.statusChangeSource,
           statusHistory: booking.statusHistory,
           calendlyHost: booking.calendlyHost,
+          originalBda: booking.originalBda,
           leadTemperature: booking.leadTemperature,
         });
       });
@@ -570,6 +585,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           statusChangeSource: booking.statusChangeSource,
           statusHistory: booking.statusHistory,
           calendlyHost: booking.calendlyHost,
+          originalBda: booking.originalBda,
           leadTemperature: booking.leadTemperature,
         });
       });
@@ -1989,6 +2005,28 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                                 {row.statusChangedAt && <> · {formatRelativeTime(row.statusChangedAt)}</>}
                               </div>
                             )}
+
+                            {/* Credited BDA. Deliberately the first-assigned owner, not the
+                                current Calendly host: a rebooking re-rolls the host, and the
+                                lead should stay with whoever worked it first. When the two
+                                differ we say so rather than hiding the handover. */}
+                            {(() => {
+                              const owner = row.originalBda?.name || row.originalBda?.email;
+                              if (!owner) return null;
+                              const host = row.calendlyHost?.email;
+                              const handed = host && row.originalBda?.email && host !== row.originalBda.email;
+                              return (
+                                <div
+                                  className="mt-0.5 text-[9px] leading-tight text-slate-400 truncate"
+                                  title={handed
+                                    ? `Credited to ${owner}. Latest meeting hosted by ${row.calendlyHost?.name || host}.`
+                                    : `Credited to ${owner}`}
+                                >
+                                  BDA <span className="font-semibold text-slate-500">{owner}</span>
+                                  {handed && <span className="text-amber-600"> · handed over</span>}
+                                </div>
+                              );
+                            })()}
 
                             {/* Post-meeting rating, editable at any time. Shown for completed
                                 leads even when unrated, so an unrated one is visibly actionable. */}
