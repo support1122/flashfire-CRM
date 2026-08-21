@@ -116,11 +116,15 @@ interface Booking {
     calendlyUserUri?: string | null;
     matchedCrmUser?: boolean;
   } | null;
-  /** The BDA credited with this lead — the first one assigned, unchanged by rebooking. */
-  originalBda?: {
+  /**
+   * Who the LEAD belongs to. Resolved server-side across every booking sharing this
+   * client's email or phone, so all of one client's rows name the same BDA instead of
+   * whoever happened to host each meeting.
+   */
+  leadOwner?: {
     email?: string | null;
     name?: string | null;
-    source?: string | null;
+    via?: string | null;
     assignedAt?: string | null;
   } | null;
 }
@@ -166,11 +170,15 @@ interface UnifiedRow {
     calendlyUserUri?: string | null;
     matchedCrmUser?: boolean;
   } | null;
-  /** The BDA credited with this lead — the first one assigned, unchanged by rebooking. */
-  originalBda?: {
+  /**
+   * Who the LEAD belongs to. Resolved server-side across every booking sharing this
+   * client's email or phone, so all of one client's rows name the same BDA instead of
+   * whoever happened to host each meeting.
+   */
+  leadOwner?: {
     email?: string | null;
     name?: string | null;
-    source?: string | null;
+    via?: string | null;
     assignedAt?: string | null;
   } | null;
   leadTemperature?: {
@@ -554,7 +562,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           statusChangeSource: booking.statusChangeSource,
           statusHistory: booking.statusHistory,
           calendlyHost: booking.calendlyHost,
-          originalBda: booking.originalBda,
+          leadOwner: booking.leadOwner,
           leadTemperature: booking.leadTemperature,
         });
       });
@@ -585,7 +593,7 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
           statusChangeSource: booking.statusChangeSource,
           statusHistory: booking.statusHistory,
           calendlyHost: booking.calendlyHost,
-          originalBda: booking.originalBda,
+          leadOwner: booking.leadOwner,
           leadTemperature: booking.leadTemperature,
         });
       });
@@ -2006,24 +2014,24 @@ export default function UnifiedDataView({ onOpenEmailCampaign, onOpenWhatsAppCam
                               </div>
                             )}
 
-                            {/* Credited BDA. Deliberately the first-assigned owner, not the
-                                current Calendly host: a rebooking re-rolls the host, and the
-                                lead should stay with whoever worked it first. When the two
-                                differ we say so rather than hiding the handover. */}
+                            {/* Lead owner — the client's BDA, identical on every row of that
+                                client. A rebooking re-rolls the Calendly host, so the host is
+                                shown only when it differs, rather than being mistaken for the
+                                owner. */}
                             {(() => {
-                              const owner = row.originalBda?.name || row.originalBda?.email;
+                              const owner = row.leadOwner?.name || row.leadOwner?.email;
                               if (!owner) return null;
                               const host = row.calendlyHost?.email;
-                              const handed = host && row.originalBda?.email && host !== row.originalBda.email;
+                              const handed = host && row.leadOwner?.email && host !== row.leadOwner.email;
                               return (
                                 <div
                                   className="mt-0.5 text-[9px] leading-tight text-slate-400 truncate"
                                   title={handed
-                                    ? `Credited to ${owner}. Latest meeting hosted by ${row.calendlyHost?.name || host}.`
-                                    : `Credited to ${owner}`}
+                                    ? `Lead owner ${owner}. This meeting was hosted by ${row.calendlyHost?.name || host}.`
+                                    : `Lead owner ${owner}`}
                                 >
-                                  BDA <span className="font-semibold text-slate-500">{owner}</span>
-                                  {handed && <span className="text-amber-600"> · handed over</span>}
+                                  Owner <span className="font-semibold text-slate-600">{owner}</span>
+                                  {handed && <span className="text-amber-600"> · host differs</span>}
                                 </div>
                               );
                             })()}

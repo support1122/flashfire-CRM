@@ -173,6 +173,17 @@ interface Booking {
     calendlyUserUri?: string | null;
     matchedCrmUser?: boolean;
   } | null;
+  /**
+   * Who the LEAD belongs to. Resolved server-side across every booking sharing this
+   * client's email or phone, so all of one client's rows name the same BDA instead of
+   * whoever happened to host each meeting.
+   */
+  leadOwner?: {
+    email?: string | null;
+    name?: string | null;
+    via?: string | null;
+    assignedAt?: string | null;
+  } | null;
   leadTemperature?: {
     value?: LeadTemperature | null;
     ratedByEmail?: string | null;
@@ -719,6 +730,7 @@ export default function LeadsView({
         statusChangeSource: booking.statusChangeSource,
         statusHistory: booking.statusHistory,
         calendlyHost: booking.calendlyHost,
+        leadOwner: booking.leadOwner,
         leadTemperature: booking.leadTemperature,
       };
     }).filter((row) => {
@@ -2271,6 +2283,27 @@ export default function LeadsView({
                             {row.statusChangedAt && <> · {formatRelativeTime(row.statusChangedAt)}</>}
                           </div>
                         )}
+
+                        {/* Lead owner — the client's BDA, identical on every row of that
+                            client. The Calendly host is re-rolled on each rebooking, so it
+                            is called out only when it differs from the owner. */}
+                        {(() => {
+                          const owner = row.leadOwner?.name || row.leadOwner?.email;
+                          if (!owner) return null;
+                          const host = row.calendlyHost?.email;
+                          const handed = host && row.leadOwner?.email && host !== row.leadOwner.email;
+                          return (
+                            <div
+                              className="mt-0.5 text-[9px] leading-tight text-slate-400 truncate"
+                              title={handed
+                                ? `Lead owner ${owner}. This meeting was hosted by ${row.calendlyHost?.name || host}.`
+                                : `Lead owner ${owner}`}
+                            >
+                              Owner <span className="font-semibold text-slate-600">{owner}</span>
+                              {handed && <span className="text-amber-600"> · host differs</span>}
+                            </div>
+                          );
+                        })()}
 
                         {/* Post-meeting rating, editable at any time — the BDA's read on a
                             lead changes after a follow-up call, not only right after the
