@@ -63,7 +63,7 @@ export function PlanConfigProvider({ children }: { children: React.ReactNode }) 
       if (!body.success || !Array.isArray(body.configs)) {
         throw new Error(body.message || 'Failed to load plan config');
       }
-      const options: PlanOption[] = [];
+      const optionsByName = new Map<PlanName, PlanOption>();
       const config: Record<PlanName, IncentiveConfigEntry> = {
         PRIME: { incentivePerLeadInr: 0, basePriceUsd: 99 },
         IGNITE: { incentivePerLeadInr: 0, basePriceUsd: 199 },
@@ -73,9 +73,9 @@ export function PlanConfigProvider({ children }: { children: React.ReactNode }) 
       for (const c of body.configs) {
         const name = c.planName as PlanName;
         const basePriceUsd = c.basePriceUsd != null ? Number(c.basePriceUsd) : (config[name]?.basePriceUsd ?? 0);
-        const incentivePerLeadInr = Number(c.incentivePerLeadInr) ?? 0;
+        const incentivePerLeadInr = Number(c.incentivePerLeadInr) || 0;
         if (['PRIME', 'IGNITE', 'PROFESSIONAL', 'EXECUTIVE'].includes(name)) {
-          options.push({
+          optionsByName.set(name, {
             key: name,
             label: name,
             price: basePriceUsd,
@@ -85,6 +85,7 @@ export function PlanConfigProvider({ children }: { children: React.ReactNode }) 
           config[name] = { incentivePerLeadInr, basePriceUsd };
         }
       }
+      const options = Array.from(optionsByName.values());
       if (options.length > 0) {
         setPlanOptions(options);
         setIncentiveConfig(config);
