@@ -15,6 +15,7 @@ type CrmModule =
   | 'leads'
   | 'meta_leads'
   | 'claim_leads'
+  | 'claim_leads_02'
   | 'call_leads'
   | 'meeting_links'
   | 'bda_admin'
@@ -36,6 +37,7 @@ const PERMISSIONS: Array<{ key: CrmModule; label: string; description: string; v
   { key: 'leads', label: 'Leads', description: 'MQL / SQL / Converted management + revenue tracking' },
   { key: 'meta_leads', label: 'Meta Leads', description: 'Facebook & Instagram Lead Ads (dedicated tab)' },
   { key: 'claim_leads', label: 'Claim Leads', description: 'BDA lead claiming and management' },
+  { key: 'claim_leads_02', label: 'Claim Leads 02', description: 'BDA lead claiming with client-tracking payment snapshot + incentive' },
   { key: 'call_leads', label: 'Call Leads', description: 'BDA calling list for leads' },
   { key: 'meeting_links', label: 'Meeting Info', description: 'Meeting recordings and Google Drive video URLs' },
   { key: 'bda_admin', label: 'BDA Admin', description: 'Approve BDA claims and review notifications' },

@@ -80,7 +80,7 @@ const statusBadge = (s: Claim['status']): StatusBadge => {
 
 export default function ClaimLeadsView02() {
   const { user, token, canEdit } = useCrmAuth();
-  const editable = canEdit('claim_leads');
+  const editable = canEdit('claim_leads_02');
   const isAdmin = user?.role === 'admin';
 
   const authHeaders = useMemo(
@@ -326,7 +326,7 @@ export default function ClaimLeadsView02() {
         </div>
       )}
 
-      {/* Search (BDA + admin can both claim; gated by claim_leads_edit) */}
+      {/* Search (BDA + admin can both claim; gated by claim_leads_02_edit) */}
       {editable && (
         <div ref={searchWrapRef} className="relative mb-5 max-w-xl">
           <div className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 focus-within:ring-2 focus-within:ring-purple-500">

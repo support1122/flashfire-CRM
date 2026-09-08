@@ -83,7 +83,7 @@ const TAB_CONFIG: Array<{
   { tab: 'qualified_leads', permission: 'leads', label: 'Qualified Leads', icon: Filter },
   { tab: 'meta_leads', permission: 'meta_leads', label: 'Meta Leads', icon: Facebook },
   { tab: 'claim_leads', permission: 'claim_leads', label: 'Claim Your Leads', icon: UserCheck },
-  { tab: 'claim_leads_02', permission: 'claim_leads', label: 'Claim Leads 02', icon: UserCheck },
+  { tab: 'claim_leads_02', permission: 'claim_leads_02', label: 'Claim Leads 02', icon: UserCheck },
   { tab: 'meeting_links', permission: 'meeting_links', label: 'Meeting Info', icon: Video },
   { tab: 'activity', permission: 'activity_logs', label: 'Activity Log', icon: Activity },
   { tab: 'graphs', permission: 'lead_analytics', label: 'Graphs', icon: BarChart3 },
