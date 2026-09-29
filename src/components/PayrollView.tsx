@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, X, ChevronDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -7,6 +7,7 @@ import { Plus, Pencil, Trash2, X, ChevronDown } from 'lucide-react';
 
 interface PayrollRecord {
   id: string;
+  month: string; // "YYYY-MM"
   employeeName: string;
   teamName: string;
   startDate: string;
@@ -37,15 +38,46 @@ const DEFAULT_TEAMS = [
 
 const INCENTIVE_TEAMS = new Set(['Operations', 'BDA']);
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function currentYearMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(ym: string): string {
+  const [y, m] = ym.split('-');
+  return `${MONTH_NAMES[parseInt(m) - 1]} ${y}`;
+}
+
+function prevMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 2, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function nextMonth(ym: string): string {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
 
 function loadRecords(): PayrollRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as PayrollRecord[];
+    const parsed = JSON.parse(raw) as PayrollRecord[];
+    // Backfill month for old records that don't have it
+    return parsed.map((r) =>
+      r.month ? r : { ...r, month: r.startDate ? r.startDate.slice(0, 7) : currentYearMonth() }
+    );
   } catch {
     return [];
   }
@@ -144,12 +176,13 @@ function recordToForm(r: PayrollRecord): FormState {
 
 interface ModalProps {
   editRecord: PayrollRecord | null;
+  activeMonth: string;
   customTeams: string[];
   onSave: (record: PayrollRecord, newCustomTeams: string[]) => void;
   onClose: () => void;
 }
 
-function PayrollModal({ editRecord, customTeams, onSave, onClose }: ModalProps) {
+function PayrollModal({ editRecord, activeMonth, customTeams, onSave, onClose }: ModalProps) {
   const [form, setForm] = useState<FormState>(editRecord ? recordToForm(editRecord) : EMPTY_FORM);
   const [addingTeam, setAddingTeam] = useState(false);
   const [newTeamInput, setNewTeamInput] = useState('');
@@ -208,6 +241,7 @@ function PayrollModal({ editRecord, customTeams, onSave, onClose }: ModalProps) 
     if (!validate()) return;
     const record: PayrollRecord = {
       id: editRecord?.id ?? genId(),
+      month: editRecord?.month ?? activeMonth,
       employeeName: form.employeeName.trim(),
       teamName: form.teamName,
       startDate: form.startDate,
@@ -224,15 +258,13 @@ function PayrollModal({ editRecord, customTeams, onSave, onClose }: ModalProps) 
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">
-            {editRecord ? 'Edit Employee' : 'Add Employee'}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label="Close"
-          >
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">
+              {editRecord ? 'Edit Employee' : 'Add Employee'}
+            </h2>
+            <p className="text-xs text-gray-400 mt-0.5">{formatMonthLabel(activeMonth)}</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close">
             <X size={20} />
           </button>
         </div>
@@ -288,20 +320,8 @@ function PayrollModal({ editRecord, customTeams, onSave, onClose }: ModalProps) 
                   className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={handleAddTeam}
-                  className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors font-semibold"
-                >
-                  Add
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setAddingTeam(false); setNewTeamInput(''); }}
-                  className="px-3 py-1.5 bg-gray-100 text-gray-600 text-sm rounded-lg hover:bg-gray-200 transition-colors"
-                >
-                  Cancel
-                </button>
+                <button type="button" onClick={handleAddTeam} className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 transition-colors font-semibold">Add</button>
+                <button type="button" onClick={() => { setAddingTeam(false); setNewTeamInput(''); }} className="px-3 py-1.5 bg-gray-100 text-gray-600 text-sm rounded-lg hover:bg-gray-200 transition-colors">Cancel</button>
               </div>
             )}
           </div>
@@ -334,9 +354,7 @@ function PayrollModal({ editRecord, customTeams, onSave, onClose }: ModalProps) 
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Monthly Salary (₹)</label>
             <input
-              type="number"
-              min="0"
-              step="any"
+              type="number" min="0" step="any"
               value={form.monthlySalary}
               onChange={(e) => set('monthlySalary', e.target.value)}
               placeholder="e.g. 30000"
@@ -350,9 +368,7 @@ function PayrollModal({ editRecord, customTeams, onSave, onClose }: ModalProps) 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1">Incentive (₹)</label>
               <input
-                type="number"
-                min="0"
-                step="any"
+                type="number" min="0" step="any"
                 value={form.incentive}
                 onChange={(e) => set('incentive', e.target.value)}
                 placeholder="e.g. 5000"
@@ -365,9 +381,7 @@ function PayrollModal({ editRecord, customTeams, onSave, onClose }: ModalProps) 
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">Deduction (₹)</label>
             <input
-              type="number"
-              min="0"
-              step="any"
+              type="number" min="0" step="any"
               value={form.deduction}
               onChange={(e) => set('deduction', e.target.value)}
               placeholder="e.g. 0"
@@ -409,16 +423,11 @@ function PayrollModal({ editRecord, customTeams, onSave, onClose }: ModalProps) 
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-          >
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
             Cancel
           </button>
           <button
-            type="submit"
-            form=""
+            type="submit" form=""
             onClick={handleSubmit as unknown as React.MouseEventHandler<HTMLButtonElement>}
             className="px-5 py-2 text-sm font-semibold text-white bg-blue-500 rounded-lg hover:bg-blue-600 transition-colors"
           >
@@ -439,28 +448,22 @@ export default function PayrollView() {
   const [customTeams, setCustomTeams] = useState<string[]>(() => loadTeams());
   const [modalOpen, setModalOpen] = useState(false);
   const [editRecord, setEditRecord] = useState<PayrollRecord | null>(null);
+  const [activeMonth, setActiveMonth] = useState<string>(currentYearMonth);
 
-  useEffect(() => {
-    saveRecords(records);
-  }, [records]);
+  useEffect(() => { saveRecords(records); }, [records]);
+  useEffect(() => { saveTeams(customTeams); }, [customTeams]);
 
-  useEffect(() => {
-    saveTeams(customTeams);
-  }, [customTeams]);
+  // All months that have at least one record — for the dropdown
+  const monthsWithData = Array.from(new Set(records.map((r) => r.month))).sort().reverse();
 
-  const sorted = [...records].sort((a, b) =>
-    a.employeeName.localeCompare(b.employeeName)
-  );
+  const filtered = records
+    .filter((r) => r.month === activeMonth)
+    .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
 
-  function openAdd() {
-    setEditRecord(null);
-    setModalOpen(true);
-  }
+  const isCurrentMonth = activeMonth === currentYearMonth();
 
-  function openEdit(record: PayrollRecord) {
-    setEditRecord(record);
-    setModalOpen(true);
-  }
+  function openAdd() { setEditRecord(null); setModalOpen(true); }
+  function openEdit(record: PayrollRecord) { setEditRecord(record); setModalOpen(true); }
 
   function handleSave(record: PayrollRecord, newCustomTeams: string[]) {
     setCustomTeams(newCustomTeams);
@@ -484,14 +487,13 @@ export default function PayrollView() {
   return (
     <div className="p-6 min-h-full">
       {/* Page header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Payroll Management</h1>
           <p className="text-sm text-gray-500 mt-0.5">Employee salary, incentives and deductions</p>
         </div>
         <button
-          type="button"
-          onClick={openAdd}
+          type="button" onClick={openAdd}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm"
         >
           <Plus size={16} />
@@ -499,18 +501,74 @@ export default function PayrollView() {
         </button>
       </div>
 
+      {/* Month navigator */}
+      <div className="flex items-center gap-3 mb-5">
+        <button
+          type="button"
+          onClick={() => setActiveMonth(prevMonth(activeMonth))}
+          className="p-2 rounded-lg border border-gray-200 hover:bg-gray-100 text-gray-500 transition-colors"
+          title="Previous month"
+        >
+          <ChevronLeft size={16} />
+        </button>
+
+        <div className="relative">
+          <select
+            value={activeMonth}
+            onChange={(e) => setActiveMonth(e.target.value)}
+            className="appearance-none border border-gray-200 rounded-xl px-4 py-2 pr-8 text-sm font-semibold text-gray-800 bg-white outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          >
+            {/* Always show current month even if no records */}
+            {!monthsWithData.includes(currentYearMonth()) && (
+              <option value={currentYearMonth()}>{formatMonthLabel(currentYearMonth())}</option>
+            )}
+            {/* Show active month if not in list */}
+            {!monthsWithData.includes(activeMonth) && activeMonth !== currentYearMonth() && (
+              <option value={activeMonth}>{formatMonthLabel(activeMonth)}</option>
+            )}
+            {monthsWithData.map((m) => (
+              <option key={m} value={m}>{formatMonthLabel(m)}</option>
+            ))}
+          </select>
+          <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setActiveMonth(nextMonth(activeMonth))}
+          disabled={activeMonth >= currentYearMonth()}
+          className="p-2 rounded-lg border border-gray-200 hover:bg-gray-100 text-gray-500 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+          title="Next month"
+        >
+          <ChevronRight size={16} />
+        </button>
+
+        {!isCurrentMonth && (
+          <button
+            type="button"
+            onClick={() => setActiveMonth(currentYearMonth())}
+            className="text-xs font-semibold text-blue-500 hover:text-blue-700 underline underline-offset-2"
+          >
+            Back to current month
+          </button>
+        )}
+
+        {filtered.length > 0 && (
+          <span className="ml-auto text-xs text-gray-400 font-medium">{filtered.length} employee{filtered.length !== 1 ? 's' : ''}</span>
+        )}
+      </div>
+
       {/* Table card */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-        {sorted.length === 0 ? (
+        {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center px-4">
             <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mb-4">
               <span className="text-2xl">₹</span>
             </div>
-            <p className="text-gray-600 font-semibold">No payroll records yet.</p>
-            <p className="text-gray-400 text-sm mt-1">Add your first employee to get started.</p>
+            <p className="text-gray-600 font-semibold">No records for {formatMonthLabel(activeMonth)}.</p>
+            <p className="text-gray-400 text-sm mt-1">Add employees for this month to get started.</p>
             <button
-              type="button"
-              onClick={openAdd}
+              type="button" onClick={openAdd}
               className="mt-5 inline-flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded-xl transition-colors"
             >
               <Plus size={15} />
@@ -536,28 +594,19 @@ export default function PayrollView() {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((record, idx) => {
+                {filtered.map((record, idx) => {
                   const rate = dailyRate(record.monthlySalary);
                   const days = diffDays(record.startDate, record.endDate);
                   const hasIncentive = INCENTIVE_TEAMS.has(record.teamName);
                   const total = finalSalary(
-                    record.monthlySalary,
-                    record.startDate,
-                    record.endDate,
-                    hasIncentive ? record.incentive : undefined,
-                    record.deduction
+                    record.monthlySalary, record.startDate, record.endDate,
+                    hasIncentive ? record.incentive : undefined, record.deduction
                   );
-
                   return (
-                    <tr
-                      key={record.id}
-                      className={`border-b border-gray-50 last:border-b-0 hover:bg-slate-50/60 transition-colors ${idx % 2 === 1 ? 'bg-slate-50/30' : ''}`}
-                    >
+                    <tr key={record.id} className={`border-b border-gray-50 last:border-b-0 hover:bg-slate-50/60 transition-colors ${idx % 2 === 1 ? 'bg-slate-50/30' : ''}`}>
                       <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{record.employeeName}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
-                          {record.teamName}
-                        </span>
+                        <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">{record.teamName}</span>
                       </td>
                       <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                         {record.startDate ? new Date(record.startDate + 'T00:00:00').toLocaleDateString('en-IN') : '—'}
@@ -565,48 +614,28 @@ export default function PayrollView() {
                       <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                         {record.endDate ? new Date(record.endDate + 'T00:00:00').toLocaleDateString('en-IN') : '—'}
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap">
-                        ₹{fmtINR(record.monthlySalary)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-400 whitespace-nowrap">
-                        ₹{fmtINR(rate)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-400 whitespace-nowrap">
-                        {days}
+                      <td className="px-4 py-3 text-right text-gray-700 whitespace-nowrap">₹{fmtINR(record.monthlySalary)}</td>
+                      <td className="px-4 py-3 text-right text-gray-400 whitespace-nowrap">₹{fmtINR(rate)}</td>
+                      <td className="px-4 py-3 text-right text-gray-400 whitespace-nowrap">{days}</td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        {hasIncentive && record.incentive
+                          ? <span className="text-orange-500 font-medium">₹{fmtINR(record.incentive)}</span>
+                          : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
-                        {hasIncentive && record.incentive ? (
-                          <span className="text-orange-500 font-medium">₹{fmtINR(record.incentive)}</span>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        {record.deduction ? (
-                          <span className="text-red-500">₹{fmtINR(record.deduction)}</span>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
+                        {record.deduction
+                          ? <span className="text-red-500">₹{fmtINR(record.deduction)}</span>
+                          : <span className="text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3 text-right whitespace-nowrap">
                         <span className="font-bold text-green-600">₹{fmtINR(total)}</span>
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(record)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors"
-                            title="Edit"
-                          >
+                          <button type="button" onClick={() => openEdit(record)} className="p-1.5 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors" title="Edit">
                             <Pencil size={14} />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(record.id)}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                            title="Delete"
-                          >
+                          <button type="button" onClick={() => handleDelete(record.id)} className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete">
                             <Trash2 size={14} />
                           </button>
                         </div>
@@ -620,39 +649,32 @@ export default function PayrollView() {
         )}
       </div>
 
-      {/* Summary footer when records exist */}
-      {sorted.length > 0 && (
+      {/* Summary footer */}
+      {filtered.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-4">
           <div className="bg-white border border-gray-200 rounded-xl px-5 py-3 shadow-sm">
             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Total Employees</p>
-            <p className="text-2xl font-bold text-gray-900 mt-0.5">{sorted.length}</p>
+            <p className="text-2xl font-bold text-gray-900 mt-0.5">{filtered.length}</p>
           </div>
           <div className="bg-white border border-gray-200 rounded-xl px-5 py-3 shadow-sm">
             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Total Payroll</p>
             <p className="text-2xl font-bold text-green-600 mt-0.5">
-              ₹{fmtINR(
-                sorted.reduce((sum, r) => {
-                  const hasInc = INCENTIVE_TEAMS.has(r.teamName);
-                  return sum + finalSalary(r.monthlySalary, r.startDate, r.endDate, hasInc ? r.incentive : undefined, r.deduction);
-                }, 0)
-              )}
+              ₹{fmtINR(filtered.reduce((sum, r) => {
+                const hasInc = INCENTIVE_TEAMS.has(r.teamName);
+                return sum + finalSalary(r.monthlySalary, r.startDate, r.endDate, hasInc ? r.incentive : undefined, r.deduction);
+              }, 0))}
             </p>
           </div>
           <div className="bg-white border border-gray-200 rounded-xl px-5 py-3 shadow-sm">
             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Total Incentives</p>
             <p className="text-2xl font-bold text-orange-500 mt-0.5">
-              ₹{fmtINR(
-                sorted.reduce((sum, r) => {
-                  const hasInc = INCENTIVE_TEAMS.has(r.teamName);
-                  return sum + (hasInc && r.incentive ? r.incentive : 0);
-                }, 0)
-              )}
+              ₹{fmtINR(filtered.reduce((sum, r) => sum + (INCENTIVE_TEAMS.has(r.teamName) && r.incentive ? r.incentive : 0), 0))}
             </p>
           </div>
           <div className="bg-white border border-gray-200 rounded-xl px-5 py-3 shadow-sm">
             <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide">Total Deductions</p>
             <p className="text-2xl font-bold text-red-500 mt-0.5">
-              ₹{fmtINR(sorted.reduce((sum, r) => sum + (r.deduction || 0), 0))}
+              ₹{fmtINR(filtered.reduce((sum, r) => sum + (r.deduction || 0), 0))}
             </p>
           </div>
         </div>
@@ -662,6 +684,7 @@ export default function PayrollView() {
       {modalOpen && (
         <PayrollModal
           editRecord={editRecord}
+          activeMonth={activeMonth}
           customTeams={customTeams}
           onSave={handleSave}
           onClose={() => setModalOpen(false)}
