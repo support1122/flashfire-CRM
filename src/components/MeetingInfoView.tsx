@@ -2,6 +2,18 @@ import { useEffect, useState, useCallback } from 'react';
 import { Loader2, ExternalLink, Video, RefreshCcw, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useCrmAuth } from '../auth/CrmAuthContext';
+import type { MeetingAttendanceFields } from '../types/attendance';
+import {
+  CallChip,
+  DeductionChips,
+  FlagChips,
+  InOutCell,
+  MarkedCell,
+  StatusUpdatedCell,
+  TimeSpentCell,
+  TranscriptLink,
+} from './attendance/AttendanceCells';
+import { legacyToAttendance } from './attendance/legacy';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 const DEFAULT_PAGE_SIZE = 15;
@@ -25,7 +37,7 @@ interface BdaAttendanceInfo {
   notes?: string | null;
 }
 
-interface MeetingInfoRow {
+interface MeetingInfoRow extends Partial<MeetingAttendanceFields> {
   bookingId: string;
   clientName: string;
   dateOfMeet: string | null;
@@ -95,14 +107,6 @@ function fmtTimeExact(iso?: string | null): string {
   }
 }
 
-/** "on time" | "3m late" | "2m early" from lateByMs */
-function punctuality(lateByMs?: number | null): { label: string; cls: string } | null {
-  if (lateByMs == null || !Number.isFinite(lateByMs)) return null;
-  if (lateByMs > 60_000) return { label: `${Math.round(lateByMs / 60_000)}m late`, cls: 'bg-red-100 text-red-700' };
-  if (lateByMs < -60_000) return { label: `${Math.round(-lateByMs / 60_000)}m early`, cls: 'bg-emerald-100 text-emerald-700' };
-  return { label: 'on time', cls: 'bg-emerald-100 text-emerald-700' };
-}
-
 function todayISO() {
   const d = new Date();
   const year = d.getFullYear();
@@ -112,7 +116,9 @@ function todayISO() {
 }
 
 export default function MeetingInfoView() {
-  const { token } = useCrmAuth();
+  const { token, user, hasPermission } = useCrmAuth();
+  // Admins see the diagnostic flags; BDAs only see what concerns them.
+  const viewerIsAdmin = user?.role === 'admin' || hasPermission('bda_admin');
   const [rows, setRows] = useState<MeetingInfoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -210,6 +216,7 @@ export default function MeetingInfoView() {
     }
   }, [pagination]);
 
+  const tableColumns = viewerIsAdmin ? 8 : 7;
   const totalCount = pagination?.totalCount ?? 0;
   const totalPages = pagination?.totalPages ?? 1;
   const canPrev = page > 1;
@@ -417,158 +424,102 @@ export default function MeetingInfoView() {
       <div className="overflow-hidden bg-white border border-slate-200 rounded-lg shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-[10px] sm:text-xs table-auto">
+            <caption className="sr-only">Meetings with BDA attendance, calls, status updates and deductions</caption>
             <thead className="bg-slate-100 border-b border-slate-200">
-              <tr className="text-left">
-                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Client Name</th>
-                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Date of Meet</th>
-                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">BDA</th>
-                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">BDA Status</th>
-                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">In → Out (exact)</th>
-                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Time in Meeting</th>
-                <th className="px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Google Drive Video URL</th>
+              <tr className="text-left align-bottom">
+                <th scope="col" className="sticky left-0 z-10 bg-slate-100 px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Meeting</th>
+                <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Marked</th>
+                <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">In / Out</th>
+                <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Time spent</th>
+                <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Called client</th>
+                <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Status updated</th>
+                <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Deductions</th>
+                {viewerIsAdmin && <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Flags</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center">
+                  <td colSpan={tableColumns} className="px-4 py-12 text-center">
                     <Loader2 className="animate-spin text-orange-500 mx-auto" size={28} />
                   </td>
                 </tr>
               ) : (
                 rows.map((row) => {
-                  const att = row.bdaAttendance;
-                  const isAbsent = att ? att.status === 'absent' : row.bdaAbsent;
-                  const isUnmarked = att?.status === 'unmarked';
-                  const durationMs = att?.durationMs ?? att?.cumulativeDurationMs ?? null;
-                  const late = punctuality(att?.lateByMs);
-                  const roster = (att?.participantsAtJoin || [])
+                  const att = row.attendance ?? (row.bdaAttendance ? legacyToAttendance(row.bdaAttendance) : null);
+                  const isAbsent = att ? att.verdict === 'absent' : row.bdaAbsent;
+                  const roster = (row.bdaAttendance?.participantsAtJoin || [])
                     .map((p) => p.displayName || 'Unknown')
                     .join(', ');
+                  const bdaLabel = row.bdaAttendance?.bdaName || row.bdaAttendance?.bdaEmail;
+                  const rowBg = isAbsent ? 'bg-red-50' : 'bg-white';
                   return (
-                    <tr
-                      key={row.bookingId}
-                      className={`transition-colors ${
-                        isAbsent
-                          ? 'bg-red-50 hover:bg-red-100/80'
-                          : isUnmarked
-                          ? 'bg-amber-50 hover:bg-amber-100/70'
-                          : 'bg-white hover:bg-slate-50/50'
-                      }`}
-                    >
-                      <td className="px-4 py-3 font-medium text-slate-900">{row.clientName}</td>
-                      <td className="px-4 py-3 text-slate-700">
-                        {row.dateOfMeet
-                          ? format(parseISO(row.dateOfMeet), 'MMM d, yyyy • h:mm a')
-                          : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-800 whitespace-nowrap">
-                        {att?.bdaName || att?.bdaEmail || <span className="text-slate-400">—</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {att ? (
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide ${
-                                att.status === 'present'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : att.status === 'manual'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : att.status === 'unmarked'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}
-                            >
-                              {att.status === 'present'
-                                ? att.source === 'auto'
-                                  ? 'Present (Auto)'
-                                  : 'Present'
-                                : att.status === 'manual'
-                                ? 'Present (Manual)'
-                                : att.status === 'unmarked'
-                                ? 'No Response'
-                                : 'Absent'}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-slate-100 text-slate-500">
-                              {row.bdaAbsent ? (
-                                <>
-                                  <AlertTriangle size={10} />
-                                  Likely Absent
-                                </>
-                              ) : (
-                                'No Data'
-                              )}
-                            </span>
-                          )}
-                          {att?.verified && (
-                            <span
-                              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-100 text-blue-800"
-                              title="Times verified from Google Meet conference records"
-                            >
-                              ✓ Google Meet
-                            </span>
-                          )}
-                          {late && (
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${late.cls}`}>
-                              {late.label}
-                            </span>
-                          )}
+                    <tr key={row.bookingId} className={`align-top transition-colors hover:bg-slate-50 ${rowBg}`}>
+                      <th scope="row" className={`sticky left-0 z-10 px-3 py-3 text-left font-normal ${rowBg}`}>
+                        <div className="font-semibold text-slate-900 text-xs">{row.clientName}</div>
+                        <div className="text-[11px] text-slate-600 whitespace-nowrap">
+                          {row.dateOfMeet ? format(parseISO(row.dateOfMeet), 'MMM d, yyyy • h:mm a') : '-'}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
-                        {att && (att.joinedAt || att.leftAt) ? (
-                          <div
-                            className="flex flex-col leading-tight"
-                            title={roster ? `In call when BDA joined: ${roster}` : undefined}
-                          >
-                            <span className="font-semibold text-slate-800">
-                              {att.verified ? fmtTimeExact(att.joinedAt) : fmtTime(att.joinedAt)} →{' '}
-                              {att.verified ? fmtTimeExact(att.leftAt) : fmtTime(att.leftAt)}
-                            </span>
-                            {roster && (
-                              <span className="text-[10px] text-slate-500 truncate max-w-[220px]">
-                                At join: {roster}
-                              </span>
-                            )}
-                          </div>
+                        {bdaLabel && <div className="text-[11px] text-slate-500">BDA: {bdaLabel}</div>}
+                        <div className="mt-1.5 flex items-center gap-2">
+                          {row.meetingVideoUrl ? (
+                            <a
+                              href={row.meetingVideoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded text-[11px] font-semibold text-orange-700 hover:text-orange-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                              title={row.meetingVideoUrl}
+                            >
+                              <ExternalLink size={12} aria-hidden="true" />
+                              Recording
+                            </a>
+                          ) : (
+                            <span className="text-[11px] text-slate-500">No recording</span>
+                          )}
+                          <TranscriptLink transcript={row.transcript ?? null} />
+                        </div>
+                      </th>
+                      <td className="px-3 py-3">
+                        {att || !row.bdaAbsent ? (
+                          <MarkedCell attendance={att} />
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <span className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">
+                            <AlertTriangle size={11} aria-hidden="true" />
+                            Likely absent
+                          </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
-                        {durationMs != null ? (
-                          <span className="font-semibold text-slate-800">{formatDuration(durationMs)}</span>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
+                      <td className="px-3 py-3">
+                        <InOutCell
+                          attendance={att}
+                          scheduledStart={row.dateOfMeet}
+                          title={roster ? `In call when BDA joined: ${roster}` : undefined}
+                        />
                       </td>
-                      <td className="px-4 py-3">
-                        {row.meetingVideoUrl ? (
-                          <a
-                            href={row.meetingVideoUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-orange-600 hover:text-orange-700 font-semibold truncate max-w-[320px]"
-                            title={row.meetingVideoUrl}
-                          >
-                            <ExternalLink size={12} />
-                            {(() => {
-                              const d = row.meetingVideoUrl.replace(/^https?:\/\//, '');
-                              return d.length > 45 ? `${d.slice(0, 45)}…` : d;
-                            })()}
-                          </a>
-                        ) : (
-                          <span className="text-slate-500">—</span>
-                        )}
+                      <td className="px-3 py-3">
+                        <TimeSpentCell attendance={att} />
                       </td>
+                      <td className="px-3 py-3">
+                        <CallChip summary={row.callSummary ?? null} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <StatusUpdatedCell statusUpdate={row.statusUpdate ?? null} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <DeductionChips deductions={row.deductions ?? null} viewerIsAdmin={viewerIsAdmin} />
+                      </td>
+                      {viewerIsAdmin && (
+                        <td className="px-3 py-3">
+                          <FlagChips attendance={att} />
+                        </td>
+                      )}
                     </tr>
                   );
                 })
               )}
               {!loading && rows.length === 0 && !error && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-slate-500 text-sm">
+                  <td colSpan={tableColumns} className="px-4 py-12 text-center text-slate-500 text-sm">
                     No completed meetings yet. Meetings will appear here once they have ended.
                   </td>
                 </tr>

@@ -24,12 +24,14 @@ import {
   CreditCard,
   ShieldCheck,
   DollarSign,
+  Receipt,
 } from 'lucide-react';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
 import { useCrmAuth } from '../auth/CrmAuthContext';
 import type { CrmPermission } from '../auth/crmTypes';
 import { PlanConfigProvider } from '../context/PlanConfigContext';
+import BdaAttendanceStrip from '../components/attendance/BdaAttendanceStrip';
 import '../index.css';
 
 const CampaignManager = React.lazy(() => import('../components/CampaignManager'));
@@ -55,6 +57,7 @@ const EmailTemplateBuilder = React.lazy(() => import('../components/EmailTemplat
 const SessionsView = React.lazy(() => import('../components/SessionsView'));
 const PaymentLinkGeneratorView = React.lazy(() => import('../components/PaymentLinkGeneratorView'));
 const PayrollView = React.lazy(() => import('../components/PayrollView'));
+const DeductionsView = React.lazy(() => import('../components/attendance/DeductionsView'));
 
 function TabSpinner() {
   return (
@@ -67,7 +70,7 @@ function TabSpinner() {
 }
 
 
-type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'claim_leads_02' | 'call_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs' | 'graphs02' | 'graphs03' | 'stripe_data' | 'phone' | 'email_templates' | 'payment_links' | 'payroll';
+type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'claim_leads_02' | 'call_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs' | 'graphs02' | 'graphs03' | 'stripe_data' | 'phone' | 'email_templates' | 'payment_links' | 'payroll' | 'deductions';
 
 const TAB_CONFIG: Array<{
   tab: Tab;
@@ -97,6 +100,7 @@ const TAB_CONFIG: Array<{
   { tab: 'email_templates', permission: 'email_campaign', label: 'Email Templates', icon: FileText },
   { tab: 'payment_links', permission: 'payment_links', label: 'Payment Link Generator', icon: CreditCard },
   { tab: 'payroll', permission: 'payroll', label: 'Payroll', icon: DollarSign },
+  { tab: 'deductions', permission: 'meeting_links', label: 'Deductions', icon: Receipt },
 ];
 
 export default function CrmDashboardPage() {
@@ -432,6 +436,8 @@ export default function CrmDashboardPage() {
           </div>
         </header>
 
+        <BdaAttendanceStrip />
+
         <section className="flex-1 overflow-y-auto w-full">
           <div className="w-full h-full">
             {showSessions ? (
@@ -506,6 +512,7 @@ export default function CrmDashboardPage() {
                 {activeTab === 'email_templates' && <EmailTemplateBuilder />}
                 {activeTab === 'payment_links' && <PaymentLinkGeneratorView />}
                 {activeTab === 'payroll' && <PayrollView />}
+                {activeTab === 'deductions' && <DeductionsView />}
               </Suspense>
             )}
           </div>

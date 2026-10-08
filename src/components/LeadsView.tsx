@@ -50,6 +50,8 @@ import CallButton from './CallButton';
 import CallerIdSelector from './CallerIdSelector';
 import { isStatusLockedForUser, statusLockMessage } from '../utils/statusLock';
 import { currencySymbol, formatPlanPrice } from '../utils/currency';
+import { CallChip, TranscriptLink } from './attendance/AttendanceCells';
+import type { CallSummary, TranscriptRef } from '../types/attendance';
 
 const QualifiedLeadsGraphs = lazy(() => import('./QualifiedLeadsGraphs'));
 
@@ -134,6 +136,10 @@ interface Booking {
   calendlyMeetLink?: string;
   googleMeetUrl?: string;
   meetingVideoUrl?: string;
+  /** Per-meeting call summary from the backend (BDA attendance). Null until computed. */
+  callSummary?: CallSummary | null;
+  /** Stays null until transcripts ship. */
+  transcript?: TranscriptRef | null;
   scheduledEventStartTime?: string;
   bookingCreatedAt: string;
   bookingStatus: BookingStatus;
@@ -714,6 +720,8 @@ export default function LeadsView({
         qualification: booking.qualification ?? (booking.bookingStatus === 'paid' ? 'Converted' : booking.bookingStatus === 'completed' ? 'SQL' : 'MQL'),
         meetLink: booking.googleMeetUrl || (booking.calendlyMeetLink && booking.calendlyMeetLink !== 'Not Provided' ? booking.calendlyMeetLink : undefined),
         videoUrl: booking.meetingVideoUrl || undefined,
+        callSummary: booking.callSummary ?? null,
+        transcript: booking.transcript ?? null,
         notes: booking.anythingToKnow,
         meetingNotes: booking.meetingNotes,
         paymentPlan: booking.paymentPlan,
@@ -2160,6 +2168,15 @@ export default function LeadsView({
                             {row.phone}
                           </CallButton>
                           {(() => {
+                            // Every past meeting gets the full call summary once the backend sends it.
+                            const isPast = row.scheduledTime ? parseISO(row.scheduledTime).getTime() < Date.now() : false;
+                            if (isPast && row.callSummary) {
+                              return (
+                                <div className="mt-0.5">
+                                  <CallChip summary={row.callSummary} compact />
+                                </div>
+                              );
+                            }
                             const mins = lookupCallMins(row.phone);
                             if (mins && mins.calls > 0) {
                               return (
@@ -2433,6 +2450,7 @@ export default function LeadsView({
                             <FileText size={9} />
                           </a>
                         )}
+                        <TranscriptLink transcript={row.transcript} size={9} />
                         {editable && (
                           <button
                             onClick={() => {

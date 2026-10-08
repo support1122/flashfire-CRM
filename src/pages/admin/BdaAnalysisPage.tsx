@@ -6,6 +6,7 @@ import { validatePostMeetingBookingStatus } from '../../utils/postMeetingStatus'
 import { currencySymbol } from '../../utils/currency';
 import StatusHistoryPopover, { type StatusHistoryEntry } from '../../components/StatusHistoryPopover';
 import { formatRelativeTime } from '../../utils/relativeTime';
+import BdaRegistryAdmin from '../../components/attendance/BdaRegistryAdmin';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 const ADMIN_TOKEN_KEY = 'flashfire_crm_admin_token';
@@ -1598,6 +1599,10 @@ export default function BdaAnalysisPage() {
           </div>
         </div>
       )}
+
+      <div className="border-t border-slate-200 pt-6">
+        <BdaRegistryAdmin token={adminToken} />
+      </div>
     </div>
   );
 }

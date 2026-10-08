@@ -30,4 +30,6 @@ export interface CrmUser {
   name: string;
   permissions: CrmPermission[];
   role?: 'admin' | 'bda';
+  /** Some admin accounts have role "bda" with this flag set. The backend treats either as admin. */
+  isAdmin?: boolean;
 }
