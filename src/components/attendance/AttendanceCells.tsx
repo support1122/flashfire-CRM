@@ -346,3 +346,35 @@ export function TranscriptLink({ transcript, size = 12, clientName }: { transcri
     </span>
   );
 }
+
+/** Meeting Info's Summary column: the Calendly Notetaker summary saved for this meeting, readable in place. */
+export function SummaryCell({ transcript, clientName }: { transcript: TranscriptRef | null; clientName?: string }) {
+  const [open, setOpen] = useState(false);
+  if (transcript == null || typeof transcript === 'string') {
+    return transcript ? <TranscriptLink transcript={transcript} /> : <span className="text-[11px] text-slate-400">No summary</span>;
+  }
+  const preview = transcript.summaryPreview?.trim();
+  return (
+    <div className="max-w-[260px]">
+      {preview ? <p className="line-clamp-3 text-[11px] leading-snug text-slate-700">{preview}</p> : null}
+      {transcript.bookingId ? (
+        <>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="mt-1 inline-flex items-center gap-1 rounded text-[11px] font-semibold text-orange-700 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          >
+            <ScrollText size={12} aria-hidden="true" />
+            Read full summary
+          </button>
+          {open && <RecapDialog bookingId={transcript.bookingId} clientName={clientName} onClose={() => setOpen(false)} />}
+        </>
+      ) : transcript.url ? (
+        <a href={transcript.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-orange-700 hover:underline">
+          <ScrollText size={12} aria-hidden="true" />
+          Open in Calendly
+        </a>
+      ) : null}
+    </div>
+  );
+}

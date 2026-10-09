@@ -11,10 +11,11 @@ import {
   MarkedCell,
   StatusUpdatedCell,
   TimeSpentCell,
-  TranscriptLink,
+  SummaryCell,
 } from './attendance/AttendanceCells';
 import { legacyToAttendance } from './attendance/legacy';
 import { isCrmAdminUser } from './attendance/deductionHelpers';
+import { useTrackedBdas } from '../api/attendanceAdmin';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 const DEFAULT_PAGE_SIZE = 15;
@@ -128,6 +129,8 @@ export default function MeetingInfoView() {
   const [toDate, setToDate] = useState(todayISO());
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
+  const [bdaEmail, setBdaEmail] = useState('');
+  const trackedBdas = useTrackedBdas(token);
   const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [bdaAbsentCount, setBdaAbsentCount] = useState<number>(0);
   const [missedLogs, setMissedLogs] = useState<MissedMeetingLogRow[]>([]);
@@ -161,6 +164,7 @@ export default function MeetingInfoView() {
     params.set('limit', String(limit));
     if (fromDate) params.set('fromDate', fromDate);
     if (toDate) params.set('toDate', toDate);
+    if (bdaEmail) params.set('bdaEmail', bdaEmail);
     fetch(`${API_BASE_URL}/api/meeting-links?${params}`, { headers, signal })
       .then((res) => res.json())
       .then(async (data) => {
@@ -221,7 +225,7 @@ export default function MeetingInfoView() {
       .finally(() => {
         if (!signal.aborted) setLoading(false);
       });
-  }, [token, fromDate, toDate, page, limit]);
+  }, [token, fromDate, toDate, page, limit, bdaEmail]);
 
   useEffect(() => {
     fetchData();
@@ -234,7 +238,7 @@ export default function MeetingInfoView() {
     }
   }, [pagination]);
 
-  const tableColumns = viewerIsAdmin ? 8 : 7;
+  const tableColumns = viewerIsAdmin ? 9 : 8;
   const totalCount = pagination?.totalCount ?? 0;
   const totalPages = pagination?.totalPages ?? 1;
   const canPrev = page > 1;
@@ -296,6 +300,22 @@ export default function MeetingInfoView() {
           >
             Clear dates
           </button>
+          <label className="flex items-center gap-2 text-[11px] text-slate-600">
+            <span className="font-semibold">BDA</span>
+            <select
+              value={bdaEmail}
+              onChange={(e) => {
+                setBdaEmail(e.target.value);
+                setPage(1);
+              }}
+              className="border border-slate-200 px-2 py-2 bg-white rounded-lg text-slate-800"
+            >
+              <option value="">All BDAs</option>
+              {(trackedBdas.data?.bdas ?? []).map((b) => (
+                <option key={b.email} value={b.email}>{b.displayName}</option>
+              ))}
+            </select>
+          </label>
           <div className="flex items-center gap-2 text-[11px] text-slate-600">
             <span className="font-semibold">Per page</span>
             <select
@@ -451,6 +471,7 @@ export default function MeetingInfoView() {
                 <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Time spent</th>
                 <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Called client</th>
                 <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Status updated</th>
+                <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Summary</th>
                 <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Deductions</th>
                 {viewerIsAdmin && <th scope="col" className="px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Flags</th>}
               </tr>
@@ -494,7 +515,6 @@ export default function MeetingInfoView() {
                           ) : (
                             <span className="text-[11px] text-slate-500">No recording</span>
                           )}
-                          <TranscriptLink transcript={row.transcript ?? null} />
                         </div>
                       </th>
                       <td className="px-3 py-3">
@@ -522,6 +542,9 @@ export default function MeetingInfoView() {
                       </td>
                       <td className="px-3 py-3">
                         <StatusUpdatedCell statusUpdate={row.statusUpdate ?? null} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <SummaryCell transcript={row.transcript ?? null} clientName={row.clientName} />
                       </td>
                       <td className="px-3 py-3">
                         <DeductionChips deductions={row.deductions ?? null} viewerIsAdmin={viewerIsAdmin} />

@@ -1,9 +1,16 @@
-import { render, screen, within } from '@testing-library/react';
+import { render as rtlRender, screen, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import MeetingInfoView from './MeetingInfoView';
+import type { TranscriptRef } from '../types/attendance';
 import { makeAttendance, makeCalls, makeStatus } from '../test/attendanceFixtures';
-import { stubFetch } from '../test/stubFetch';
+import { callsTo, stubFetch } from '../test/stubFetch';
+
+// The BDA dropdown loads through TanStack Query, so every render needs a fresh client.
+const render = (ui: ReactElement) =>
+  rtlRender(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>);
 
 let isAdmin = true;
 vi.mock('../auth/CrmAuthContext', () => ({
@@ -25,7 +32,7 @@ const rows = [
     callSummary: makeCalls(),
     statusUpdate: makeStatus(),
     deductions: [{ deductionId: 'd1', rule: 'status_not_updated', amountInr: 50, status: 'waived', waiverReason: 'Admin cover' }],
-    transcript: { url: 'https://example.test/t/1' },
+    transcript: { url: 'https://example.test/t/1' } as TranscriptRef | null,
   },
   {
     bookingId: 'bk_2',
@@ -37,15 +44,18 @@ const rows = [
     callSummary: makeCalls({ calls: 0, connected: false, firstCallOffsetMin: null, talkSec: 0 }),
     statusUpdate: makeStatus({ status: 'scheduled', updatedBy: null, updatedAt: null, stuck: true }),
     deductions: [{ deductionId: 'd2', rule: 'missed_meeting', amountInr: 500, status: 'active', waiverReason: null }],
-    transcript: null,
+    transcript: null as TranscriptRef | null,
   },
 ];
 
 function stubBackend() {
-  stubFetch({
+  return stubFetch({
     '/api/meeting-links': () => ({ body: { success: true, data: rows, pagination: { page: 1, limit: 15, totalCount: 2, totalPages: 1 }, bdaAbsentCount: 1 } }),
     '/api/bda-attendance/bulk': () => ({ body: { success: true, attendanceMap: {} } }),
     '/api/bda-attendance/missed-logs': () => ({ body: { success: true, data: [] } }),
+    '/api/crm/attendance/bdas': () => ({
+      body: { success: true, bdas: [{ email: 'kal@example.test', displayName: 'Kalpataru' }, { email: 'sid@example.test', displayName: 'Siddhartha' }] },
+    }),
   });
 }
 
@@ -74,7 +84,7 @@ describe('MeetingInfoView attendance columns', () => {
     expect(within(row1).getByText('Status not updated ₹50')).toHaveClass('line-through');
     expect(within(row1).getByText('Matched by name')).toBeInTheDocument();
     expect(within(row1).getByText('Marked present, never joined')).toBeInTheDocument();
-    expect(within(row1).getByRole('link', { name: 'View transcript' })).toBeInTheDocument();
+    expect(within(row1).getByRole('link', { name: /Open in Calendly/ })).toHaveAttribute('href', 'https://example.test/t/1');
     expect(within(row1).getByRole('link', { name: /Recording/ })).toHaveAttribute('href', 'https://drive.example.test/rec1');
 
     // Row 2: absent, not called, stuck on scheduled, active deduction, no transcript.
@@ -83,7 +93,7 @@ describe('MeetingInfoView attendance columns', () => {
     expect(within(row2).getByText('Still scheduled')).toBeInTheDocument();
     expect(within(row2).getByText(/Stuck/)).toBeInTheDocument();
     expect(within(row2).getByText('Missed meeting ₹500')).not.toHaveClass('line-through');
-    expect(within(row2).queryByRole('link', { name: 'View transcript' })).not.toBeInTheDocument();
+    expect(within(row2).getByText('No summary')).toBeInTheDocument();
   });
 
   it('expands the sessions list', async () => {
@@ -147,5 +157,31 @@ describe('MeetingInfoView attendance columns', () => {
     expect(within(row).getByText('1 session')).toBeInTheDocument();
     // New fields are absent, so the chips say so instead of crashing.
     expect(within(row).getByText('No call data')).toBeInTheDocument();
+  });
+});
+
+describe('MeetingInfoView BDA filter and summary', () => {
+  it('filters the table and the missed logs by the chosen BDA', async () => {
+    isAdmin = true;
+    const fetchFn = stubBackend();
+    render(<MeetingInfoView />);
+    const select = await screen.findByRole('combobox', { name: 'BDA' });
+    await screen.findByRole('option', { name: 'Siddhartha' });
+    await userEvent.selectOptions(select, 'sid@example.test');
+    await vi.waitFor(() => {
+      expect(callsTo(fetchFn, 'bdaEmail=sid%40example.test').some(([u]) => String(u).includes('/api/meeting-links'))).toBe(true);
+      expect(callsTo(fetchFn, 'bdaEmail=sid%40example.test').some(([u]) => String(u).includes('/missed-logs'))).toBe(true);
+    });
+  });
+
+  it('shows the stored Calendly summary text in its own column', async () => {
+    isAdmin = false;
+    rows[1] = { ...rows[1], transcript: { bookingId: 'bk_2', summaryPreview: 'Client wants data analyst roles in Texas.', url: null } };
+    stubBackend();
+    render(<MeetingInfoView />);
+    expect(await screen.findByRole('columnheader', { name: 'Summary' })).toBeInTheDocument();
+    expect(await screen.findByText('Client wants data analyst roles in Texas.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Read full summary/ })).toBeInTheDocument();
+    expect(screen.getByText('Open in Calendly')).toBeInTheDocument();
   });
 });

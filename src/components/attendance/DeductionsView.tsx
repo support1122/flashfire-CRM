@@ -5,6 +5,7 @@ import { useDeductionSummary, useDeductions, useResolveDeduction, useReviewQueue
 import type { Deduction } from '../../types/attendance';
 import type { DeductionsMode } from '../../types/attendanceAdmin';
 import AttendanceReviewQueues from './AttendanceReviewQueues';
+import FinesSwitch from './FinesSwitch';
 import DeductionEvidenceDrawer from './DeductionEvidenceDrawer';
 import WaiveDialog from './WaiveDialog';
 import {
@@ -329,7 +330,8 @@ export default function DeductionsView() {
         <AttendanceReviewQueues token={token} />
       ) : (
         <>
-          {data && <ModeBanner mode={data.mode} admin={admin} />}
+          {admin && <FinesSwitch token={token} />}
+          {data && !admin && <ModeBanner mode={data.mode} admin={admin} />}
           <PolicyDetails />
 
           {admin && (

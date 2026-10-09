@@ -14,10 +14,19 @@ export interface RuleTotal {
 
 export type RuleTotals = Record<DeductionRule, RuleTotal>;
 
+/** The fines switch (GET/PUT /api/crm/admin/deductions/settings). source 'env' = set on the server, read-only here. */
+export interface DeductionSettings {
+  mode: DeductionsMode;
+  liveFrom: string | null;
+  source: 'crm' | 'env';
+}
+
 export interface DeductionsResponse {
   success: true;
   month: string;
   mode: DeductionsMode;
+  liveFrom?: string | null;
+  modeSource?: 'crm' | 'env';
   rows: Deduction[];
   totals: {
     byRule: Partial<RuleTotals>;

@@ -9,6 +9,8 @@ import type {
   BdaProfilesResponse,
   BdaProfileUpdate,
   DeductionMutationResponse,
+  DeductionSettings,
+  DeductionsMode,
   DeductionsResponse,
   DeductionSummaryResponse,
   ReviewQueuesResponse,
@@ -58,6 +60,7 @@ export const attendanceAdminKeys = {
   summary: (month: string) => ['attendance-admin', 'summary', month] as const,
   queues: ['attendance-admin', 'queues'] as const,
   profiles: ['attendance-admin', 'profiles'] as const,
+  settings: ['attendance-admin', 'settings'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -245,5 +248,35 @@ export function useSaveBdaProfile(token: string | null) {
       if (context?.previous) client.setQueryData(attendanceAdminKeys.profiles, context.previous);
     },
     onSettled: () => client.invalidateQueries({ queryKey: attendanceAdminKeys.profiles }),
+  });
+}
+
+/** The fines switch. Admin only. */
+export function useDeductionSettings(token: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: attendanceAdminKeys.settings,
+    queryFn: ({ signal }) => adminRequest<{ success: true; settings: DeductionSettings }>('/api/crm/admin/deductions/settings', token, { signal }),
+    enabled: enabled && Boolean(token),
+  });
+}
+
+/** Turn fines off / shadow / live. Live and shadow start now on the server; a past start is refused there. */
+export function useSaveDeductionSettings(token: string | null) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (mode: DeductionsMode) =>
+      adminRequest<{ success: true; settings: DeductionSettings }>('/api/crm/admin/deductions/settings', token, { method: 'PUT', body: { mode } }),
+    onSettled: () => client.invalidateQueries({ queryKey: attendanceAdminKeys.all }),
+  });
+}
+
+/** The tracked BDAs (name + email), for filter dropdowns. Any signed-in CRM user. */
+export function useTrackedBdas(token: string | null) {
+  return useQuery({
+    queryKey: ['attendance', 'tracked-bdas'] as const,
+    queryFn: ({ signal }) =>
+      adminRequest<{ success: true; bdas: { email: string; displayName: string }[] }>('/api/crm/attendance/bdas', token, { signal }),
+    enabled: Boolean(token),
+    staleTime: 5 * 60 * 1000,
   });
 }
