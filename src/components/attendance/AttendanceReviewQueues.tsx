@@ -249,7 +249,7 @@ export default function AttendanceReviewQueues({ token }: { token: string | null
       const d = dialog.deduction;
       return {
         heading: `${RULE_LABEL[d.rule]}, ${formatInr(d.amountInr)}`,
-        details: [d.clientName, d.bdaName || d.bdaEmail, fmtDayTime(d.evidence.scheduledStart)],
+        details: [d.clientName, d.bdaName || d.bdaEmail, fmtDayTime(d.evidence?.scheduledStart ?? null)],
       };
     }
     return {
@@ -304,7 +304,7 @@ export default function AttendanceReviewQueues({ token }: { token: string | null
                 <tr key={d.deductionId} className="bg-amber-50/40">
                   <td className={TD}>
                     <p className="font-medium text-slate-900">{d.clientName}</p>
-                    <p className="text-xs text-slate-500">{fmtDayTime(d.evidence.scheduledStart)}</p>
+                    <p className="text-xs text-slate-500">{fmtDayTime(d.evidence?.scheduledStart ?? null)}</p>
                   </td>
                   <td className={`${TD} whitespace-nowrap text-slate-800`}>{d.bdaName || d.bdaEmail}</td>
                   <td className={TD}>

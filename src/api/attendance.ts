@@ -25,20 +25,26 @@ interface RequestOptions {
   signal?: AbortSignal;
 }
 
-function toApiError(status: number, body: unknown): ApiError {
-  const err = (body as { error?: unknown } | null)?.error;
+/**
+ * Builds the ApiError for a failed response. The backend puts extra facts at the TOP LEVEL of the body, next to
+ * `error` (for example windowOpensAt on a 409 window_not_open), so those are copied into `details` as well as
+ * anything nested inside `error`. Reading only `error.*` silently lost them.
+ */
+export function toApiError(status: number, body: unknown): ApiError {
+  const { success: _success, error: err, ...top } = (body ?? {}) as Record<string, unknown>;
+  void _success;
   if (err && typeof err === 'object') {
     const { code, message, ...rest } = err as Record<string, unknown>;
     return new ApiError(
       status,
       typeof code === 'string' ? code : null,
       typeof message === 'string' ? message : `Request failed (${status})`,
-      rest,
+      { ...top, ...rest },
     );
   }
   // Older endpoints return a bare string error.
-  if (typeof err === 'string') return new ApiError(status, null, err);
-  return new ApiError(status, null, `Request failed (${status})`);
+  if (typeof err === 'string') return new ApiError(status, null, err, top);
+  return new ApiError(status, null, `Request failed (${status})`, top);
 }
 
 /** Calls the CRM backend with the logged-in user's bearer token. Throws ApiError on failure.

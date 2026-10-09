@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { Loader2, ExternalLink, Video, RefreshCcw, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useCrmAuth } from '../auth/CrmAuthContext';
@@ -14,6 +14,7 @@ import {
   TranscriptLink,
 } from './attendance/AttendanceCells';
 import { legacyToAttendance } from './attendance/legacy';
+import { isCrmAdminUser } from './attendance/deductionHelpers';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
 const DEFAULT_PAGE_SIZE = 15;
@@ -116,9 +117,10 @@ function todayISO() {
 }
 
 export default function MeetingInfoView() {
-  const { token, user, hasPermission } = useCrmAuth();
+  const { token, user } = useCrmAuth();
   // Admins see the diagnostic flags; BDAs only see what concerns them.
-  const viewerIsAdmin = user?.role === 'admin' || hasPermission('bda_admin');
+  // Same rule as the backend: role admin or the isAdmin flag. Holding the bda_admin permission does not make a BDA an admin here.
+  const viewerIsAdmin = isCrmAdminUser(user);
   const [rows, setRows] = useState<MeetingInfoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -140,7 +142,15 @@ export default function MeetingInfoView() {
     return 'bg-slate-100 text-slate-700';
   };
 
+  // A newer request cancels the older one, so changing dates or pages quickly can never let a slow old answer
+  // overwrite the newer table or switch the loading spinner off early.
+  const abortRef = useRef<AbortController | null>(null);
+
   const fetchData = useCallback(() => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const { signal } = controller;
     setLoading(true);
     setLoadingMissedLogs(true);
     setError(null);
@@ -151,7 +161,7 @@ export default function MeetingInfoView() {
     params.set('limit', String(limit));
     if (fromDate) params.set('fromDate', fromDate);
     if (toDate) params.set('toDate', toDate);
-    fetch(`${API_BASE_URL}/api/meeting-links?${params}`, { headers })
+    fetch(`${API_BASE_URL}/api/meeting-links?${params}`, { headers, signal })
       .then((res) => res.json())
       .then(async (data) => {
         if (data.success && Array.isArray(data.data)) {
@@ -162,7 +172,7 @@ export default function MeetingInfoView() {
             try {
               const attRes = await fetch(
                 `${API_BASE_URL}/api/bda-attendance/bulk?bookingIds=${bookingIds.join(',')}`,
-                { headers }
+                { headers, signal }
               );
               const attData = await attRes.json();
               if (attData.success) attendanceMap = attData.attendanceMap || {};
@@ -181,7 +191,7 @@ export default function MeetingInfoView() {
           try {
             const logsRes = await fetch(
               `${API_BASE_URL}/api/bda-attendance/missed-logs?${params.toString()}`,
-              { headers }
+              { headers, signal }
             );
             const logsData = await logsRes.json();
             if (logsData.success && Array.isArray(logsData.data)) {
@@ -200,14 +210,18 @@ export default function MeetingInfoView() {
         }
       })
       .catch(() => {
+        if (signal.aborted) return; // superseded by a newer request, which owns the state now
         setError('Failed to load meeting info');
         setLoadingMissedLogs(false);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!signal.aborted) setLoading(false);
+      });
   }, [token, fromDate, toDate, page, limit]);
 
   useEffect(() => {
     fetchData();
+    return () => abortRef.current?.abort();
   }, [fetchData]);
 
   const handlePageChange = useCallback((newPage: number) => {

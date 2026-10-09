@@ -1,3 +1,4 @@
+import { currentMonthKey } from './deductionHelpers';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { addMonths, format, parse } from 'date-fns';
@@ -33,7 +34,8 @@ function Stat({ label, value, tone = 'text-slate-900' }: { label: string; value:
  */
 export default function MyAttendancePanel({ initialMonth }: { initialMonth?: string }) {
   const { token, user } = useCrmAuth();
-  const currentMonth = format(new Date(), MONTH_FMT);
+  // The backend's month keys are IST. Using the browser's own month could disagree with it near the 1st.
+  const currentMonth = currentMonthKey();
   const [month, setMonth] = useState(initialMonth ?? currentMonth);
 
   const query = useQuery({

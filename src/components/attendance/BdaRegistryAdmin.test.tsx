@@ -53,20 +53,15 @@ describe('BdaRegistryAdmin', () => {
     expect(within(unknown).getAllByRole('row')).toHaveLength(4); // header + 3
   });
 
-  it('flips a toggle at once and sends the full editable set', async () => {
+  it('flips a toggle at once and sends ONLY the changed field', async () => {
     const calls = setup();
     const sid = await card('Siddhartha');
     await userEvent.click(within(sid).getByRole('switch', { name: 'Tracked' }));
     await waitFor(() => expect(within(sid).getByRole('switch', { name: 'Tracked' })).not.toBeChecked());
     await waitFor(() => expect(within(sid).getByText('Saved')).toBeInTheDocument());
     const put = calls.find((c) => c.method === 'PUT');
-    expect(put?.body).toEqual({
-      aliases: ['siddhartha b', 'basaveni siddhartha'],
-      discordUserId: '412345678901234567',
-      leaveDays: ['2026-10-12', '2026-10-13'],
-      tracked: false,
-      active: true,
-    });
+    // Not the whole profile: a stale cache must never overwrite what another admin changed.
+    expect(put?.body).toEqual({ tracked: false });
   });
 
   it('rolls the toggle back and shows the error when the save fails', async () => {

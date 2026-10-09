@@ -111,14 +111,8 @@ function ProfileCard({ profile, token }: { profile: BdaProfile; token: string | 
   const sortedLeave = useMemo(() => [...profile.leaveDays].sort(), [profile.leaveDays]);
 
   async function commit(patch: Partial<BdaProfileUpdate>): Promise<boolean> {
-    const update: BdaProfileUpdate = {
-      aliases: profile.aliases,
-      discordUserId: profile.discordUserId,
-      leaveDays: profile.leaveDays,
-      tracked: profile.tracked,
-      active: profile.active,
-      ...patch,
-    };
+    // Send only what changed (see SaveProfileVars): the profile prop can be stale if another admin edited it.
+    const update: Partial<BdaProfileUpdate> = patch;
     if (savedTimer.current) clearTimeout(savedTimer.current);
     setState({ phase: 'saving' });
     try {

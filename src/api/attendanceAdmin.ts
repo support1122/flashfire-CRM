@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../config';
-import { ApiError } from './attendance';
+import { ApiError, toApiError } from './attendance';
 import type { Deduction } from '../types/attendance';
 import type {
   ActivateBody,
@@ -45,19 +45,7 @@ async function adminRequest<T>(
     body = null;
   }
 
-  if (!res.ok) {
-    const err = (body as { error?: unknown } | null)?.error;
-    if (err && typeof err === 'object') {
-      const { code, message, ...rest } = err as Record<string, unknown>;
-      throw new ApiError(
-        res.status,
-        typeof code === 'string' ? code : null,
-        typeof message === 'string' ? message : `Request failed (${res.status})`,
-        rest,
-      );
-    }
-    throw new ApiError(res.status, null, typeof err === 'string' ? err : `Request failed (${res.status})`);
-  }
+  if (!res.ok) throw toApiError(res.status, body);
   if (body === null || typeof body !== 'object') {
     throw new ApiError(res.status, 'bad_response', 'The server sent an unreadable answer');
   }
@@ -138,7 +126,9 @@ export function useWaiveDeduction(token: string | null) {
         method: 'POST',
         body: { reason },
       }),
-    onSuccess: invalidate,
+    // onSettled, not onSuccess: if another admin already resolved this row the server answers 409, and the list must
+    // refresh so the stale Waive and Activate buttons disappear.
+    onSettled: invalidate,
   });
 }
 
@@ -151,7 +141,7 @@ export function useActivateDeduction(token: string | null) {
         token,
         { method: 'POST', body: { reason, action } },
       ),
-    onSuccess: invalidate,
+    onSettled: invalidate,
   });
 }
 
@@ -185,7 +175,7 @@ export function useReassignBooking(token: string | null) {
         token,
         { method: 'PUT', body: { email } },
       ),
-    onSuccess: invalidate,
+    onSettled: invalidate,
   });
 }
 
@@ -198,7 +188,7 @@ export function useConvertToMiss(token: string | null) {
         token,
         { method: 'POST', body: { reason, bdaEmail } },
       ),
-    onSuccess: invalidate,
+    onSettled: invalidate,
   });
 }
 
@@ -215,13 +205,15 @@ export function useDismissIntegrityFlag(token: string | null) {
         token,
         { method: 'POST', body: { reason, bdaEmail } },
       ),
-    onSuccess: invalidate,
+    onSettled: invalidate,
   });
 }
 
 interface SaveProfileVars {
   email: string;
-  update: BdaProfileUpdate;
+  /** Only the field(s) the admin changed. Sending the whole profile from a stale cache would overwrite a colleague's
+   * edit (for example re-enabling `tracked`), and re-validating untouched aliases could reject an unrelated toggle. */
+  update: Partial<BdaProfileUpdate>;
 }
 
 /** Saves a BDA profile edit (name, aliases, leave days, etc) with optimistic updates.

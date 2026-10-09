@@ -32,6 +32,7 @@ import { useCrmAuth } from '../auth/CrmAuthContext';
 import type { CrmPermission } from '../auth/crmTypes';
 import { PlanConfigProvider } from '../context/PlanConfigContext';
 import BdaAttendanceStrip from '../components/attendance/BdaAttendanceStrip';
+import AttendanceErrorBoundary from '../components/attendance/AttendanceErrorBoundary';
 import '../index.css';
 
 const CampaignManager = React.lazy(() => import('../components/CampaignManager'));
@@ -436,7 +437,9 @@ export default function CrmDashboardPage() {
           </div>
         </header>
 
-        <BdaAttendanceStrip />
+        <AttendanceErrorBoundary label="The attendance strip">
+          <BdaAttendanceStrip />
+        </AttendanceErrorBoundary>
 
         <section className="flex-1 overflow-y-auto w-full">
           <div className="w-full h-full">
@@ -512,7 +515,11 @@ export default function CrmDashboardPage() {
                 {activeTab === 'email_templates' && <EmailTemplateBuilder />}
                 {activeTab === 'payment_links' && <PaymentLinkGeneratorView />}
                 {activeTab === 'payroll' && <PayrollView />}
-                {activeTab === 'deductions' && <DeductionsView />}
+                {activeTab === 'deductions' && (
+                  <AttendanceErrorBoundary label="Deductions">
+                    <DeductionsView />
+                  </AttendanceErrorBoundary>
+                )}
               </Suspense>
             )}
           </div>

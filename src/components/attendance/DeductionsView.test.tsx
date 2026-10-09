@@ -291,3 +291,94 @@ describe('DeductionsView as an admin: waive', () => {
     expect(post?.body).toEqual({ reason: 'Zoom sync was down, call log confirms no call', action: 'activate' });
   });
 });
+
+describe('DeductionsView filters', () => {
+  function adminInstall() {
+    asAdmin();
+    install({
+      'GET /api/crm/deductions': () => deductionsResponse(adminRows),
+      'GET /api/crm/deductions/summary': () => summaryResponse(),
+      'GET /api/crm/admin/attendance/review-queues': () => emptyQueues,
+    });
+  }
+  // Rows of the ledger table only (the per-BDA table above it has rows too), minus its header row.
+  const ledger = () => screen.getByRole('table', { name: /^Deductions for/ });
+  const rowsShown = () => within(ledger()).getAllByRole('row').length - 1;
+
+  it('shows every row and a count, then narrows by status without a new request', async () => {
+    adminInstall();
+    renderView();
+    expect(await screen.findByTestId('ledger-count')).toHaveTextContent('Showing 8 of 8');
+    expect(rowsShown()).toBe(8);
+
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'waived');
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent('Showing 1 of 8');
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent('The totals above still cover the whole month');
+    expect(rowsShown()).toBe(1);
+    expect(screen.getByText('Rohan Deshpande')).toBeInTheDocument();
+    // The cards above still show the whole month, not the filtered list.
+    expect(screen.getByTestId('total-active')).toHaveTextContent('₹1,150');
+  });
+
+  it('puts a count next to every status', async () => {
+    adminInstall();
+    renderView();
+    await screen.findByTestId('ledger-count');
+    const options = within(screen.getByLabelText('Status')).getAllByRole('option').map((o) => o.textContent);
+    expect(options).toEqual(['All statuses (8)', 'Active (4)', 'Needs review (1)', 'Waived (1)', 'Voided (1)', 'Shadow (1)']);
+  });
+
+  it('filters by rule and by a search, and the two combine', async () => {
+    adminInstall();
+    renderView();
+    await screen.findByTestId('ledger-count');
+    await userEvent.selectOptions(screen.getByLabelText('Rule'), 'no_show_not_called');
+    expect(rowsShown()).toBe(2);
+    await userEvent.type(screen.getByLabelText('Search'), 'tomasz');
+    expect(rowsShown()).toBe(1);
+    expect(screen.getByText('Tomasz Kowalczyk')).toBeInTheDocument();
+  });
+
+  it('says so when nothing matches, and Clear filters brings everything back', async () => {
+    adminInstall();
+    renderView();
+    await screen.findByTestId('ledger-count');
+    await userEvent.type(screen.getByLabelText('Search'), 'no such client');
+    expect(await screen.findByTestId('ledger-no-match')).toHaveTextContent('No deductions match these filters');
+    await userEvent.click(within(screen.getByTestId('ledger-no-match')).getByRole('button', { name: 'Clear filters' }));
+    expect(screen.queryByTestId('ledger-no-match')).not.toBeInTheDocument();
+    expect(rowsShown()).toBe(8);
+    expect(screen.getByLabelText('Search')).toHaveValue('');
+  });
+
+  it('keeps the chosen sort when filters are cleared, and sorting by amount reorders the rows', async () => {
+    adminInstall();
+    renderView();
+    await screen.findByTestId('ledger-count');
+    await userEvent.selectOptions(screen.getByLabelText('Sort'), 'amount_high');
+    const firstAmount = within(within(ledger()).getAllByRole('row')[1]).getByText('₹500');
+    expect(firstAmount).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'active');
+    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(screen.getByLabelText('Sort')).toHaveValue('amount_high');
+  });
+
+  it('a BDA gets the filters too, but no Shadow option and no BDA search wording', async () => {
+    asBda();
+    install({ 'GET /api/crm/deductions': () => deductionsResponse(siddharthaRows) });
+    renderView();
+    await screen.findByTestId('ledger-count');
+    const options = within(screen.getByLabelText('Status')).getAllByRole('option').map((o) => o.textContent);
+    expect(options.join('|')).not.toMatch(/Shadow/);
+    expect(options).toContain('Under review (1)');
+    expect(screen.getByLabelText('Search')).toHaveAttribute('placeholder', 'Client, booking id or reason');
+  });
+
+  it('shows no filter bar for an empty month', async () => {
+    asBda();
+    install({ 'GET /api/crm/deductions': () => deductionsResponse([]) });
+    renderView();
+    await screen.findByText(/No deductions in/);
+    expect(screen.queryByLabelText('Search')).not.toBeInTheDocument();
+  });
+});

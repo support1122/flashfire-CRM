@@ -164,6 +164,82 @@ export function deriveTotals(rows: Deduction[]): { byRule: RuleTotals; activeAmo
   return { byRule, activeAmountInr };
 }
 
+// ---------------------------------------------------------------------------
+// Ledger filters and sorting (client side, over the month the server already returned)
+// ---------------------------------------------------------------------------
+
+export type StatusFilter = 'all' | DeductionStatus;
+export type RuleFilter = 'all' | DeductionRule;
+export type LedgerSort = 'newest' | 'oldest' | 'amount_high' | 'amount_low';
+
+export interface LedgerFilters {
+  status: StatusFilter;
+  rule: RuleFilter;
+  /** Free text. Matches client name, BDA name or email, booking id and the waiver or void reason. Case and accent blind. */
+  search: string;
+  sort: LedgerSort;
+}
+
+export const DEFAULT_FILTERS: LedgerFilters = { status: 'all', rule: 'all', search: '', sort: 'newest' };
+
+export const SORT_LABEL: Record<LedgerSort, string> = {
+  newest: 'Meeting date, newest first',
+  oldest: 'Meeting date, oldest first',
+  amount_high: 'Amount, highest first',
+  amount_low: 'Amount, lowest first',
+};
+
+/** True when any filter differs from the default. Sorting alone is not a filter. */
+export function hasActiveFilters(f: LedgerFilters): boolean {
+  return f.status !== 'all' || f.rule !== 'all' || f.search.trim() !== '';
+}
+
+const fold = (text: string) =>
+  text
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase();
+
+/** The text a search is matched against, for one row. */
+function searchable(d: Deduction): string {
+  return fold(
+    [d.clientName, d.bdaName, d.bdaEmail, d.bookingId, d.waiverReason, d.voidReason, d.waivedByName]
+      .filter((v): v is string => typeof v === 'string' && v.length > 0)
+      .join(' '),
+  );
+}
+
+const startMs = (d: Deduction) => {
+  const t = Date.parse(d.evidence?.scheduledStart ?? '');
+  return Number.isFinite(t) ? t : 0;
+};
+
+/** Filters then sorts. Never mutates its input, and ties keep a stable order (by deduction id). */
+export function applyLedgerFilters(rows: Deduction[], f: LedgerFilters): Deduction[] {
+  const words = fold(f.search.trim()).split(/\s+/).filter(Boolean);
+  const kept = rows.filter((d) => {
+    if (f.status !== 'all' && d.status !== f.status) return false;
+    if (f.rule !== 'all' && d.rule !== f.rule) return false;
+    if (words.length === 0) return true;
+    const haystack = searchable(d);
+    return words.every((w) => haystack.includes(w)); // every word must match, in any order
+  });
+  const by = {
+    newest: (a: Deduction, b: Deduction) => startMs(b) - startMs(a),
+    oldest: (a: Deduction, b: Deduction) => startMs(a) - startMs(b),
+    amount_high: (a: Deduction, b: Deduction) => b.amountInr - a.amountInr || startMs(b) - startMs(a),
+    amount_low: (a: Deduction, b: Deduction) => a.amountInr - b.amountInr || startMs(b) - startMs(a),
+  }[f.sort];
+  return [...kept].sort((a, b) => by(a, b) || a.deductionId.localeCompare(b.deductionId));
+}
+
+/** How many rows each status has, for the counts in the status filter. Ignores the other filters on purpose. */
+export function countByStatus(rows: Deduction[]): Record<DeductionStatus, number> {
+  const out: Record<DeductionStatus, number> = { active: 0, needs_review: 0, waived: 0, voided: 0, shadow: 0 };
+  for (const r of rows) out[r.status] += 1;
+  return out;
+}
+
 export { RULE_LABEL, formatInr };
 
 // ---------------------------------------------------------------------------

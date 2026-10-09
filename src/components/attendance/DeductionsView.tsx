@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardList, Info, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardList, Info, Search, X, Loader2, RefreshCw } from 'lucide-react';
 import { useCrmAuth } from '../../auth/CrmAuthContext';
 import { useDeductionSummary, useDeductions, useResolveDeduction, useReviewQueues } from '../../api/attendanceAdmin';
 import type { Deduction } from '../../types/attendance';
@@ -19,6 +19,15 @@ import {
   statusLabel,
   tierText,
   voidReasonText,
+  DEFAULT_FILTERS,
+  SORT_LABEL,
+  applyLedgerFilters,
+  countByStatus,
+  hasActiveFilters,
+  type LedgerFilters,
+  type LedgerSort,
+  type RuleFilter,
+  type StatusFilter,
 } from './deductionHelpers';
 import { RULE_LABEL, fmtDayTime, formatInr } from './format';
 
@@ -196,6 +205,7 @@ export default function DeductionsView() {
   const [bdaEmail, setBdaEmail] = useState('');
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [evidence, setEvidence] = useState<EvidenceState | null>(null);
+  const [filters, setFilters] = useState<LedgerFilters>(DEFAULT_FILTERS);
 
   const thisMonth = currentMonthKey();
   const query = useDeductions(token, month, admin ? bdaEmail : '');
@@ -204,13 +214,12 @@ export default function DeductionsView() {
   const resolve = useResolveDeduction(token);
 
   const data = query.data;
-  const rows = useMemo(
-    () =>
-      [...(data?.rows ?? [])].sort(
-        (a, b) => Date.parse(b.evidence.scheduledStart) - Date.parse(a.evidence.scheduledStart),
-      ),
-    [data],
-  );
+  // `rows` is the whole month as the server sent it (totals and counts come from it). `visibleRows` is what the
+  // filters and the sort choose to show in the table.
+  const rows = useMemo(() => data?.rows ?? [], [data]);
+  const visibleRows = useMemo(() => applyLedgerFilters(rows, filters), [rows, filters]);
+  const statusCounts = useMemo(() => countByStatus(rows), [rows]);
+  const filtered = hasActiveFilters(filters);
 
   const totals = useMemo(() => {
     const derived = deriveTotals(rows);
@@ -438,6 +447,103 @@ export default function DeductionsView() {
                   )}
                 </div>
 
+                {rows.length > 0 && (
+                  <div className="space-y-2 border-b border-slate-200 bg-slate-50/60 px-4 py-3">
+                    <div role="search" aria-label="Filter deductions" className="flex flex-wrap items-end gap-3">
+                      <div className="min-w-56 flex-1">
+                        <label htmlFor="deductions-search" className="block text-xs font-semibold text-slate-600">
+                          Search
+                        </label>
+                        <div className="relative mt-1">
+                          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                          <input
+                            id="deductions-search"
+                            type="search"
+                            value={filters.search}
+                            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+                            placeholder={admin ? 'Client, BDA, booking id or reason' : 'Client, booking id or reason'}
+                            autoComplete="off"
+                            className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-8 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="deductions-status-filter" className="block text-xs font-semibold text-slate-600">
+                          Status
+                        </label>
+                        <select
+                          id="deductions-status-filter"
+                          value={filters.status}
+                          onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value as StatusFilter }))}
+                          className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+                        >
+                          <option value="all">All statuses ({rows.length})</option>
+                          {(['active', 'needs_review', 'waived', 'voided', ...(admin ? (['shadow'] as const) : [])] as const).map((st) => (
+                            <option key={st} value={st}>
+                              {statusLabel(st, admin)} ({statusCounts[st]})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label htmlFor="deductions-rule-filter" className="block text-xs font-semibold text-slate-600">
+                          Rule
+                        </label>
+                        <select
+                          id="deductions-rule-filter"
+                          value={filters.rule}
+                          onChange={(e) => setFilters((f) => ({ ...f, rule: e.target.value as RuleFilter }))}
+                          className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+                        >
+                          <option value="all">All rules</option>
+                          {RULES.map((r) => (
+                            <option key={r} value={r}>
+                              {RULE_LABEL[r]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label htmlFor="deductions-sort" className="block text-xs font-semibold text-slate-600">
+                          Sort
+                        </label>
+                        <select
+                          id="deductions-sort"
+                          value={filters.sort}
+                          onChange={(e) => setFilters((f) => ({ ...f, sort: e.target.value as LedgerSort }))}
+                          className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+                        >
+                          {(Object.keys(SORT_LABEL) as LedgerSort[]).map((k) => (
+                            <option key={k} value={k}>
+                              {SORT_LABEL[k]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <p role="status" aria-live="polite" className="text-xs text-slate-600" data-testid="ledger-count">
+                        Showing {visibleRows.length} of {rows.length}
+                        {filtered ? '. The totals above still cover the whole month.' : ''}
+                      </p>
+                      {filtered && (
+                        <button
+                          type="button"
+                          onClick={() => setFilters((f) => ({ ...DEFAULT_FILTERS, sort: f.sort }))}
+                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-orange-700 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+                        >
+                          <X size={12} aria-hidden="true" />
+                          Clear filters
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {rows.length === 0 ? (
                   <div className="px-4 py-12 text-center">
                     <p className="text-sm font-semibold text-slate-800">
@@ -448,6 +554,17 @@ export default function DeductionsView() {
                         ? 'Fines are not active yet, so nothing is recorded for you.'
                         : 'Rows appear here as soon as a rule applies to one of your meetings.'}
                     </p>
+                  </div>
+                ) : visibleRows.length === 0 ? (
+                  <div className="px-4 py-12 text-center" data-testid="ledger-no-match">
+                    <p className="text-sm font-semibold text-slate-800">No deductions match these filters</p>
+                    <button
+                      type="button"
+                      onClick={() => setFilters((f) => ({ ...DEFAULT_FILTERS, sort: f.sort }))}
+                      className="mt-2 rounded-lg px-3 py-2 text-sm font-semibold text-orange-700 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+                    >
+                      Clear filters
+                    </button>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -466,7 +583,7 @@ export default function DeductionsView() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {rows.map((d) => {
+                        {visibleRows.map((d) => {
                           const resolved = d.status === 'waived' || d.status === 'voided';
                           const tier = tierText(d);
                           const rowTone =

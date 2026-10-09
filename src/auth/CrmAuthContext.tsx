@@ -1,4 +1,5 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { queryClient } from '../api/queryClient';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { CrmModule, CrmPermission, CrmUser } from './crmTypes';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.flashfirejobs.com';
@@ -37,6 +38,17 @@ export function CrmAuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState<CrmUser | null>(null);
   const [status, setStatus] = useState<AuthStatus>('loading');
+
+  // Cached attendance and deduction data belongs to one person. When a KNOWN user is replaced (a different login on the
+  // same tab) or logs out, the cache is dropped, so the next person never sees the previous one's rows while loading.
+  // Not on the first load: user goes null to email once /auth/me answers, and clearing then would orphan the queries
+  // that already started with the stored token, leaving their screens loading forever.
+  const lastEmail = useRef<string | null>(null);
+  useEffect(() => {
+    const next = user?.email ?? null;
+    if (lastEmail.current && lastEmail.current !== next) queryClient.clear();
+    lastEmail.current = next;
+  }, [user?.email]);
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
