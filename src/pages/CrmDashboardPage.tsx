@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useMemo, useState, type ComponentType } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
 import {
   BarChart3,
   ChevronLeft,
@@ -75,7 +75,8 @@ type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflo
 
 const TAB_CONFIG: Array<{
   tab: Tab;
-  permission: CrmPermission;
+  /** null: every signed-in user sees it (the server scopes the data to the caller). */
+  permission: CrmPermission | null;
   label: string;
   icon: ComponentType<{ size?: number }>;
 }> = [
@@ -101,7 +102,9 @@ const TAB_CONFIG: Array<{
   { tab: 'email_templates', permission: 'email_campaign', label: 'Email Templates', icon: FileText },
   { tab: 'payment_links', permission: 'payment_links', label: 'Payment Link Generator', icon: CreditCard },
   { tab: 'payroll', permission: 'payroll', label: 'Payroll', icon: DollarSign },
-  { tab: 'deductions', permission: 'meeting_links', label: 'Deductions', icon: Receipt },
+  // Rule 2.6: a BDA sees every deduction against them, so this cannot hang on an unrelated permission. The server
+  // returns only the caller's own rows (all rows for admins); an untracked user just sees an empty list.
+  { tab: 'deductions', permission: null, label: 'Deductions', icon: Receipt },
 ];
 
 export default function CrmDashboardPage() {
@@ -124,13 +127,14 @@ export default function CrmDashboardPage() {
   const [approvalsOpen, setApprovalsOpen] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
 
-  const allowedTabs = useMemo(() => TAB_CONFIG.filter((t) => hasPermission(t.permission)), [hasPermission]);
+  const canSee = useCallback((permission: CrmPermission | null) => permission === null || hasPermission(permission), [hasPermission]);
+  const allowedTabs = useMemo(() => TAB_CONFIG.filter((t) => canSee(t.permission)), [canSee]);
 
   const [activeTab, setActiveTab] = useState<Tab>('campaigns');
 
   const safeSetActiveTab = (tab: Tab) => {
     const cfg = TAB_CONFIG.find((t) => t.tab === tab);
-    if (!cfg || !hasPermission(cfg.permission)) return;
+    if (!cfg || !canSee(cfg.permission)) return;
     setShowSessions(false);
     setActiveTab(tab);
   };
@@ -181,7 +185,7 @@ export default function CrmDashboardPage() {
         if (!body?.success || !Array.isArray(body.data)) return;
         if (!cancelled) {
           setBdaApprovals(
-            body.data.map((item: any) => ({
+            body.data.map((item: Record<string, unknown>) => ({
               approvalId: String(item.approvalId),
               bookingId: String(item.bookingId),
               bdaEmail: String(item.bdaEmail || ''),
@@ -189,11 +193,13 @@ export default function CrmDashboardPage() {
               clientName: String(item.clientName || ''),
               clientEmail: String(item.clientEmail || ''),
               clientPhone: String(item.clientPhone || ''),
-              createdAt: item.createdAt
+              createdAt: String(item.createdAt ?? '')
             }))
           );
         }
-      } catch {
+      } catch (err) {
+        // The approvals bell is a convenience; a failed poll retries in a minute. Log it rather than hide it.
+        console.warn('[CRM] BDA approvals poll failed:', err);
       }
     };
     load();

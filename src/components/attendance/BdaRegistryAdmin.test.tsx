@@ -10,7 +10,24 @@ function setup(failWith?: Handler) {
   const server = profilesResponse();
   const put = (email: string): Handler => async (call) => {
     if (failWith) return failWith(call);
-    server.profiles = server.profiles.map((p) => (p.email === email ? { ...p, ...(call.body as object) } : p));
+    // Mirrors the server: plain fields replace, add*/remove* edit the list ($addToSet / $pull).
+    const { addAliases, removeAliases, addLeaveDays, removeLeaveDays, ...plain } = call.body as Record<string, string[] | unknown>;
+    const edit = (list: string[], add?: unknown, remove?: unknown) => {
+      let out = [...list];
+      for (const v of (add as string[]) || []) if (!out.includes(v)) out.push(v);
+      if (remove) out = out.filter((v) => !(remove as string[]).includes(v));
+      return out;
+    };
+    server.profiles = server.profiles.map((p) =>
+      p.email === email
+        ? {
+            ...p,
+            ...(plain as object),
+            aliases: edit(p.aliases, addAliases, removeAliases),
+            leaveDays: edit(p.leaveDays, addLeaveDays, removeLeaveDays),
+          }
+        : p,
+    );
     return { success: true };
   };
   const stub = installFetch({
@@ -96,10 +113,12 @@ describe('BdaRegistryAdmin', () => {
     await userEvent.type(input, 'k samal');
     await userEvent.click(within(kal).getByRole('button', { name: 'Add alias' }));
     expect(await within(kal).findByText('k samal')).toBeInTheDocument();
-    expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ aliases: ['kalpataru s', 'kalpataru samal', 'k samal'] });
+    // Only the new alias travels (atomic add), never the whole list from a possibly stale screen.
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ addAliases: ['k samal'] });
 
     await userEvent.click(within(kal).getByRole('button', { name: 'Remove alias kalpataru s' }));
     await waitFor(() => expect(within(kal).queryByText('kalpataru s')).not.toBeInTheDocument());
+    expect(calls.filter((c) => c.method === 'PUT').at(-1)?.body).toEqual({ removeAliases: ['kalpataru s'] });
   });
 
   it('adds a leave day in date order and validates the Discord ID', async () => {
@@ -109,7 +128,7 @@ describe('BdaRegistryAdmin', () => {
     await userEvent.type(date, '2026-10-05');
     await userEvent.click(within(kal).getByRole('button', { name: 'Add day' }));
     await waitFor(() => expect(within(kal).getByText('5 Oct 2026')).toBeInTheDocument());
-    expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ leaveDays: ['2026-10-05', '2026-10-09'] });
+    expect(calls.find((c) => c.method === 'PUT')?.body).toEqual({ addLeaveDays: ['2026-10-05'] });
 
     const discord = within(kal).getByLabelText('Discord user ID');
     const save = within(kal).getByRole('button', { name: 'Save ID' });

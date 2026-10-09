@@ -1,7 +1,10 @@
-import { AlertTriangle, Check, Clock, PhoneCall, PhoneOff, ScrollText, ShieldCheck, X } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, Check, Clock, HelpCircle, Monitor, PhoneCall, PhoneOff, ScrollText, ShieldCheck, Smartphone, X } from 'lucide-react';
+import RecapDialog from './RecapDialog';
 import type {
   CallSummary,
   DeductionChip,
+  JoinDevice,
   MeetingAttendance,
   StatusUpdate,
   TranscriptRef,
@@ -80,6 +83,7 @@ export function InOutCell({
         <span className="whitespace-nowrap font-semibold text-slate-800 tabular-nums">{fmtClock(attendance.outAt, secs)}</span>
       </div>
       <div className="flex flex-wrap gap-1">
+        <JoinDeviceChip device={attendance.joinDevice} />
         {attendance.verified && (
           <span
             className="inline-flex items-center gap-1 whitespace-nowrap rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-800"
@@ -226,6 +230,8 @@ export function DeductionChips({
               {d.status === 'voided' && <span className="font-medium">voided</span>}
               {d.status === 'needs_review' && <span className="font-medium">{viewerIsAdmin ? 'to review' : 'under review'}</span>}
               {d.status === 'shadow' && <span className="font-medium">shadow</span>}
+              {/* The title tooltip is mouse-only; the reason must also reach keyboard and screen-reader users. */}
+              {title && <span className="sr-only">. {title}</span>}
             </span>
           </li>
         );
@@ -268,12 +274,65 @@ export function FlagChips({ attendance }: { attendance: MeetingAttendance | null
   );
 }
 
-/** Transcript icon. Renders nothing until a transcript exists (Part E); a bare link when it has a URL. */
-export function TranscriptLink({ transcript, size = 12 }: { transcript: TranscriptRef | null; size?: number }) {
+const DEVICE: Record<JoinDevice, { label: string; icon: typeof Monitor; cls: string; title: string }> = {
+  pc: { label: 'PC', icon: Monitor, cls: 'border-slate-200 bg-slate-50 text-slate-700', title: 'Joined on the PC: the attendance extension saw this call' },
+  mobile: {
+    label: 'Mobile',
+    icon: Smartphone,
+    cls: 'border-violet-200 bg-violet-50 text-violet-800',
+    title: 'Likely joined from a phone: Google saw the BDA in the call while the extension ran on the PC without this call open',
+  },
+  phone_dial_in: { label: 'Dial-in', icon: PhoneCall, cls: 'border-sky-200 bg-sky-50 text-sky-800', title: 'Joined by dialing in (Google lists a phone participant)' },
+  unknown: {
+    label: 'Device unknown',
+    icon: HelpCircle,
+    cls: 'border-amber-200 bg-amber-50 text-amber-900',
+    title: 'Google saw the BDA, but the extension was offline during the call, so the device cannot be told',
+  },
+};
+
+/** Which device the BDA joined from (display only). Renders nothing until someone saw the join. */
+export function JoinDeviceChip({ device }: { device: JoinDevice | null | undefined }) {
+  if (!device || !DEVICE[device]) return null;
+  const d = DEVICE[device];
+  const Icon = d.icon;
+  return (
+    <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${d.cls}`} title={d.title}>
+      <Icon size={11} aria-hidden="true" />
+      {d.label}
+      <span className="sr-only">. {d.title}</span>
+    </span>
+  );
+}
+
+/**
+ * Transcript icon. With a stored Calendly recap it opens the summary in a dialog; with only a URL it links out;
+ * with neither it renders nothing.
+ */
+export function TranscriptLink({ transcript, size = 12, clientName }: { transcript: TranscriptRef | null; size?: number; clientName?: string }) {
+  const [open, setOpen] = useState(false);
   if (transcript == null) return null;
   const url = typeof transcript === 'string' ? transcript : transcript.url ?? null;
   const cls =
     'inline-flex items-center justify-center p-0.5 rounded border border-slate-200 bg-white text-slate-700 hover:border-orange-400 hover:text-orange-600 transition flex-shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600';
+  const bookingId = typeof transcript === 'object' ? transcript.bookingId : undefined;
+  if (bookingId) {
+    const preview = typeof transcript === 'object' ? transcript.summaryPreview : undefined;
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={cls}
+          aria-label="View Calendly meeting summary"
+          title={preview ? `Calendly summary: ${preview}` : 'View Calendly meeting summary'}
+        >
+          <ScrollText size={size} aria-hidden="true" />
+        </button>
+        {open && <RecapDialog bookingId={bookingId} clientName={clientName} onClose={() => setOpen(false)} />}
+      </>
+    );
+  }
   if (url) {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer" title="View transcript" aria-label="View transcript" className={cls}>

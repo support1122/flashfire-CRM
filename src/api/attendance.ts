@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config';
-import type { MarkPresentResponse, MyMonthResponse, MyWindowResponse } from '../types/attendance';
+import type { BookingRecapResponse, MarkPresentResponse, MyMonthResponse, MyWindowResponse } from '../types/attendance';
 
 /** A failed API call from the backend. `status` is 0 when the network was unreachable.
  * Includes `code` (snake_case error identifier) and `details` (extra fields like windowOpensAt on 409s).
@@ -91,6 +91,10 @@ export function postMarkPresent(token: string | null, bookingId: string): Promis
     token,
     { method: 'POST', body: {} },
   );
+}
+
+export function fetchBookingRecap(token: string | null, bookingId: string, signal?: AbortSignal): Promise<BookingRecapResponse> {
+  return crmRequest<BookingRecapResponse>(`/api/crm/bookings/${encodeURIComponent(bookingId)}/recap`, token, { signal });
 }
 
 export function fetchMyMonth(token: string | null, month: string, signal?: AbortSignal): Promise<MyMonthResponse> {

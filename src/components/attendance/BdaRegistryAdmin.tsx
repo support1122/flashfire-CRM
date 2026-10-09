@@ -143,7 +143,7 @@ function ProfileCard({ profile, token }: { profile: BdaProfile; token: string | 
     }
     setAliasError(null);
     setAliasDraft('');
-    await commit({ aliases: [...profile.aliases, value] });
+    await commit({ addAliases: [value] });
   }
 
   async function addLeave(event: FormEvent) {
@@ -159,7 +159,7 @@ function ProfileCard({ profile, token }: { profile: BdaProfile; token: string | 
     setLeaveError(null);
     const day = leaveDraft;
     setLeaveDraft('');
-    await commit({ leaveDays: [...profile.leaveDays, day].sort() });
+    await commit({ addLeaveDays: [day] });
   }
 
   const discordTrimmed = discordDraft.trim();
@@ -226,7 +226,7 @@ function ProfileCard({ profile, token }: { profile: BdaProfile; token: string | 
           {profile.aliases.length > 0 ? (
             <ul aria-labelledby={`${idBase}-aliases`} className="mt-2 flex flex-wrap gap-1.5">
               {profile.aliases.map((alias) => (
-                <Chip key={alias} removeLabel={`Remove alias ${alias}`} onRemove={() => commit({ aliases: profile.aliases.filter((a) => a !== alias) })}>
+                <Chip key={alias} removeLabel={`Remove alias ${alias}`} onRemove={() => commit({ removeAliases: [alias] })}>
                   {alias}
                 </Chip>
               ))}
@@ -313,7 +313,7 @@ function ProfileCard({ profile, token }: { profile: BdaProfile; token: string | 
                   key={day}
                   muted={day < today}
                   removeLabel={`Remove leave day ${leaveLabel(day)}`}
-                  onRemove={() => commit({ leaveDays: profile.leaveDays.filter((d) => d !== day) })}
+                  onRemove={() => commit({ removeLeaveDays: [day] })}
                 >
                   {leaveLabel(day)}
                 </Chip>

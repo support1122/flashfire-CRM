@@ -164,6 +164,8 @@ export default function MeetingInfoView() {
     fetch(`${API_BASE_URL}/api/meeting-links?${params}`, { headers, signal })
       .then((res) => res.json())
       .then(async (data) => {
+        // A newer request (page or date change) owns the state from here; every await below re-checks this.
+        if (signal.aborted) return;
         if (data.success && Array.isArray(data.data)) {
           // Fetch real BDA attendance data
           const bookingIds = data.data.map((r: MeetingInfoRow) => r.bookingId).filter(Boolean);
@@ -180,6 +182,7 @@ export default function MeetingInfoView() {
               // Silently fall back to old heuristic
             }
           }
+          if (signal.aborted) return;
           // Merge attendance into rows
           const enrichedRows = data.data.map((row: MeetingInfoRow) => ({
             ...row,
@@ -194,15 +197,16 @@ export default function MeetingInfoView() {
               { headers, signal }
             );
             const logsData = await logsRes.json();
+            if (signal.aborted) return;
             if (logsData.success && Array.isArray(logsData.data)) {
               setMissedLogs(logsData.data);
             } else {
               setMissedLogs([]);
             }
           } catch {
-            setMissedLogs([]);
+            if (!signal.aborted) setMissedLogs([]);
           } finally {
-            setLoadingMissedLogs(false);
+            if (!signal.aborted) setLoadingMissedLogs(false);
           }
         } else {
           setError(data.message || 'Failed to load');

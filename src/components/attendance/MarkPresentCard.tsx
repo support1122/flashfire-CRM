@@ -235,11 +235,20 @@ export default function MarkPresentCard({ onOpenMyAttendance }: MarkPresentCardP
     }
   }
 
+  // Screen readers hear the time left only at thresholds; announcing the per-second countdown would be noise.
+  // The text changes just three times, so the polite live region speaks just three times.
+  let timeLeftAnnouncement = '';
+  if (state?.kind === 'open' && state.msLeft <= 60_000) {
+    timeLeftAnnouncement =
+      state.msLeft <= 10_000 ? '10 seconds left to mark present' : state.msLeft <= 30_000 ? '30 seconds left to mark present' : 'Under a minute left to mark present';
+  }
+
   return (
     <section
       aria-label="Mark Present"
       className="bg-white border border-gray-200 rounded-lg shadow-sm px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-3"
     >
+      <p aria-live="polite" className="sr-only" data-testid="time-left-announcer">{timeLeftAnnouncement}</p>
       <div className="min-w-0 flex-1 basis-60">
         <p className="text-[11px] uppercase tracking-wider text-gray-500 font-semibold">Mark Present</p>
         {win ? (

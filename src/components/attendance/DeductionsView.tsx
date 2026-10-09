@@ -383,6 +383,19 @@ export default function DeductionsView() {
             <>
               <TotalsCards totals={totals} underReview={underReview} admin={admin} filtered={Boolean(bdaEmail)} />
 
+              {admin && summary.isError && (
+                <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                  <span>The per-BDA summary could not load, so the BDA filter is empty.</span>
+                  <button
+                    type="button"
+                    onClick={() => summary.refetch()}
+                    className="rounded-lg border border-rose-300 bg-white px-3 py-1 font-semibold hover:bg-rose-100"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
               {admin && !bdaEmail && bdaOptions.length > 0 && (
                 <section aria-labelledby="per-bda-heading" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                   <h2 id="per-bda-heading" className="border-b border-slate-200 px-4 py-3 text-sm font-bold text-slate-900">

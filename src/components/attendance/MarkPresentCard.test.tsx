@@ -122,11 +122,27 @@ describe('MarkPresentCard states', () => {
     stubFetch({ '/my-window': myWindowRoute('2026-10-08T11:00:18.000Z') });
     renderCard();
     await flush();
-    const live = document.querySelector('[aria-live="polite"]');
-    expect(live).toHaveTextContent('Mark Present window is open');
-    expect(live?.textContent).not.toMatch(/left/);
+    const live = screen.getByText('Mark Present window is open');
+    expect(live).toHaveAttribute('aria-live', 'polite');
+    expect(live.textContent).not.toMatch(/left/);
     await flush(5000);
     expect(live).toHaveTextContent('Mark Present window is open');
+  });
+
+  it('announces the time left only at 60, 30 and 10 seconds', async () => {
+    // 42 s left at render.
+    stubFetch({ '/my-window': myWindowRoute('2026-10-08T11:00:18.000Z') });
+    renderCard();
+    await flush();
+    const announcer = screen.getByTestId('time-left-announcer');
+    expect(announcer).toHaveAttribute('aria-live', 'polite');
+    expect(announcer).toHaveTextContent('Under a minute left to mark present');
+    await flush(5000); // 37 s: no change, so nothing new is spoken
+    expect(announcer).toHaveTextContent('Under a minute left to mark present');
+    await flush(8000); // 29 s
+    expect(announcer).toHaveTextContent('30 seconds left to mark present');
+    await flush(20_000); // 9 s
+    expect(announcer).toHaveTextContent('10 seconds left to mark present');
   });
 });
 

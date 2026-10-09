@@ -119,11 +119,19 @@ export interface BdaProfilesResponse {
   unknownNames: UnknownBdaName[];
 }
 
-/** The fields PUT /api/crm/admin/bda-profiles/:email accepts. */
+/**
+ * The fields PUT /api/crm/admin/bda-profiles/:email accepts. Use the add/remove fields for list edits: they are
+ * atomic on the server, so two admins editing at once never drop each other's leave days or aliases. Send only one
+ * of `aliases` / `addAliases` / `removeAliases` (same for leave days) per request.
+ */
 export interface BdaProfileUpdate {
   aliases: string[];
   discordUserId: string | null;
   leaveDays: string[];
   tracked: boolean;
   active: boolean;
+  addAliases?: string[];
+  removeAliases?: string[];
+  addLeaveDays?: string[];
+  removeLeaveDays?: string[];
 }

@@ -61,7 +61,16 @@ export interface MeetingAttendance {
   verified: boolean; // true = times come from Google Meet conference records (authoritative); false = from extension
   matchedBy: 'stable_id' | 'name' | null; // How the BDA was identified (plan 2.8): email/calendly/zoom > name
   integrityFlag: 'marked_never_joined' | null; // Flag: BDA marked present but never joined the call (plan 2.2, open D10)
+  /**
+   * Which device the BDA joined from (backend Utils/JoinDevice.js). Display only, never decides a verdict.
+   * pc: the extension saw this call. mobile: Google saw the BDA while the extension ran on the PC without this call
+   * in any tab. phone_dial_in: Google lists the BDA as a dial-in. unknown: extension offline during the call.
+   */
+  joinDevice?: JoinDevice | null;
+  joinDeviceReason?: string | null;
 }
+
+export type JoinDevice = 'pc' | 'mobile' | 'phone_dial_in' | 'unknown';
 
 /** Summary of calls from the assigned BDA to the client on a booking (plan section 2.4).
  * Computed from Zoom Phone call logs; matched by BDA email, Zoom ID, or normalized phone number.
@@ -110,7 +119,7 @@ export interface Deduction {
   rule: DeductionRule; // 'missed_meeting' | 'no_show_not_called' | 'status_not_updated'
   month: string; // YYYY-MM (IST calendar month the booking started in)
   amountInr: number; // Fine amount in INR (may be 0 if waived)
-  tierIndex: number | null; // Only for missed_meeting: 0-based tier (1st miss = 0, 6th+ = 5), null when waived/voided
+  tierIndex: number | null; // Only for missed_meeting: 1-based tier (1st miss = 1, 6th+ = 6 and up; ₹1,000 from 6). The backend sets i + 1.
   status: DeductionStatus; // 'shadow' | 'needs_review' | 'active' | 'waived' | 'voided'
   evidence: {
     scheduledStart: string;
@@ -133,7 +142,34 @@ export interface Deduction {
  * Transcript reference. Stays null until Part E ships, so the shape is deliberately loose:
  * a bare URL string or an object with an optional url.
  */
-export type TranscriptRef = string | { url?: string | null };
+export type TranscriptRef =
+  | string
+  | {
+      /** Calendly's recap link, when the email carried one. */
+      url?: string | null;
+      /** First ~280 characters of the Calendly Notetaker summary. */
+      summaryPreview?: string;
+      sentAt?: string | null;
+      /** Present when a recap is stored: the full summary loads from GET /api/crm/bookings/:bookingId/recap. */
+      bookingId?: string;
+    };
+
+/** One Calendly Notetaker recap, from GET /api/crm/bookings/:bookingId/recap. */
+export interface BookingRecap {
+  messageId: string;
+  subject: string;
+  sentAt: string | null;
+  summary: string;
+  sections: Record<string, string>;
+  recapUrl: string | null;
+  attendees: string[];
+  matchStatus: 'matched' | 'ambiguous' | 'unmatched' | 'manual';
+}
+
+export interface BookingRecapResponse {
+  success: true;
+  recaps: BookingRecap[];
+}
 
 /** The attendance fields every meeting row gains on /api/meeting-links and /api/leads/paginated. */
 export interface MeetingAttendanceFields {
