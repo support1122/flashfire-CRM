@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   DollarSign,
   Receipt,
+  CalendarDays,
 } from 'lucide-react';
 import type { EmailPrefillPayload } from '../types/emailPrefill';
 import type { WhatsAppPrefillPayload } from '../types/whatsappPrefill';
@@ -59,6 +60,7 @@ const SessionsView = React.lazy(() => import('../components/SessionsView'));
 const PaymentLinkGeneratorView = React.lazy(() => import('../components/PaymentLinkGeneratorView'));
 const PayrollView = React.lazy(() => import('../components/PayrollView'));
 const DeductionsView = React.lazy(() => import('../components/attendance/DeductionsView'));
+const LeaveRequestsView = React.lazy(() => import('../components/attendance/LeaveRequestsView'));
 
 function TabSpinner() {
   return (
@@ -71,7 +73,7 @@ function TabSpinner() {
 }
 
 
-type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'claim_leads_02' | 'call_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs' | 'graphs02' | 'graphs03' | 'stripe_data' | 'phone' | 'email_templates' | 'payment_links' | 'payroll' | 'deductions';
+type Tab = 'campaigns' | 'emails' | 'whatsapp' | 'analytics' | 'data' | 'workflows' | 'leads' | 'qualified_leads' | 'claim_leads' | 'claim_leads_02' | 'call_leads' | 'meeting_links' | 'meta_leads' | 'activity' | 'graphs' | 'graphs02' | 'graphs03' | 'stripe_data' | 'phone' | 'email_templates' | 'payment_links' | 'payroll' | 'deductions' | 'leave';
 
 const TAB_CONFIG: Array<{
   tab: Tab;
@@ -102,6 +104,12 @@ const TAB_CONFIG: Array<{
   { tab: 'email_templates', permission: 'email_campaign', label: 'Email Templates', icon: FileText },
   { tab: 'payment_links', permission: 'payment_links', label: 'Payment Link Generator', icon: CreditCard },
   { tab: 'payroll', permission: 'payroll', label: 'Payroll', icon: DollarSign },
+  // Rule 2.6: a BDA sees every deduction against them, so this cannot hang on an unrelated permission. The server
+  // returns only the caller's own rows (all rows for admins); an untracked user just sees an empty list.
+  { tab: 'deductions', permission: null, label: 'Deductions', icon: Receipt },
+  // Same reasoning as Deductions: every BDA files their own leave, so it cannot hang on a
+  // permission. The server scopes the rows and only an admin may approve.
+  { tab: 'leave', permission: null, label: 'Leave', icon: CalendarDays },
   // Granted per user from the admin dashboard. The server returns only the caller's own rows (all rows for admins).
   { tab: 'deductions', permission: 'deductions', label: 'Deductions', icon: Receipt },
 ];
@@ -523,6 +531,11 @@ export default function CrmDashboardPage() {
                 {activeTab === 'deductions' && (
                   <AttendanceErrorBoundary label="Deductions">
                     <DeductionsView />
+                  </AttendanceErrorBoundary>
+                )}
+                {activeTab === 'leave' && (
+                  <AttendanceErrorBoundary label="Leave">
+                    <LeaveRequestsView />
                   </AttendanceErrorBoundary>
                 )}
               </Suspense>
