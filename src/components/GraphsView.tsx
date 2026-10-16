@@ -13,6 +13,7 @@ import {
   Cell,
   ComposedChart,
   Line,
+  LabelList,
 } from 'recharts';
 import { Loader2, RefreshCcw, Users, TrendingUp, CalendarCheck } from 'lucide-react';
 import { useCrmAuth } from '../auth/CrmAuthContext';
@@ -72,6 +73,9 @@ export default function GraphsView() {
   const [leadsBooked, setLeadsBooked] = useState<LeadsBookedRow[]>([]);
   const [bookingSource, setBookingSource] = useState<'all' | 'meta'>('all');
 
+  // Meetings from direct/organic source+medium pairs (same /api/leads/analytics call).
+  const [directMeetings, setDirectMeetings] = useState<Array<{ month: string; source: string; medium: string; count: number }>>([]);
+
   const fetchConversion = useCallback(async () => {
     try {
       setConvLoading(true);
@@ -87,6 +91,7 @@ export default function GraphsView() {
         paid: r.paid || 0,
       })));
       setLeadsBooked((json.data?.leadsVsBooked || []) as LeadsBookedRow[]);
+      setDirectMeetings(json.data?.directMeetingsMonthly || []);
     } catch {
       /* ignore */
     } finally {
@@ -121,6 +126,32 @@ export default function GraphsView() {
     const rate = leads > 0 ? Math.round((booked / leads) * 1000) / 10 : 0;
     return { leads, booked, notBooked: leads - booked, rate };
   }, [bookingChart]);
+
+  // ── Direct leads → Meetings by source / medium ──
+  const directPairs = useMemo(() => [
+    { key: 'direct / (none)',                 source: 'direct',        medium: '(none)',                   color: '#64748B' },
+    { key: 'WEBSITE / Hero_Section',          source: 'WEBSITE',       medium: 'Hero_Section',             color: '#0EA5E9' },
+    { key: 'WEBSITE / Navbar_Button',         source: 'WEBSITE',       medium: 'Navigation_Navbar_Button', color: '#6366F1' },
+    { key: 'webpage_visit / website',         source: 'webpage_visit', medium: 'website',                  color: '#10B981' },
+    { key: 'direct / paid',                   source: 'direct',        medium: 'paid',                     color: '#F59E0B' },
+    { key: 'WEBSITE / Result_Stats_Section',  source: 'WEBSITE',       medium: 'Result_Stats_Section',     color: '#EC4899' },
+  ], []);
+
+  const directChart = useMemo(() => {
+    const byMonth = new Map<string, Record<string, number | string>>();
+    for (const r of directMeetings) {
+      if (!r.month || r.month > currentYM) continue;
+      const pair = directPairs.find((p) => p.source === r.source && p.medium === r.medium);
+      if (!pair) continue;
+      const row = byMonth.get(r.month) || { month: r.month, monthLabel: fmtMonth(r.month), total: 0 };
+      row[pair.key] = ((row[pair.key] as number) || 0) + r.count;
+      row.total = (row.total as number) + r.count;
+      byMonth.set(r.month, row);
+    }
+    return Array.from(byMonth.values()).sort((a, b) => String(a.month).localeCompare(String(b.month)));
+  }, [directMeetings, directPairs]);
+
+  const directTotal = useMemo(() => directChart.reduce((s, r) => s + (r.total as number), 0), [directChart]);
 
   // ── Overall funnel: Leads → Booked → Completed → Paid (all leads, all-time) ──
   // Completed counts meetings that actually happened (status completed OR paid, since
@@ -296,6 +327,46 @@ export default function GraphsView() {
           <p><span className="font-bold text-slate-800">Leads</span> = unique people who filled a lead form that month{bookingSource === 'meta' ? ' (Meta lead ads only)' : ''}.</p>
           <p><span className="font-bold text-slate-800">Meeting Booked</span> = got onto the calendar at least once (any status except not-scheduled).</p>
           <p><span className="font-bold text-slate-800">Booking %</span> = Booked ÷ Leads. Higher = more leads turning into actual meetings.</p>
+        </div>
+      </div>
+
+      {/* ── Direct leads → Meetings by UTM source / medium ── */}
+      <div className="bg-white border border-slate-200 rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-1">
+          <CalendarCheck size={18} className="text-emerald-600" />
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Direct Leads → Meetings</h3>
+            <p className="text-xs text-slate-500">{directTotal.toLocaleString()} meetings · by meeting month · direct / website UTM source + medium</p>
+          </div>
+        </div>
+        {directChart.length === 0 ? (
+          <div className="h-40 flex items-center justify-center text-slate-500 text-sm">
+            {convLoading ? 'Loading…' : 'No data'}
+          </div>
+        ) : (
+          <div className="h-80 mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={directChart} margin={{ top: 20, right: 24, left: 0, bottom: 12 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} tickLine={false} axisLine={{ stroke: '#E2E8F0' }} />
+                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} width={36} />
+                <Tooltip cursor={{ fill: 'rgba(15,23,42,0.04)' }} contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
+                {directPairs.map((p, i) => (
+                  <Bar key={p.key} dataKey={p.key} stackId="direct" fill={p.color}
+                    radius={i === directPairs.length - 1 ? [4, 4, 0, 0] : undefined}>
+                    {i === directPairs.length - 1 && (
+                      <LabelList dataKey="total" position="top" style={{ fontSize: 11, fontWeight: 600, fill: '#334155' }} />
+                    )}
+                  </Bar>
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        <div className="mt-3 border-t border-slate-100 pt-3 text-[11px] text-slate-600 space-y-0.5">
+          <p><span className="font-bold text-slate-800">Meetings</span> = bookings with a scheduled meeting time (any status, incl. canceled / no-show), counted in the month the meeting is scheduled (US Eastern).</p>
+          <p>Included: direct/(none), WEBSITE/Hero_Section, WEBSITE/Navigation_Navbar_Button, webpage_visit/website, direct/paid, WEBSITE/Result_Stats_Section.</p>
         </div>
       </div>
 
