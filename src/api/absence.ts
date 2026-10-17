@@ -7,6 +7,8 @@ import type {
   AbsenceCandidatesResponse,
   AbsenceReportsFilters,
   AbsenceReportsResponse,
+  BatchAbsenceBody,
+  BatchAbsenceResponse,
   CreateAbsenceBody,
   CreateAbsenceResponse,
   DecideAbsenceResponse,
@@ -17,7 +19,7 @@ const BASE = '/api/crm/absences';
 export const absenceKeys = {
   all: ['absences'] as const,
   reports: (f: AbsenceReportsFilters) => ['absences', 'reports', f.status, f.kind, f.bdaEmail, f.month] as const,
-  candidates: (f: AbsenceCandidatesFilters) => ['absences', 'candidates', f.kind, f.bdaEmail, f.q] as const,
+  candidates: (f: AbsenceCandidatesFilters) => ['absences', 'candidates', f.kind, f.bdaEmail, f.q, f.from, f.to] as const,
 };
 
 /** A BDA gets their own reports, an admin gets everyone's. The server decides, and adds `pendingCount` for admins. */
@@ -53,6 +55,8 @@ export function useAbsenceCandidates(token: string | null, filters: AbsenceCandi
       const params = new URLSearchParams({ kind: filters.kind });
       if (filters.bdaEmail) params.set('bdaEmail', filters.bdaEmail);
       if (filters.q) params.set('q', filters.q);
+      if (filters.from) params.set('from', filters.from);
+      if (filters.to) params.set('to', filters.to);
       return crmRequest<AbsenceCandidatesResponse>(`${BASE}/candidates?${params.toString()}`, token, { signal });
     },
   });
@@ -75,6 +79,15 @@ export function useCreateAbsence(token: string | null) {
   return useMutation({
     mutationFn: (body: CreateAbsenceBody) => crmRequest<CreateAbsenceResponse>(`${BASE}/`, token, { method: 'POST', body }),
     // onSettled, not onSuccess: an already_fined or already_reported refusal means the lists on screen are stale.
+    onSettled: invalidate,
+  });
+}
+
+/** Several calls, one reason, one request. The server judges each call on its own and answers per call. */
+export function useCreateAbsenceBatch(token: string | null) {
+  const invalidate = useInvalidateAbsences();
+  return useMutation({
+    mutationFn: (body: BatchAbsenceBody) => crmRequest<BatchAbsenceResponse>(`${BASE}/batch`, token, { method: 'POST', body }),
     onSettled: invalidate,
   });
 }

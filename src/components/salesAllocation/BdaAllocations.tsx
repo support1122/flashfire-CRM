@@ -3,7 +3,7 @@ import { Loader2, Mail, Phone, RefreshCw } from 'lucide-react';
 import { useAbsenceReports } from '../../api/absence';
 import { useAllocationOutcome, useSalesAllocations } from '../../api/salesAllocation';
 import type { SalesAllocation } from '../../types/salesAllocation';
-import { PENDING_REPORTS, successNotice } from '../attendance/absenceHelpers';
+import { PENDING_REPORTS, outcomeNotice } from '../attendance/absenceHelpers';
 import AbsenceNotice from '../attendance/AbsenceNotice';
 import MarkAbsentDialog from '../attendance/MarkAbsentDialog';
 import { ActionDialog, StatusBadge } from './shared';
@@ -244,7 +244,7 @@ export default function BdaAllocations({ token, highlightId }: { token: string |
           }}
           returnFocusTo={reporting.trigger}
           onClose={() => setReporting(null)}
-          onDone={(report) => setNotice(successNotice(report))}
+          onDone={(outcome) => setNotice(outcomeNotice(outcome))}
         />
       )}
 

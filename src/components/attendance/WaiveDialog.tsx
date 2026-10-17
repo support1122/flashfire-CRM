@@ -67,6 +67,8 @@ interface WaiveDialogProps {
   canSubmit?: boolean;
   /** False when the children hold the first thing to fill in, so focus stays at the top of the dialog. */
   focusReason?: boolean;
+  /** Replaces the Send button's text, for example "Mark 3 absent". */
+  confirmLabel?: string;
   /** lg gives a picker room to breathe. */
   size?: 'md' | 'lg';
 }
@@ -84,6 +86,7 @@ export default function WaiveDialog({
   children,
   canSubmit = true,
   focusReason = true,
+  confirmLabel,
   size = 'md',
 }: WaiveDialogProps) {
   const copy = COPY[variant];
@@ -248,7 +251,7 @@ export default function WaiveDialog({
             className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-40 ${copy.tone}`}
           >
             {sending && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
-            {sending ? 'Saving' : copy.confirm}
+            {sending ? 'Saving' : (confirmLabel ?? copy.confirm)}
           </button>
         </div>
       </form>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardList, FileWarning, Flag, Info, Search, X, Loader2, RefreshCw, UserX } from 'lucide-react';
 import { useCrmAuth } from '../../auth/CrmAuthContext';
 import { useAbsenceReports } from '../../api/absence';
@@ -12,7 +12,7 @@ import FinesSwitch from './FinesSwitch';
 import MarkAbsentDialog from './MarkAbsentDialog';
 import DeductionEvidenceDrawer from './DeductionEvidenceDrawer';
 import WaiveDialog from './WaiveDialog';
-import { PENDING_REPORTS, successNotice } from './absenceHelpers';
+import { PENDING_REPORTS, outcomeNotice } from './absenceHelpers';
 import {
   AMOUNT_LABEL,
   RAISED_BY_LABEL,
@@ -31,6 +31,10 @@ import {
   tierText,
   voidReasonText,
   DEFAULT_FILTERS,
+  DATE_PRESET_LABEL,
+  monthDayBounds,
+  presetRange,
+  type DatePreset,
   SORT_LABEL,
   applyLedgerFilters,
   countByStatus,
@@ -246,6 +250,11 @@ export default function DeductionsView() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const thisMonth = currentMonthKey();
+  // A date range belongs to one month: the ledger is fetched a month at a time.
+  useEffect(() => {
+    setFilters((f) => (f.from || f.to ? { ...f, from: '', to: '' } : f));
+  }, [month]);
+  const bounds = monthDayBounds(month);
   const query = useDeductions(token, month, admin ? bdaEmail : '');
   const summary = useDeductionSummary(token, month, admin);
   const queues = useReviewQueues(token, admin);
@@ -532,9 +541,10 @@ export default function DeductionsView() {
 
                 {rows.length > 0 && (
                   <div className="space-y-2 border-b border-slate-200 bg-slate-50/60 px-4 py-3">
-                    {admin && (
-                      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Quick filters">
-                        <button
+                    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Quick filters">
+                      {admin && (
+                        <>
+                          <button
                           type="button"
                           onClick={() => setFilters((f) => ({ ...f, status: f.status === 'needs_review' ? 'all' : 'needs_review' }))}
                           aria-pressed={filters.status === 'needs_review'}
@@ -555,8 +565,32 @@ export default function DeductionsView() {
                           <FileWarning size={12} aria-hidden="true" />
                           Pending reports ({pendingReportCount})
                         </button>
-                      </div>
-                    )}
+                        </>
+                      )}
+                      {month === thisMonth && (
+                        <>
+                          {admin && <span className="mx-1 h-4 w-px bg-slate-300" aria-hidden="true" />}
+                          <span className="text-xs font-semibold text-slate-600">Meeting date</span>
+                          {(Object.keys(DATE_PRESET_LABEL) as DatePreset[]).map((p) => {
+                            const range = presetRange(p);
+                            const on = filters.from === range.from && filters.to === range.to;
+                            return (
+                              <button
+                                key={p}
+                                type="button"
+                                onClick={() => setFilters((f) => (on ? { ...f, from: '', to: '' } : { ...f, ...range }))}
+                                aria-pressed={on}
+                                className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${
+                                  on ? 'border-orange-500 bg-orange-100 text-orange-900' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                {DATE_PRESET_LABEL[p]}
+                              </button>
+                            );
+                          })}
+                        </>
+                      )}
+                    </div>
                     <div role="search" aria-label="Filter deductions" className="flex flex-wrap items-end gap-3">
                       <div className="min-w-56 flex-1">
                         <label htmlFor="deductions-search" className="block text-xs font-semibold text-slate-600">
@@ -631,6 +665,37 @@ export default function DeductionsView() {
                             </option>
                           ))}
                         </select>
+                      </div>
+
+                      <div className="flex items-end gap-2">
+                        <div>
+                          <label htmlFor="deductions-from" className="block text-xs font-semibold text-slate-600">
+                            From date
+                          </label>
+                          <input
+                            id="deductions-from"
+                            type="date"
+                            value={filters.from}
+                            min={bounds.first}
+                            max={filters.to || bounds.last}
+                            onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value }))}
+                            className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="deductions-to" className="block text-xs font-semibold text-slate-600">
+                            To date
+                          </label>
+                          <input
+                            id="deductions-to"
+                            type="date"
+                            value={filters.to}
+                            min={filters.from || bounds.first}
+                            max={bounds.last}
+                            onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))}
+                            className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+                          />
+                        </div>
                       </div>
 
                       {admin && (
@@ -864,7 +929,7 @@ export default function DeductionsView() {
           defaultBdaEmail={bdaEmail}
           returnFocusTo={absenceDialog.trigger}
           onClose={() => setAbsenceDialog(null)}
-          onDone={(report) => setNotice(successNotice(report))}
+          onDone={(outcome) => setNotice(outcomeNotice(outcome))}
         />
       )}
       {dialog && dialogSubject && (

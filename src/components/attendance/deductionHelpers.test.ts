@@ -4,6 +4,9 @@ import {
   applyLedgerFilters,
   countByStatus,
   hasActiveFilters,
+  istDayKey,
+  monthDayBounds,
+  presetRange,
   currentMonthKey,
   deriveTotals,
   isCrmAdminUser,
@@ -216,5 +219,54 @@ describe('manual absence wording', () => {
     expect(whyText(allocationManual)).toMatch(/Lead Allocation call as missed/);
     expect(whyText(bookingManualEscalated)).toMatch(/marked this meeting as missed/);
     expect(whyText(missedActive)).toMatch(/mark window closed/);
+  });
+});
+
+describe('date filters', () => {
+  const ids = (rows: { deductionId: string }[]) => rows.map((r) => r.deductionId);
+  const dayOf = (id: string) => istDayKey(adminRows.find((r) => r.deductionId === id)?.evidence?.scheduledStart);
+
+  it('reads the calendar day in IST, so a late evening UTC meeting lands on the next day', () => {
+    expect(istDayKey('2026-10-07T18:29:59.000Z')).toBe('2026-10-07');
+    expect(istDayKey('2026-10-07T18:30:00.000Z')).toBe('2026-10-08');
+    expect(istDayKey(null)).toBeNull();
+    expect(istDayKey('not a date')).toBeNull();
+  });
+
+  it('keeps rows inside the range, both ends included', () => {
+    const day = dayOf('ded_1004') as string;
+    const only = applyLedgerFilters(adminRows, { ...DEFAULT_FILTERS, from: day, to: day });
+    expect(only.length).toBeGreaterThan(0);
+    expect(only.every((r) => istDayKey(r.evidence.scheduledStart) === day)).toBe(true);
+    expect(ids(applyLedgerFilters(adminRows, { ...DEFAULT_FILTERS, from: '2026-10-08' }))).toEqual([]);
+    expect(applyLedgerFilters(adminRows, { ...DEFAULT_FILTERS, to: '2026-10-31' })).toHaveLength(adminRows.length);
+  });
+
+  it('from alone and to alone each work, and a backwards range shows nothing', () => {
+    const early = applyLedgerFilters(adminRows, { ...DEFAULT_FILTERS, to: '2026-10-02' });
+    expect(early.every((r) => (istDayKey(r.evidence.scheduledStart) as string) <= '2026-10-02')).toBe(true);
+    expect(applyLedgerFilters(adminRows, { ...DEFAULT_FILTERS, from: '2026-10-07', to: '2026-10-01' })).toEqual([]);
+  });
+
+  it('combines with the other filters and counts as an active filter', () => {
+    expect(hasActiveFilters({ ...DEFAULT_FILTERS, from: '2026-10-01' })).toBe(true);
+    expect(hasActiveFilters({ ...DEFAULT_FILTERS, to: '2026-10-01' })).toBe(true);
+    const both = applyLedgerFilters(adminRows, { ...DEFAULT_FILTERS, status: 'active', from: '2026-10-03', to: '2026-10-04' });
+    expect(both.every((r) => r.status === 'active')).toBe(true);
+  });
+
+  it('quick presets count back from now in IST', () => {
+    const now = new Date('2026-10-08T06:00:00.000Z');
+    expect(presetRange('today', now)).toEqual({ from: '2026-10-08', to: '2026-10-08' });
+    expect(presetRange('yesterday', now)).toEqual({ from: '2026-10-07', to: '2026-10-07' });
+    expect(presetRange('last7', now)).toEqual({ from: '2026-10-02', to: '2026-10-08' });
+    // 00:30 IST on the 8th is still the 7th in UTC; the preset must follow IST.
+    expect(presetRange('today', new Date('2026-10-07T19:00:00.000Z'))).toEqual({ from: '2026-10-08', to: '2026-10-08' });
+  });
+
+  it('gives the first and last day of a month, leap years included', () => {
+    expect(monthDayBounds('2026-10')).toEqual({ first: '2026-10-01', last: '2026-10-31' });
+    expect(monthDayBounds('2026-02').last).toBe('2026-02-28');
+    expect(monthDayBounds('2028-02').last).toBe('2028-02-29');
   });
 });

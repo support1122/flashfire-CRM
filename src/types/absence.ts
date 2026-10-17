@@ -64,12 +64,38 @@ export interface AbsenceCandidatesFilters {
   kind: AbsenceKind;
   bdaEmail: string;
   q: string;
+  /** YYYY-MM-DD in IST, '' = no limit. */
+  from: string;
+  to: string;
 }
 
 export interface CreateAbsenceBody {
   kind: AbsenceKind;
   refId: string;
   reason: string;
+}
+
+export interface BatchAbsenceBody {
+  items: { kind: AbsenceKind; refId: string }[];
+  reason: string;
+}
+
+/** 200 even when some calls were refused: every call has its own result, in the order the server handled them. */
+export type BatchAbsenceResult =
+  | { kind: AbsenceKind; refId: string; ok: true; report: AbsenceReport | null }
+  | { kind: AbsenceKind; refId: string; ok: false; error: { code: string; message: string } };
+
+export interface BatchAbsenceResponse {
+  success: true;
+  results: BatchAbsenceResult[];
+  succeeded: number;
+  failed: number;
+}
+
+/** What the dialog hands back once it closes: the reports that were saved and the calls the server refused. */
+export interface AbsenceOutcome {
+  saved: AbsenceReport[];
+  failed: { clientName: string; message: string }[];
 }
 
 /** 201 for both callers. An admin gets status approved plus deductionId, a BDA gets status pending and no fine yet. */

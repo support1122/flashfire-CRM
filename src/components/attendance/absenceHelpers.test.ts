@@ -3,6 +3,8 @@ import { ApiError } from '../../api/attendance';
 import {
   absenceErrorMessage,
   istTime,
+  outcomeNotice,
+  refusalMessage,
   reportStatusLabel,
   sortDecided,
   sortForBda,
@@ -81,5 +83,40 @@ describe('report ordering', () => {
     const input = [pendingNew, pendingOld];
     sortPending(input);
     expect(input.map((r) => r.reportId)).toEqual(['abs_2', 'abs_1']);
+  });
+});
+
+describe('outcomeNotice', () => {
+  const approved = (name: string) => ({ ...approvedReport, clientName: name });
+  const pending = (name: string) => ({ ...pendingOld, clientName: name });
+
+  it('keeps the single-call wording for one saved call', () => {
+    expect(outcomeNotice({ saved: [approved('Ava Stone')], failed: [] })).toBe('Absence recorded for Ava Stone. The fine was added to the ledger.');
+    expect(outcomeNotice({ saved: [pending('Ava Stone')], failed: [] })).toContain('Report sent for Ava Stone');
+  });
+
+  it('counts several saved calls for an admin and for a BDA', () => {
+    expect(outcomeNotice({ saved: [approved('A'), approved('B')], failed: [] })).toBe('2 absences recorded. The fines were added to the ledger.');
+    expect(outcomeNotice({ saved: [pending('A'), pending('B'), pending('C')], failed: [] })).toBe(
+      '3 reports sent. An admin will review them, and fines only start after approval.',
+    );
+  });
+
+  it('names every refused call so nothing fails silently', () => {
+    const text = outcomeNotice({ saved: [approved('A'), approved('B')], failed: [{ clientName: 'Meera Pillai', message: 'This call already has a fine.' }] });
+    expect(text).toContain('2 absences recorded');
+    expect(text).toContain('1 refused. Meera Pillai: This call already has a fine.');
+    expect(outcomeNotice({ saved: [approved('A')], failed: [{ clientName: 'Meera', message: 'Too old.' }] })).toBe(
+      '1 absence recorded. The fine was added to the ledger. 1 refused. Meera: Too old.',
+    );
+    expect(outcomeNotice({ saved: [], failed: [{ clientName: 'Meera', message: 'Too old.' }] })).toBe('Nothing was saved. Meera: Too old.');
+  });
+});
+
+describe('refusalMessage', () => {
+  it('uses the server sentence, then the stock one, then a generic one', () => {
+    expect(refusalMessage({ code: 'x', message: 'Custom words.' })).toBe('Custom words.');
+    expect(refusalMessage({ code: 'too_old', message: '' })).toContain('30 days');
+    expect(refusalMessage({ code: 'weird', message: '' })).toBe('That call could not be saved.');
   });
 });

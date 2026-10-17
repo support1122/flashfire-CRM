@@ -1,10 +1,10 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Loader2, RefreshCw, Search } from 'lucide-react';
-import { useAbsenceCandidates, useCreateAbsence } from '../../api/absence';
+import { useAbsenceCandidates, useCreateAbsence, useCreateAbsenceBatch } from '../../api/absence';
 import { useTrackedBdas } from '../../api/attendanceAdmin';
-import type { AbsenceCandidate, AbsenceKind, AbsenceReport } from '../../types/absence';
+import type { AbsenceCandidate, AbsenceKind, AbsenceOutcome } from '../../types/absence';
 import { useDebounced } from '../salesAllocation/helpers';
-import { KIND_LABEL, absenceErrorMessage, istTime, withFriendlyError } from './absenceHelpers';
+import { BATCH_MAX, KIND_LABEL, absenceErrorMessage, candidateKey, istTime, refusalMessage, withFriendlyError } from './absenceHelpers';
 import type { FocusTarget } from './deductionHelpers';
 import WaiveDialog from './WaiveDialog';
 
@@ -27,8 +27,8 @@ interface MarkAbsentDialogProps {
   defaultBdaEmail?: string;
   returnFocusTo?: FocusTarget;
   onClose: () => void;
-  /** Called with the saved report once the server accepted it, just before the dialog closes. */
-  onDone: (report: AbsenceReport) => void;
+  /** Called with what was saved and what the server refused, just before the dialog closes. */
+  onDone: (outcome: AbsenceOutcome) => void;
 }
 
 const FIELD =
@@ -59,29 +59,52 @@ function CallPicker({
   admin,
   defaultBdaEmail,
   selected,
-  onSelect,
+  onChange,
 }: {
   token: string | null;
   admin: boolean;
   defaultBdaEmail: string;
-  selected: AbsenceCandidate | null;
-  onSelect: (c: AbsenceCandidate | null) => void;
+  selected: Map<string, AbsenceCandidate>;
+  onChange: (next: Map<string, AbsenceCandidate>) => void;
 }) {
   const [kind, setKind] = useState<AbsenceKind>('allocation');
   const [bdaEmail, setBdaEmail] = useState(defaultBdaEmail);
   const [search, setSearch] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const q = useDebounced(search.trim(), 300);
-  const groupName = useId();
   const searchId = useId();
-  const query = useAbsenceCandidates(token, { kind, bdaEmail: admin ? bdaEmail : '', q });
+  const fromId = useId();
+  const toId = useId();
+  const allRef = useRef<HTMLInputElement>(null);
+  const backwards = Boolean(from && to && from > to);
+  const query = useAbsenceCandidates(token, { kind, bdaEmail: admin ? bdaEmail : '', q, from, to }, !backwards);
   const candidates = query.data?.candidates ?? [];
+  const shownSelected = candidates.filter((c) => selected.has(candidateKey(c))).length;
+  const allShown = candidates.length > 0 && shownSelected === candidates.length;
+  const atLimit = selected.size >= BATCH_MAX;
+  useEffect(() => {
+    if (allRef.current) allRef.current.indeterminate = shownSelected > 0 && !allShown;
+  }, [shownSelected, allShown]);
   // The list may still show the previous search while the next one loads; say so instead of hiding it.
   const settling = q !== search.trim();
 
-  function pickKind(next: AbsenceKind) {
-    if (next === kind) return;
-    setKind(next);
-    onSelect(null);
+  function toggle(c: AbsenceCandidate) {
+    const next = new Map(selected);
+    const key = candidateKey(c);
+    if (next.has(key)) next.delete(key);
+    else if (next.size < BATCH_MAX) next.set(key, c);
+    onChange(next);
+  }
+
+  function toggleAllShown() {
+    const next = new Map(selected);
+    if (allShown) {
+      for (const c of candidates) next.delete(candidateKey(c));
+    } else {
+      for (const c of candidates) if (next.size < BATCH_MAX) next.set(candidateKey(c), c);
+    }
+    onChange(next);
   }
 
   return (
@@ -91,7 +114,7 @@ function CallPicker({
           <button
             key={k}
             type="button"
-            onClick={() => pickKind(k)}
+            onClick={() => setKind(k)}
             aria-pressed={kind === k}
             className={`flex-1 rounded-md px-3 py-1.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500 ${
               kind === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
@@ -123,15 +146,47 @@ function CallPicker({
         </div>
       </div>
 
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-[minmax(0,10rem)_minmax(0,10rem)_auto] sm:items-end">
+        <div>
+          <label htmlFor={fromId} className="block text-xs font-semibold text-slate-600">
+            From date
+          </label>
+          <input id={fromId} type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} className={`mt-1 w-full ${FIELD}`} />
+        </div>
+        <div>
+          <label htmlFor={toId} className="block text-xs font-semibold text-slate-600">
+            To date
+          </label>
+          <input id={toId} type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={`mt-1 w-full ${FIELD}`} />
+        </div>
+        {(from || to) && (
+          <button
+            type="button"
+            onClick={() => {
+              setFrom('');
+              setTo('');
+            }}
+            className="col-span-2 justify-self-start rounded-lg px-2 py-2 text-xs font-semibold text-orange-700 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500 sm:col-span-1"
+          >
+            Clear dates
+          </button>
+        )}
+      </div>
+      {backwards && (
+        <p role="alert" className="text-xs font-medium text-red-700">
+          The From date is after the To date.
+        </p>
+      )}
+
       <div>
-        {query.isPending ? (
+        {query.isPending && !backwards ? (
           <div role="status" aria-busy="true" className="space-y-2" data-testid="candidates-loading">
             <span className="sr-only">Loading calls</span>
             {[0, 1, 2].map((i) => (
               <div key={i} className="h-14 animate-pulse rounded-lg bg-slate-200/70" />
             ))}
           </div>
-        ) : query.isError ? (
+        ) : backwards ? null : query.isError ? (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
             <p className="text-sm text-red-800">{absenceErrorMessage(query.error, 'Could not load calls')}</p>
             <button
@@ -154,23 +209,28 @@ function CallPicker({
             </p>
           </div>
         ) : (
-          <fieldset>
-            <legend className="mb-1 text-xs font-semibold text-slate-600">Choose the call</legend>
+          <fieldset className="min-w-0">
+            <legend className="sr-only">Choose the calls</legend>
+            <label className="mb-1 flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-orange-500">
+              <input ref={allRef} type="checkbox" checked={allShown} onChange={toggleAllShown} className="accent-orange-600" />
+              Select all {candidates.length} shown
+            </label>
             <ul className={`max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 ${settling || query.isFetching ? 'opacity-60' : ''}`}>
               {candidates.map((c) => {
-                const checked = selected?.kind === c.kind && selected.refId === c.refId;
+                const checked = selected.has(candidateKey(c));
+                const blocked = !checked && atLimit;
                 return (
                   <li key={`${c.kind}-${c.refId}`}>
                     <label
-                      className={`flex cursor-pointer items-start gap-3 px-3 py-2.5 has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-orange-500 ${
+                      className={`flex items-start gap-3 px-3 py-2.5 ${blocked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-orange-500 ${
                         checked ? 'bg-orange-50' : 'hover:bg-slate-50'
                       }`}
                     >
                       <input
-                        type="radio"
-                        name={groupName}
+                        type="checkbox"
                         checked={checked}
-                        onChange={() => onSelect(c)}
+                        disabled={blocked}
+                        onChange={() => toggle(c)}
                         className="mt-1 accent-orange-600"
                       />
                       <span className="min-w-0 flex-1">
@@ -193,11 +253,34 @@ function CallPicker({
         </p>
       </div>
 
-      {selected && (
-        <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700" data-testid="candidate-selected">
-          Selected: <span className="font-semibold">{selected.clientName}</span>
-          {admin && selected.bdaName ? `, ${selected.bdaName}` : ''}, {istTime(selected.callStart)}
-        </p>
+      {selected.size > 0 && (
+        <div className="flex items-start justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-700" data-testid="candidate-selected">
+          <p>
+            {selected.size === 1 ? (
+              (() => {
+                const only = [...selected.values()][0];
+                return (
+                  <>
+                    Selected: <span className="font-semibold">{only.clientName}</span>
+                    {admin && only.bdaName ? `, ${only.bdaName}` : ''}, {istTime(only.callStart)}
+                  </>
+                );
+              })()
+            ) : (
+              <>
+                <span className="font-semibold">{selected.size} calls selected</span>
+                {atLimit ? ` (the most you can send at once is ${BATCH_MAX})` : ''}
+              </>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => onChange(new Map())}
+            className="shrink-0 rounded px-1.5 py-0.5 font-semibold text-orange-700 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+          >
+            Clear
+          </button>
+        </div>
       )}
     </div>
   );
@@ -209,14 +292,28 @@ function CallPicker({
  * Mount it only while it should be open; closing unmounts it and clears the picker and the reason.
  */
 export default function MarkAbsentDialog({ token, admin, target, defaultBdaEmail = '', returnFocusTo, onClose, onDone }: MarkAbsentDialogProps) {
-  const [picked, setPicked] = useState<AbsenceCandidate | null>(null);
+  const [picked, setPicked] = useState<Map<string, AbsenceCandidate>>(new Map());
   const create = useCreateAbsence(token);
-  const chosen: Pick<AbsenceTarget, 'kind' | 'refId'> | null = target ?? picked;
+  const createMany = useCreateAbsenceBatch(token);
+  const count = target ? 1 : picked.size;
 
   async function submit(reason: string) {
-    if (!chosen) throw new Error('Choose a call first.');
-    const { report } = await withFriendlyError(create.mutateAsync({ kind: chosen.kind, refId: chosen.refId, reason }));
-    onDone(report);
+    if (target) {
+      const { report } = await withFriendlyError(create.mutateAsync({ kind: target.kind, refId: target.refId, reason }));
+      onDone({ saved: [report], failed: [] });
+      return;
+    }
+    if (picked.size === 0) throw new Error('Choose at least one call first.');
+    const items = [...picked.values()];
+    const res = await withFriendlyError(createMany.mutateAsync({ items: items.map((c) => ({ kind: c.kind, refId: c.refId })), reason }));
+    const names = new Map(items.map((c) => [candidateKey(c), c.clientName]));
+    const saved = res.results.flatMap((r) => (r.ok && r.report ? [r.report] : []));
+    const failed = res.results.flatMap((r) =>
+      r.ok ? [] : [{ clientName: names.get(candidateKey(r)) ?? 'A call', message: refusalMessage(r.error) }],
+    );
+    // Nothing went through: keep the dialog open with the reasons, so the person can fix the selection and retry.
+    if (saved.length === 0) throw new Error(failed.map((f) => `${f.clientName}: ${f.message}`).join(' ') || 'Nothing was saved.');
+    onDone({ saved, failed });
   }
 
   const subject = target
@@ -225,9 +322,10 @@ export default function MarkAbsentDialog({ token, admin, target, defaultBdaEmail
         details: [...(admin ? [target.bdaName] : []), istTime(target.callStart), KIND_LABEL[target.kind]],
       }
     : {
-        heading: admin ? 'Fine a BDA for a missed call' : 'Pick the call you could not take',
+        heading: admin ? 'Fine a BDA for missed calls' : 'Pick the calls you could not take',
         details: [],
       };
+  const confirmLabel = !target && count > 1 ? (admin ? `Mark ${count} absent` : `Send ${count} reports`) : undefined;
 
   return (
     <WaiveDialog
@@ -236,11 +334,12 @@ export default function MarkAbsentDialog({ token, admin, target, defaultBdaEmail
       onSubmit={submit}
       onClose={onClose}
       returnFocusTo={returnFocusTo}
-      canSubmit={chosen !== null}
+      canSubmit={count > 0}
+      confirmLabel={confirmLabel}
       focusReason={Boolean(target)}
       size={target ? 'md' : 'lg'}
     >
-      {!target && <CallPicker token={token} admin={admin} defaultBdaEmail={admin ? defaultBdaEmail : ''} selected={picked} onSelect={setPicked} />}
+      {!target && <CallPicker token={token} admin={admin} defaultBdaEmail={admin ? defaultBdaEmail : ''} selected={picked} onChange={setPicked} />}
     </WaiveDialog>
   );
 }

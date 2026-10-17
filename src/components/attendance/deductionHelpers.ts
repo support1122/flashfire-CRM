@@ -199,6 +199,9 @@ export interface LedgerFilters {
   amount: AmountFilter;
   /** BDA filter. Active rows only, the ones that count towards pay. */
   countingOnly: boolean;
+  /** Meeting day range, YYYY-MM-DD in IST, both ends included. '' = no limit. */
+  from: string;
+  to: string;
 }
 
 export const DEFAULT_FILTERS: LedgerFilters = {
@@ -210,6 +213,8 @@ export const DEFAULT_FILTERS: LedgerFilters = {
   raisedBy: 'all',
   amount: 'all',
   countingOnly: false,
+  from: '',
+  to: '',
 };
 
 export const SOURCE_LABEL: Record<DeductionSource, string> = {
@@ -254,7 +259,9 @@ export function hasActiveFilters(f: LedgerFilters): boolean {
     f.source !== 'all' ||
     f.raisedBy !== 'all' ||
     f.amount !== 'all' ||
-    f.countingOnly
+    f.countingOnly ||
+    f.from !== '' ||
+    f.to !== ''
   );
 }
 
@@ -283,6 +290,31 @@ function searchable(d: Deduction): string {
   );
 }
 
+/** The IST calendar day of an instant, as YYYY-MM-DD. Null when the instant is missing or not a date. */
+export function istDayKey(iso: string | null | undefined): string | null {
+  const t = Date.parse(iso ?? '');
+  if (!Number.isFinite(t)) return null;
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t));
+}
+
+export type DatePreset = 'today' | 'yesterday' | 'last7';
+export const DATE_PRESET_LABEL: Record<DatePreset, string> = { today: 'Today', yesterday: 'Yesterday', last7: 'Last 7 days' };
+
+/** { from, to } for a quick-date chip, counted back from `now` in IST. */
+export function presetRange(preset: DatePreset, now: Date = new Date()): { from: string; to: string } {
+  const day = (back: number) => istDayKey(new Date(now.getTime() - back * 24 * 3600 * 1000).toISOString()) ?? '';
+  if (preset === 'today') return { from: day(0), to: day(0) };
+  if (preset === 'yesterday') return { from: day(1), to: day(1) };
+  return { from: day(6), to: day(0) };
+}
+
+/** First and last day of a YYYY-MM month, for the limits of the date inputs. */
+export function monthDayBounds(month: string): { first: string; last: string } {
+  const [y, m] = month.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { first: `${month}-01`, last: `${month}-${String(lastDay).padStart(2, '0')}` };
+}
+
 const startMs = (d: Deduction) => {
   const t = Date.parse(d.evidence?.scheduledStart ?? '');
   return Number.isFinite(t) ? t : 0;
@@ -299,6 +331,12 @@ export function applyLedgerFilters(rows: Deduction[], f: LedgerFilters): Deducti
     if (f.amount === 'tier1' && d.amountInr !== TIER1_AMOUNT_INR) return false;
     if (f.amount === 'escalated' && d.amountInr < ESCALATED_AMOUNT_INR) return false;
     if (f.countingOnly && !countsTowardsPay(d)) return false;
+    if (f.from || f.to) {
+      const day = istDayKey(d.evidence?.scheduledStart);
+      if (!day) return false; // a row with no meeting time cannot be placed in a date range
+      if (f.from && day < f.from) return false;
+      if (f.to && day > f.to) return false;
+    }
     if (words.length === 0) return true;
     const haystack = searchable(d);
     return words.every((w) => haystack.includes(w)); // every word must match, in any order

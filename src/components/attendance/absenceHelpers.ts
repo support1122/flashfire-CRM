@@ -1,5 +1,5 @@
 import { ApiError } from '../../api/attendance';
-import type { AbsenceErrorCode, AbsenceKind, AbsenceReport, AbsenceReportsFilters, AbsenceStatus } from '../../types/absence';
+import type { AbsenceErrorCode, AbsenceOutcome, AbsenceKind, AbsenceReport, AbsenceReportsFilters, AbsenceStatus } from '../../types/absence';
 import { INDIA_ZONE, formatInZone } from '../salesAllocation/timeZones';
 
 export const KIND_LABEL: Record<AbsenceKind, string> = {
@@ -79,11 +79,39 @@ export function sortForBda(reports: AbsenceReport[]): AbsenceReport[] {
   return [...pending.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)), ...sortDecided(rest)];
 }
 
+/** The server refuses more than this in one request. */
+export const BATCH_MAX = 50;
+
+export const candidateKey = (c: { kind: AbsenceKind; refId: string }) => `${c.kind}|${c.refId}`;
+
+/** One refused call in a batch: the server's sentence, or the stock one for its code. */
+export function refusalMessage(error: { code: string; message: string }): string {
+  if (error.message) return error.message;
+  return error.code in FALLBACK ? FALLBACK[error.code as AbsenceErrorCode] : 'That call could not be saved.';
+}
+
 /** What to tell the person once a mark or report went through. */
 export function successNotice(report: Pick<AbsenceReport, 'status' | 'clientName'>): string {
   return report.status === 'approved'
     ? `Absence recorded for ${report.clientName}. The fine was added to the ledger.`
     : `Report sent for ${report.clientName}. An admin will review it, and the fine only starts after approval.`;
+}
+
+/**
+ * What to tell the person after one or many calls were sent. All saved: the single-call wording, or a count.
+ * Some refused: say how many went through and name each refusal, so nothing fails silently.
+ */
+export function outcomeNotice(outcome: AbsenceOutcome): string {
+  const { saved, failed } = outcome;
+  if (failed.length === 0 && saved.length === 1) return successNotice(saved[0]);
+  const n = saved.length;
+  const pending = saved.some((r) => r.status === 'pending');
+  const done = pending
+    ? `${n} ${n === 1 ? 'report' : 'reports'} sent. An admin will review ${n === 1 ? 'it' : 'them'}, and fines only start after approval.`
+    : `${n} ${n === 1 ? 'absence' : 'absences'} recorded. The ${n === 1 ? 'fine was' : 'fines were'} added to the ledger.`;
+  if (failed.length === 0) return done;
+  const refused = failed.map((f) => `${f.clientName}: ${f.message}`).join(' ');
+  return saved.length === 0 ? `Nothing was saved. ${refused}` : `${done} ${failed.length} refused. ${refused}`;
 }
 
 /** Runs a request and turns a failure into an Error whose message is safe to show in a dialog. */

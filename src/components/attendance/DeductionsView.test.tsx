@@ -323,6 +323,46 @@ describe('DeductionsView filters', () => {
     expect(screen.getByTestId('total-active')).toHaveTextContent('₹1,150');
   });
 
+  it('narrows to a day with a quick date chip, and the chip toggles back off', async () => {
+    adminInstall();
+    renderView();
+    await screen.findByTestId('ledger-count');
+    const yesterday = screen.getByRole('button', { name: 'Yesterday' });
+    await userEvent.click(yesterday);
+    expect(yesterday).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('From date')).toHaveValue('2026-10-07');
+    expect(screen.getByLabelText('To date')).toHaveValue('2026-10-07');
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent(`Showing ${rowsShown()} of 8`);
+    expect(rowsShown()).toBeLessThan(8);
+    expect(rowsShown()).toBeGreaterThan(0);
+    await userEvent.click(yesterday);
+    expect(yesterday).toHaveAttribute('aria-pressed', 'false');
+    expect(rowsShown()).toBe(8);
+  });
+
+  it('filters by typed dates, offers only days of the month, and Clear filters resets them', async () => {
+    adminInstall();
+    renderView();
+    await screen.findByTestId('ledger-count');
+    const from = screen.getByLabelText('From date');
+    expect(from).toHaveAttribute('min', '2026-10-01');
+    expect(screen.getByLabelText('To date')).toHaveAttribute('max', '2026-10-31');
+    await userEvent.type(from, '2026-10-06');
+    expect(rowsShown()).toBeLessThan(8);
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent('The totals above still cover the whole month');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Clear filters' })[0]);
+    expect(rowsShown()).toBe(8);
+    expect(screen.getByLabelText('From date')).toHaveValue('');
+  });
+
+  it('shows the empty-match state for a day with no deductions', async () => {
+    adminInstall();
+    renderView();
+    await screen.findByTestId('ledger-count');
+    await userEvent.type(screen.getByLabelText('From date'), '2026-10-30');
+    expect(await screen.findByTestId('ledger-no-match')).toBeInTheDocument();
+  });
+
   it('puts a count next to every status', async () => {
     adminInstall();
     renderView();
@@ -482,14 +522,19 @@ describe('DeductionsView absence features as an admin', () => {
           { kind: 'allocation', refId: 'alloc_9', bdaEmail: 'siddhartha@flashfirehq.com', bdaName: 'Siddhartha', clientName: 'Tomasz Kowalczyk', callStart: '2026-10-07T09:30:00.000Z', detail: null },
         ],
       }),
-      'POST /api/crm/absences/': () => ({ success: true, report: report('abs_new', { status: 'approved', clientName: 'Tomasz Kowalczyk' }), deductionId: 'ded_new' }),
+      'POST /api/crm/absences/batch': () => ({
+        success: true,
+        succeeded: 1,
+        failed: 0,
+        results: [{ kind: 'allocation', refId: 'alloc_9', ok: true, report: report('abs_new', { status: 'approved', clientName: 'Tomasz Kowalczyk' }) }],
+      }),
     });
     renderView();
     await screen.findByText('Nadia Rahman');
     const before = ledgerCalls;
     await userEvent.click(screen.getByRole('button', { name: 'Mark absent' }));
     const dialog = await screen.findByRole('dialog', { name: /mark absent/i });
-    await userEvent.click(await within(dialog).findByRole('radio', { name: /Tomasz/ }));
+    await userEvent.click(await within(dialog).findByRole('checkbox', { name: /Tomasz/ }));
     await userEvent.type(within(dialog).getByLabelText('Reason'), 'BDA never joined the call.');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mark absent' }));
     expect(await screen.findByTestId('absence-notice')).toHaveTextContent('Absence recorded for Tomasz Kowalczyk. The fine was added to the ledger.');

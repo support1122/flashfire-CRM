@@ -8,7 +8,7 @@ import {
   useSalesAllocations,
 } from '../../api/salesAllocation';
 import type { AllocationScope, SalesAllocation } from '../../types/salesAllocation';
-import { PENDING_REPORTS, successNotice } from '../attendance/absenceHelpers';
+import { PENDING_REPORTS, outcomeNotice } from '../attendance/absenceHelpers';
 import AbsenceNotice from '../attendance/AbsenceNotice';
 import MarkAbsentDialog from '../attendance/MarkAbsentDialog';
 import ScheduleCallCard from './ScheduleCallCard';
@@ -359,7 +359,7 @@ export default function AdminAllocations({
           }}
           returnFocusTo={absentFor.trigger}
           onClose={() => setAbsentFor(null)}
-          onDone={(report) => setNotice(successNotice(report))}
+          onDone={(outcome) => setNotice(outcomeNotice(outcome))}
         />
       )}
 
