@@ -8,6 +8,8 @@ import {
   countsTowardsPay,
   offsetFromStart,
   resolveFocusTarget,
+  rowOrigin,
+  rowSource,
   signalName,
   statusLabel,
   tierText,
@@ -15,6 +17,7 @@ import {
   whyText,
   type FocusTarget,
 } from './deductionHelpers';
+import { KIND_LABEL } from './absenceHelpers';
 import { RULE_LABEL, formatInr } from './format';
 
 function stamp(iso: string | null | undefined): string {
@@ -65,6 +68,8 @@ export default function DeductionEvidenceDrawer({ deduction: d, admin, onClose, 
   const ev = d.evidence;
   const tier = tierText(d);
   const counted = countsTowardsPay(d);
+  const manual = rowOrigin(d) === 'manual';
+  const allocation = rowSource(d) === 'allocation';
 
   const returnRef = useRef(returnFocusTo);
   useEffect(() => {
@@ -150,16 +155,29 @@ export default function DeductionEvidenceDrawer({ deduction: d, admin, onClose, 
         <p className="mt-2 text-slate-600">{whyText(d)}</p>
       </Section>
 
-      <Section title="The meeting">
+      {d.manualAbsent && (
+        <Section title="Marked absent">
+          <dl>
+            <Row label="Call type">{KIND_LABEL[d.manualAbsent.kind]}</Row>
+            <Row label="Marked by">{d.manualAbsent.markedByName || d.manualAbsent.markedBy || 'An admin'}</Row>
+            <Row label="When">{stamp(d.manualAbsent.at)}</Row>
+          </dl>
+          <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-slate-700" data-testid="manual-reason">
+            {d.manualAbsent.reason || 'No reason recorded'}
+          </p>
+        </Section>
+      )}
+
+      <Section title={allocation ? 'The call' : 'The meeting'}>
         <dl>
           <Row label="Client">{ev.clientName || d.clientName}</Row>
-          <Row label="Scheduled start">{stamp(ev.scheduledStart)}</Row>
-          <Row label="Booking status">{ev.bookingStatus ?? 'Not recorded'}</Row>
-          {d.rule === 'missed_meeting' && <Row label="Window closed">{stamp(ev.windowClosedAt)}</Row>}
+          <Row label={allocation ? 'Call time' : 'Scheduled start'}>{stamp(ev.scheduledStart)}</Row>
+          {!allocation && <Row label="Booking status">{ev.bookingStatus ?? 'Not recorded'}</Row>}
+          {d.rule === 'missed_meeting' && !manual && <Row label="Window closed">{stamp(ev.windowClosedAt)}</Row>}
         </dl>
       </Section>
 
-      {d.rule === 'missed_meeting' && (
+      {d.rule === 'missed_meeting' && !manual && (
         <Section title="Presence signals">
           {signals.length === 0 ? (
             <p className="text-slate-600">No signal arrived. Nothing showed the BDA in the call.</p>

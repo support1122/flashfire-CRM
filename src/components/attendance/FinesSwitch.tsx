@@ -43,7 +43,7 @@ export default function FinesSwitch({ token }: { token: string | null }) {
     <section aria-labelledby="fines-switch-heading" className={`rounded-xl border px-4 py-3 ${tone}`}>
       <div className="flex flex-wrap items-center gap-3">
         <Power size={18} aria-hidden="true" className={s.mode === 'live' ? 'text-emerald-600' : 'text-slate-500'} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-48 flex-1">
           <h2 id="fines-switch-heading" className="text-sm font-bold text-slate-900">
             Fines: {LABEL[s.mode]}
             {s.mode !== 'off' && s.liveFrom ? <span className="font-medium text-slate-600"> since {fmt(s.liveFrom)}</span> : null}

@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DeductionsView from './DeductionsView';
 import {
   adminRows,
+  allocationManual,
+  bookingManualEscalated,
   apiError,
   deductionsResponse,
   emptyQueues,
@@ -13,6 +15,7 @@ import {
   summaryResponse,
   type Handler,
 } from './attendanceAdminFixtures';
+import { pendingNew, pendingOld, report } from './absenceFixtures';
 
 const auth = vi.hoisted(() => ({
   current: { token: 'tok', user: { email: 'x', name: 'x', permissions: [] as string[], role: 'bda' as string, isAdmin: false } },
@@ -380,5 +383,194 @@ describe('DeductionsView filters', () => {
     renderView();
     await screen.findByText(/No deductions in/);
     expect(screen.queryByLabelText('Search')).not.toBeInTheDocument();
+  });
+});
+
+describe('DeductionsView absence features as an admin', () => {
+  const rows = [...adminRows, allocationManual, bookingManualEscalated];
+  const pending = [pendingOld, pendingNew];
+
+  function setupAdmin(extra: Record<string, Handler> = {}) {
+    asAdmin();
+    return install({
+      'GET /api/crm/deductions': () => deductionsResponse(rows),
+      'GET /api/crm/deductions/summary': () => summaryResponse(),
+      'GET /api/crm/admin/attendance/review-queues': () => emptyQueues,
+      'GET /api/crm/absences/': ({ path }) =>
+        path.includes('status=pending') ? { success: true, reports: pending, pendingCount: 2 } : { success: true, reports: [] },
+      ...extra,
+    });
+  }
+
+  it('marks manual and Lead Allocation rows with who marked them and the source', async () => {
+    setupAdmin();
+    renderView();
+    const row = (await screen.findByText('Nadia Rahman')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('Lead Allocation')).toBeInTheDocument();
+    expect(within(row).getByTestId('marked-by')).toHaveTextContent('Marked by Sohith');
+    const calendlyRow = screen.getByText('Pavel Novak').closest('tr') as HTMLElement;
+    expect(within(calendlyRow).queryByText('Lead Allocation')).not.toBeInTheDocument();
+    expect(within(calendlyRow).getByTestId('marked-by')).toHaveTextContent('Marked by Sohith');
+    const autoRow = screen.getByText('Hemanth Dasu').closest('tr') as HTMLElement;
+    expect(within(autoRow).queryByTestId('marked-by')).not.toBeInTheDocument();
+  });
+
+  it('filters by source, raised by and amount, and Clear filters resets all of them', async () => {
+    setupAdmin();
+    renderView();
+    await screen.findByText('Nadia Rahman');
+    const total = rows.length;
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent(`Showing ${total} of ${total}`);
+
+    await userEvent.selectOptions(screen.getByLabelText('Source'), 'allocation');
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent(`Showing 1 of ${total}`);
+    await userEvent.selectOptions(screen.getByLabelText('Source'), 'all');
+
+    await userEvent.selectOptions(screen.getByLabelText('Raised by'), 'manual');
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent(`Showing 2 of ${total}`);
+
+    await userEvent.selectOptions(screen.getByLabelText('Amount'), 'escalated');
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent(`Showing 1 of ${total}`);
+    expect(screen.getByText('Pavel Novak')).toBeInTheDocument();
+    expect(screen.queryByText('Nadia Rahman')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /clear filters/i }));
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent(`Showing ${total} of ${total}`);
+    expect(screen.getByLabelText('Raised by')).toHaveValue('all');
+    expect(screen.getByLabelText('Amount')).toHaveValue('all');
+    expect(screen.getByLabelText('Source')).toHaveValue('all');
+  });
+
+  it('offers a Needs review chip that toggles the status filter', async () => {
+    setupAdmin();
+    renderView();
+    await screen.findByText('Nadia Rahman');
+    const chip = screen.getByRole('button', { name: /needs review \(1\)/i });
+    expect(chip).toHaveAttribute('aria-pressed', 'false');
+    await userEvent.click(chip);
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Status')).toHaveValue('needs_review');
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent(`Showing 1 of ${rows.length}`);
+    await userEvent.click(chip);
+    expect(screen.getByLabelText('Status')).toHaveValue('all');
+  });
+
+  it('jumps to the review queue from the Pending reports chip and shows the pending badge on the tab', async () => {
+    setupAdmin();
+    renderView();
+    await screen.findByText('Nadia Rahman');
+    await waitFor(() => expect(screen.getByTestId('badge-absences')).toHaveTextContent('2'));
+    await userEvent.click(screen.getByRole('button', { name: /pending reports \(2\)/i }));
+    expect(await screen.findByRole('heading', { name: 'Waiting for review (2)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /absence reports/i })).toHaveAttribute('aria-current', 'page');
+    await userEvent.click(screen.getByRole('button', { name: 'Ledger' }));
+    expect(await screen.findByTestId('ledger-count')).toBeInTheDocument();
+  });
+
+  it('opens Mark absent, fines in one call, tells the admin and refreshes the ledger', async () => {
+    let ledgerCalls = 0;
+    const calls = setupAdmin({
+      'GET /api/crm/deductions': () => {
+        ledgerCalls += 1;
+        return deductionsResponse(rows);
+      },
+      'GET /api/crm/attendance/bdas': () => ({ success: true, bdas: [] }),
+      'GET /api/crm/absences/candidates': () => ({
+        success: true,
+        kind: 'allocation',
+        candidates: [
+          { kind: 'allocation', refId: 'alloc_9', bdaEmail: 'siddhartha@flashfirehq.com', bdaName: 'Siddhartha', clientName: 'Tomasz Kowalczyk', callStart: '2026-10-07T09:30:00.000Z', detail: null },
+        ],
+      }),
+      'POST /api/crm/absences/': () => ({ success: true, report: report('abs_new', { status: 'approved', clientName: 'Tomasz Kowalczyk' }), deductionId: 'ded_new' }),
+    });
+    renderView();
+    await screen.findByText('Nadia Rahman');
+    const before = ledgerCalls;
+    await userEvent.click(screen.getByRole('button', { name: 'Mark absent' }));
+    const dialog = await screen.findByRole('dialog', { name: /mark absent/i });
+    await userEvent.click(await within(dialog).findByRole('radio', { name: /Tomasz/ }));
+    await userEvent.type(within(dialog).getByLabelText('Reason'), 'BDA never joined the call.');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark absent' }));
+    expect(await screen.findByTestId('absence-notice')).toHaveTextContent('Absence recorded for Tomasz Kowalczyk. The fine was added to the ledger.');
+    expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);
+    await waitFor(() => expect(ledgerCalls).toBeGreaterThan(before));
+  });
+
+  it('shows the manual reason in the evidence drawer and no presence signals', async () => {
+    setupAdmin();
+    renderView();
+    await userEvent.click(await screen.findByRole('button', { name: /view evidence for Nadia Rahman/i }));
+    const drawer = await screen.findByRole('dialog', { name: /missed meeting/i });
+    expect(within(drawer).getByRole('heading', { name: /marked absent/i })).toBeInTheDocument();
+    expect(within(drawer).getByTestId('manual-reason')).toHaveTextContent('BDA was offline for the whole call window');
+    expect(within(drawer).getByText('Lead Allocation call')).toBeInTheDocument();
+    expect(within(drawer).queryByText(/Presence signals/i)).not.toBeInTheDocument();
+    expect(within(drawer).getByText(/A person marked this Lead Allocation call as missed/)).toBeInTheDocument();
+  });
+});
+
+describe('DeductionsView absence features as a BDA', () => {
+  const mine = [...siddharthaRows, { ...bookingManualEscalated }];
+
+  function setupBda() {
+    asBda();
+    return install({
+      'GET /api/crm/deductions': () => deductionsResponse(mine),
+      'GET /api/crm/absences/': () => ({ success: true, reports: [report('abs_a', { clientName: 'Pending Person' })] }),
+    });
+  }
+
+  it('offers Report a missed call and My reports, and no admin controls or admin filters', async () => {
+    const calls = setupBda();
+    renderView();
+    await screen.findByTestId('total-active');
+    expect(screen.getByRole('button', { name: 'Report a missed call' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^mark absent$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /my reports/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /absence reports|review queues/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Raised by')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Amount')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('BDA')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /needs review|pending reports/i })).not.toBeInTheDocument();
+    for (const label of ['Search', 'Status', 'Rule', 'Source', 'Sort']) expect(screen.getByLabelText(label)).toBeInTheDocument();
+    expect(screen.getByLabelText('Counting toward pay')).not.toBeChecked();
+    expect(calls.every((c) => !c.path.includes('/admin/') && !c.path.includes('/summary') && !c.path.includes('bdaEmail'))).toBe(true);
+    await waitFor(() => expect(screen.getByTestId('badge-absences')).toHaveTextContent('1'));
+  });
+
+  it('writes "Marked absent by" on manual rows', async () => {
+    setupBda();
+    renderView();
+    const row = (await screen.findByText('Pavel Novak')).closest('tr') as HTMLElement;
+    expect(within(row).getByTestId('marked-by')).toHaveTextContent('Marked absent by Sohith');
+  });
+
+  it('narrows to rows that count toward pay with the toggle', async () => {
+    setupBda();
+    renderView();
+    await screen.findByText('Pavel Novak');
+    expect(screen.queryByText('Rohan Deshpande')).toBeInTheDocument(); // waived, shown but not counted
+    await userEvent.click(screen.getByLabelText('Counting toward pay'));
+    expect(screen.queryByText('Rohan Deshpande')).not.toBeInTheDocument();
+    expect(screen.queryByText('Imran Qureshi')).not.toBeInTheDocument(); // under review
+    expect(screen.getByText('Pavel Novak')).toBeInTheDocument();
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent('Showing 3 of 5');
+    await userEvent.click(screen.getByRole('button', { name: /clear filters/i }));
+    expect(screen.getByLabelText('Counting toward pay')).not.toBeChecked();
+  });
+
+  it('opens the report dialog from the ledger and shows My reports', async () => {
+    setupBda();
+    renderView();
+    await screen.findByTestId('total-active');
+    await userEvent.click(screen.getByRole('button', { name: 'Report a missed call' }));
+    const dialog = await screen.findByRole('dialog', { name: /report a missed call/i });
+    expect(within(dialog).getByText(/fine only starts after they approve it/)).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /my reports/i }));
+    expect(await screen.findByText('Pending Person')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /withdraw report for Pending Person/i })).toBeInTheDocument();
   });
 });

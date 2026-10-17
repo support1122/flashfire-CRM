@@ -7,6 +7,10 @@ import {
   currentMonthKey,
   deriveTotals,
   isCrmAdminUser,
+  markedByText,
+  rowOrigin,
+  rowSource,
+  whyText,
   monthLabel,
   offsetFromStart,
   reasonProblem,
@@ -14,7 +18,7 @@ import {
   tierText,
   voidReasonText,
 } from './deductionHelpers';
-import { adminRows } from './attendanceAdminFixtures';
+import { adminRows, allocationManual, bookingManualEscalated, missedActive } from './attendanceAdminFixtures';
 
 describe('isCrmAdminUser', () => {
   it('is true for role admin or the isAdmin flag, never for role bda alone', () => {
@@ -138,5 +142,79 @@ describe('ledger filters', () => {
 
   it('counts rows per status, ignoring the other filters', () => {
     expect(countByStatus(adminRows)).toEqual({ active: 4, needs_review: 1, waived: 1, voided: 1, shadow: 1 });
+  });
+});
+
+describe('absence filters', () => {
+  const ids = (list: { deductionId: string }[]) => list.map((r) => r.deductionId);
+  const rows = [...adminRows, allocationManual, bookingManualEscalated];
+
+  it('filters by source and treats a row with no source as a Calendly meeting', () => {
+    expect(ids(applyLedgerFilters(rows, { ...DEFAULT_FILTERS, source: 'allocation' }))).toEqual(['ded_1010']);
+    const calendly = applyLedgerFilters(rows, { ...DEFAULT_FILTERS, source: 'booking' });
+    expect(calendly).toHaveLength(rows.length - 1);
+    const legacy = { ...missedActive, source: undefined as never, origin: undefined as never };
+    expect(rowSource(legacy)).toBe('booking');
+    expect(rowOrigin(legacy)).toBe('auto');
+  });
+
+  it('filters by who raised the fine', () => {
+    expect(ids(applyLedgerFilters(rows, { ...DEFAULT_FILTERS, raisedBy: 'manual', sort: 'oldest' }))).toEqual(['ded_1010', 'ded_1011']);
+    expect(applyLedgerFilters(rows, { ...DEFAULT_FILTERS, raisedBy: 'auto' })).toHaveLength(adminRows.length);
+  });
+
+  it('splits amounts into tier 1 (exactly INR 500) and escalated (INR 1,000 or more)', () => {
+    const tier1 = applyLedgerFilters(rows, { ...DEFAULT_FILTERS, amount: 'tier1' });
+    expect(tier1.every((r) => r.amountInr === 500)).toBe(true);
+    expect(tier1.length).toBeGreaterThan(0);
+    expect(ids(applyLedgerFilters(rows, { ...DEFAULT_FILTERS, amount: 'escalated' }))).toEqual(['ded_1011']);
+  });
+
+  it('keeps only active rows when Counting toward pay is on', () => {
+    const counting = applyLedgerFilters(rows, { ...DEFAULT_FILTERS, countingOnly: true });
+    expect(counting.every((r) => r.status === 'active')).toBe(true);
+    expect(counting.map((r) => r.deductionId)).not.toContain('ded_1005');
+  });
+
+  it('combines filters with AND', () => {
+    const out = applyLedgerFilters(rows, { ...DEFAULT_FILTERS, raisedBy: 'manual', source: 'booking' });
+    expect(ids(out)).toEqual(['ded_1011']);
+    expect(applyLedgerFilters(rows, { ...DEFAULT_FILTERS, source: 'allocation', amount: 'escalated' })).toEqual([]);
+  });
+
+  it('searches the marker name and the absence reason', () => {
+    expect(ids(applyLedgerFilters(rows, { ...DEFAULT_FILTERS, search: 'offline whole call' }))).toEqual(['ded_1010']);
+    expect(ids(applyLedgerFilters(rows, { ...DEFAULT_FILTERS, search: 'sohith', sort: 'oldest' }))).toEqual(
+      expect.arrayContaining(['ded_1010', 'ded_1011', 'ded_1005']),
+    );
+  });
+
+  it('counts every new control as an active filter, and sorting alone as none', () => {
+    expect(hasActiveFilters(DEFAULT_FILTERS)).toBe(false);
+    expect(hasActiveFilters({ ...DEFAULT_FILTERS, sort: 'oldest' })).toBe(false);
+    for (const patch of [{ source: 'allocation' }, { raisedBy: 'manual' }, { amount: 'tier1' }, { countingOnly: true }] as const) {
+      expect(hasActiveFilters({ ...DEFAULT_FILTERS, ...patch })).toBe(true);
+    }
+  });
+});
+
+describe('manual absence wording', () => {
+  it('says who marked it, in the voice of the viewer', () => {
+    expect(markedByText(allocationManual, true)).toBe('Marked by Sohith');
+    expect(markedByText(allocationManual, false)).toBe('Marked absent by Sohith');
+    expect(markedByText(missedActive, true)).toBeNull();
+  });
+
+  it('falls back to the email, then to "an admin", when the name is missing', () => {
+    const noName = { ...allocationManual, manualAbsent: { ...allocationManual.manualAbsent!, markedByName: null } };
+    expect(markedByText(noName, true)).toBe('Marked by sohith@flashfirehq.com');
+    const nobody = { ...noName, manualAbsent: null };
+    expect(markedByText(nobody, true)).toBe('Marked by an admin');
+  });
+
+  it('explains a manual fine without claiming a presence window was missed', () => {
+    expect(whyText(allocationManual)).toMatch(/Lead Allocation call as missed/);
+    expect(whyText(bookingManualEscalated)).toMatch(/marked this meeting as missed/);
+    expect(whyText(missedActive)).toMatch(/mark window closed/);
   });
 });

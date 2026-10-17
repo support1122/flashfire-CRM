@@ -6,6 +6,7 @@ export const STATUS_CHIP: Record<AllocationStatus, string> = {
   completed: 'bg-emerald-100 text-emerald-800',
   no_answer: 'bg-amber-100 text-amber-800',
   cancelled: 'bg-slate-200 text-slate-700',
+  absent: 'bg-red-100 text-red-800',
 };
 
 export const STATUS_LABEL: Record<AllocationStatus, string> = {
@@ -13,6 +14,7 @@ export const STATUS_LABEL: Record<AllocationStatus, string> = {
   completed: 'Completed',
   no_answer: 'No answer',
   cancelled: 'Cancelled',
+  absent: 'Absent',
 };
 
 /** Re-renders every `everyMs` so countdowns stay honest without a refetch. */
@@ -23,6 +25,16 @@ export function useNow(everyMs = 30_000): Date {
     return () => window.clearInterval(id);
   }, [everyMs]);
   return now;
+}
+
+/** The value after it has stopped changing for `ms`. Keeps a search box from firing a request per keystroke. */
+export function useDebounced<T>(value: T, ms: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(value), ms);
+    return () => window.clearTimeout(id);
+  }, [value, ms]);
+  return debounced;
 }
 
 export function errorMessage(cause: unknown, fallback: string): string {

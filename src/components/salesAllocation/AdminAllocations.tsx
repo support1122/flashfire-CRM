@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Copy, Loader2, RefreshCw } from 'lucide-react';
+import { Check, Copy, Loader2, RefreshCw, UserX } from 'lucide-react';
+import { useAbsenceReports } from '../../api/absence';
 import {
   useBdaAvailability,
   useCancelAllocation,
@@ -7,6 +8,9 @@ import {
   useSalesAllocations,
 } from '../../api/salesAllocation';
 import type { AllocationScope, SalesAllocation } from '../../types/salesAllocation';
+import { PENDING_REPORTS, successNotice } from '../attendance/absenceHelpers';
+import AbsenceNotice from '../attendance/AbsenceNotice';
+import MarkAbsentDialog from '../attendance/MarkAbsentDialog';
 import ScheduleCallCard from './ScheduleCallCard';
 import { ActionDialog, StatusBadge } from './shared';
 import { copyText, errorMessage, useNow } from './helpers';
@@ -102,19 +106,25 @@ function AllocationRow({
   row,
   now,
   highlight,
+  reportPending,
   onCancel,
+  onMarkAbsent,
 }: {
   token: string | null;
   row: SalesAllocation;
   now: Date;
   highlight: boolean;
+  /** A BDA already reported this call and it waits for review in the Deductions tab. */
+  reportPending: boolean;
   onCancel: (row: SalesAllocation) => void;
+  onMarkAbsent: (row: SalesAllocation, trigger: HTMLElement) => void;
 }) {
   const [reassigning, setReassigning] = useState(false);
   const [copied, setCopied] = useState(false);
   const ref = useRef<HTMLLIElement>(null);
   const at = new Date(row.callAt);
   const open = row.status === 'scheduled';
+  const callOver = at.getTime() <= now.getTime();
 
   useEffect(() => {
     if (highlight) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -176,6 +186,22 @@ function AllocationRow({
               >
                 Cancel
               </button>
+              {callOver &&
+                (reportPending ? (
+                  <span className="inline-flex items-center rounded-lg bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                    Report waiting for review
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => onMarkAbsent(row, e.currentTarget)}
+                    aria-label={`Mark absent: ${row.clientName}, ${row.bdaName}`}
+                    className="inline-flex items-center gap-1 rounded-lg bg-red-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-red-700"
+                  >
+                    <UserX size={12} aria-hidden="true" />
+                    Mark absent
+                  </button>
+                ))}
             </>
           )}
           <button
@@ -205,6 +231,8 @@ export default function AdminAllocations({
   const [scope, setScope] = useState<AllocationScope>(initialScope);
   const [bdaFilter, setBdaFilter] = useState('');
   const [cancelling, setCancelling] = useState<SalesAllocation | null>(null);
+  const [absentFor, setAbsentFor] = useState<{ row: SalesAllocation; trigger: HTMLElement } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const now = useNow();
   const cancel = useCancelAllocation(token);
 
@@ -216,10 +244,17 @@ export default function AdminAllocations({
   ).sort((a, b) => a[1].localeCompare(b[1]));
 
   const rows = query.data?.allocations ?? [];
+  // Same request as the Deductions tab badge, so it is shared. Tells us which calls a BDA already reported.
+  const pendingReports = useAbsenceReports(token, PENDING_REPORTS);
+  const reportedIds = new Set(
+    (pendingReports.data?.reports ?? []).filter((r) => r.kind === 'allocation').map((r) => r.refId),
+  );
 
   return (
     <div className="space-y-5">
       <ScheduleCallCard token={token} />
+
+      <AbsenceNotice message={notice} onDismiss={() => setNotice(null)} />
 
       <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3">
@@ -300,7 +335,9 @@ export default function AdminAllocations({
                     row={r}
                     now={now}
                     highlight={r.allocationId === highlightId}
+                    reportPending={reportedIds.has(r.allocationId)}
                     onCancel={setCancelling}
+                    onMarkAbsent={(row, trigger) => setAbsentFor({ row, trigger })}
                   />
                 ))}
               </ul>
@@ -308,6 +345,23 @@ export default function AdminAllocations({
           )}
         </div>
       </section>
+
+      {absentFor && (
+        <MarkAbsentDialog
+          token={token}
+          admin
+          target={{
+            kind: 'allocation',
+            refId: absentFor.row.allocationId,
+            clientName: absentFor.row.clientName,
+            bdaName: absentFor.row.bdaName,
+            callStart: absentFor.row.callAt,
+          }}
+          returnFocusTo={absentFor.trigger}
+          onClose={() => setAbsentFor(null)}
+          onDone={(report) => setNotice(successNotice(report))}
+        />
+      )}
 
       {cancelling && (
         <ActionDialog

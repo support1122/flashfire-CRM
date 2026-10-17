@@ -391,7 +391,9 @@ export default function AdminDashboardPage() {
   const logoutAdmin = () => {
     try {
       localStorage.removeItem(ADMIN_TOKEN_KEY);
-    } catch {}
+    } catch {
+      /* storage can be blocked; the in-memory logout below still happens */
+    }
     setAdminToken(null);
     setAdminEmail('');
     setOtp('');
@@ -435,7 +437,9 @@ export default function AdminDashboardPage() {
       if (!res.ok || !body?.token) throw new Error(body?.error || 'Invalid code');
       try {
         localStorage.setItem(ADMIN_TOKEN_KEY, body.token);
-      } catch {}
+      } catch {
+        /* storage can be blocked; the token still lives in state for this session */
+      }
       setAdminToken(body.token);
       setOtp('');
       setOtpSent(false);

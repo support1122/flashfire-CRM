@@ -2,7 +2,7 @@
  * Server contract: /api/crm/sales-allocations
  */
 
-export type AllocationStatus = 'scheduled' | 'completed' | 'no_answer' | 'cancelled';
+export type AllocationStatus = 'scheduled' | 'completed' | 'no_answer' | 'cancelled' | 'absent';
 export type AllocationScope = 'upcoming' | 'past' | 'all';
 
 export interface SalesAllocation {

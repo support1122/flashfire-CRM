@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Mail, Phone, RefreshCw } from 'lucide-react';
+import { useAbsenceReports } from '../../api/absence';
 import { useAllocationOutcome, useSalesAllocations } from '../../api/salesAllocation';
 import type { SalesAllocation } from '../../types/salesAllocation';
+import { PENDING_REPORTS, successNotice } from '../attendance/absenceHelpers';
+import AbsenceNotice from '../attendance/AbsenceNotice';
+import MarkAbsentDialog from '../attendance/MarkAbsentDialog';
 import { ActionDialog, StatusBadge } from './shared';
 import { errorMessage, useNow } from './helpers';
 import { INDIA_ZONE, countdownLabel, dayKeyInZone, formatInZone, zoneCity } from './timeZones';
@@ -12,16 +16,22 @@ function CallCard({
   row,
   now,
   highlight,
+  reportPending,
   onOutcome,
+  onReport,
 }: {
   row: SalesAllocation;
   now: Date;
   highlight: boolean;
+  /** This BDA already reported the call and it waits for an admin. */
+  reportPending: boolean;
   onOutcome: (o: Outcome) => void;
+  onReport: (row: SalesAllocation, trigger: HTMLElement) => void;
 }) {
   const ref = useRef<HTMLLIElement>(null);
   const at = new Date(row.callAt);
   const open = row.status === 'scheduled';
+  const callOver = at.getTime() <= now.getTime();
 
   useEffect(() => {
     if (highlight) ref.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -88,6 +98,21 @@ function CallCard({
           >
             No answer
           </button>
+          {callOver &&
+            (reportPending ? (
+              <span className="inline-flex items-center rounded-lg bg-amber-100 px-3 py-1.5 text-sm font-semibold text-amber-800">
+                Report sent, waiting for review
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => onReport(row, e.currentTarget)}
+                aria-label={`Report missed call: ${row.clientName}`}
+                className="rounded-lg border border-red-200 px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50"
+              >
+                Report missed call
+              </button>
+            ))}
         </div>
       )}
     </li>
@@ -98,7 +123,15 @@ export default function BdaAllocations({ token, highlightId }: { token: string |
   const query = useSalesAllocations(token, { scope: 'all', status: '', bdaEmail: '' });
   const outcome = useAllocationOutcome(token);
   const [dialog, setDialog] = useState<Outcome | null>(null);
+  const [reporting, setReporting] = useState<{ row: SalesAllocation; trigger: HTMLElement } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const now = useNow();
+  // A BDA only gets their own reports back, so this is the set of calls they already reported.
+  const pendingReports = useAbsenceReports(token, PENDING_REPORTS);
+  const reportedIds = useMemo(
+    () => new Set((pendingReports.data?.reports ?? []).filter((r) => r.kind === 'allocation').map((r) => r.refId)),
+    [pendingReports.data],
+  );
 
   const groups = useMemo(() => {
     const today = dayKeyInZone(now, INDIA_ZONE);
@@ -119,6 +152,7 @@ export default function BdaAllocations({ token, highlightId }: { token: string |
   }, [query.data, now]);
 
   const doneCount = (query.data?.allocations ?? []).filter((r) => r.status === 'completed').length;
+  const absentCount = (query.data?.allocations ?? []).filter((r) => r.status === 'absent').length;
 
   const sections: Array<{ title: string; rows: SalesAllocation[] }> = [
     { title: 'Today', rows: groups.today },
@@ -149,12 +183,15 @@ export default function BdaAllocations({ token, highlightId }: { token: string |
           { label: 'Today', n: groups.today.length, cls: 'bg-sky-100 text-sky-800' },
           { label: 'Upcoming', n: groups.upcoming.length, cls: 'bg-slate-200 text-slate-800' },
           { label: 'Done', n: doneCount, cls: 'bg-emerald-100 text-emerald-800' },
+          ...(absentCount > 0 ? [{ label: 'Absent', n: absentCount, cls: 'bg-red-100 text-red-800' }] : []),
         ].map((c) => (
           <li key={c.label} className={`rounded-full px-3 py-1 text-sm font-semibold ${c.cls}`}>
             {c.label}: {c.n}
           </li>
         ))}
       </ul>
+
+      <AbsenceNotice message={notice} onDismiss={() => setNotice(null)} />
 
       {query.isLoading ? (
         <p className="flex items-center gap-2 py-6 text-sm text-slate-500">
@@ -179,11 +216,36 @@ export default function BdaAllocations({ token, highlightId }: { token: string |
               </h2>
               <ul className="space-y-3">
                 {s.rows.map((r) => (
-                  <CallCard key={r.allocationId} row={r} now={now} highlight={r.allocationId === highlightId} onOutcome={setDialog} />
+                  <CallCard
+                    key={r.allocationId}
+                    row={r}
+                    now={now}
+                    highlight={r.allocationId === highlightId}
+                    reportPending={reportedIds.has(r.allocationId)}
+                    onOutcome={setDialog}
+                    onReport={(row, trigger) => setReporting({ row, trigger })}
+                  />
                 ))}
               </ul>
             </section>
           ))
+      )}
+
+      {reporting && (
+        <MarkAbsentDialog
+          token={token}
+          admin={false}
+          target={{
+            kind: 'allocation',
+            refId: reporting.row.allocationId,
+            clientName: reporting.row.clientName,
+            bdaName: reporting.row.bdaName,
+            callStart: reporting.row.callAt,
+          }}
+          returnFocusTo={reporting.trigger}
+          onClose={() => setReporting(null)}
+          onDone={(report) => setNotice(successNotice(report))}
+        />
       )}
 
       {dialog && (

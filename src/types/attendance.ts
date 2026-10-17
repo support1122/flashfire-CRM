@@ -96,6 +96,20 @@ export interface StatusUpdate {
 
 export type DeductionRule = 'missed_meeting' | 'no_show_not_called' | 'status_not_updated';
 export type DeductionStatus = 'shadow' | 'needs_review' | 'active' | 'waived' | 'voided';
+/** auto = a rule fired by itself, manual = a person wrote the fine (an admin marked it, or approved a BDA report). */
+export type DeductionOrigin = 'auto' | 'manual';
+/** booking = a Calendly meeting, allocation = a Lead Allocation call. */
+export type DeductionSource = 'booking' | 'allocation';
+
+/** Who marked a call absent by hand, and why. Null on automatic fines. */
+export interface ManualAbsent {
+  kind: 'booking' | 'allocation';
+  reason: string;
+  markedBy: string;
+  markedByName: string | null;
+  at: string;
+  requestId: string | null;
+}
 
 /** The small form of a deduction that rides on every meeting row. */
 export interface DeductionChip {
@@ -136,6 +150,9 @@ export interface Deduction {
   voidedAt: string | null; // When late evidence turned absent->present (plan 2.2)
   voidReason: string | null; // 'late_evidence' or admin reason
   createdAt: string; // When the rule fired
+  origin: DeductionOrigin;
+  source: DeductionSource;
+  manualAbsent: ManualAbsent | null;
 }
 
 /**

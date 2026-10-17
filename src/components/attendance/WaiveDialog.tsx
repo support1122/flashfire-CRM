@@ -1,10 +1,10 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { REASON_MAX, REASON_MIN, reasonProblem, resolveFocusTarget, type FocusTarget } from './deductionHelpers';
 
-export type ReasonVariant = 'waive' | 'activate' | 'convert' | 'dismiss';
+export type ReasonVariant = 'waive' | 'activate' | 'convert' | 'dismiss' | 'mark_absent' | 'report_absent' | 'reject_report';
 
-const COPY: Record<ReasonVariant, { title: string; confirm: string; help: string; tone: string }> = {
+const COPY: Record<ReasonVariant, { title: string; confirm: string; help: string; tone: string; placeholder?: string }> = {
   waive: {
     title: 'Waive this deduction',
     confirm: 'Waive deduction',
@@ -29,6 +29,27 @@ const COPY: Record<ReasonVariant, { title: string; confirm: string; help: string
     help: 'Nobody is fined. The flag leaves the review list and the reason is kept for the audit trail.',
     tone: 'bg-slate-800 hover:bg-slate-900 focus-visible:outline-slate-800',
   },
+  mark_absent: {
+    title: 'Mark absent',
+    confirm: 'Mark absent',
+    help: 'The BDA is fined for this call at once and sees your name and this reason on the deduction. The record stays and is never deleted.',
+    tone: 'bg-red-600 hover:bg-red-700 focus-visible:outline-red-600',
+    placeholder: 'What happened on this call?',
+  },
+  report_absent: {
+    title: 'Report a missed call',
+    confirm: 'Send report',
+    help: 'An admin reviews your report. The fine only starts after they approve it, and you can withdraw the report until then.',
+    tone: 'bg-slate-800 hover:bg-slate-900 focus-visible:outline-slate-800',
+    placeholder: 'What happened on this call?',
+  },
+  reject_report: {
+    title: 'Reject this report',
+    confirm: 'Reject report',
+    help: 'Nobody is fined. The BDA sees your name and this reason next to the report.',
+    tone: 'bg-slate-800 hover:bg-slate-900 focus-visible:outline-slate-800',
+    placeholder: 'Why is this not an absence?',
+  },
 };
 
 interface WaiveDialogProps {
@@ -40,13 +61,31 @@ interface WaiveDialogProps {
   onClose: () => void;
   /** Where focus goes on close, when the browser did not focus the trigger button itself. */
   returnFocusTo?: FocusTarget;
+  /** Extra content between the help text and the reason box, such as a call picker. */
+  children?: ReactNode;
+  /** Extra condition on the Send button, on top of a valid reason. Defaults to true. */
+  canSubmit?: boolean;
+  /** False when the children hold the first thing to fill in, so focus stays at the top of the dialog. */
+  focusReason?: boolean;
+  /** lg gives a picker room to breathe. */
+  size?: 'md' | 'lg';
 }
 
 /**
  * Asks an admin for a written reason (5 to 500 characters) before a deduction or a review flag is
  * changed. Mount it only while it should be open; closing unmounts it, which also clears the text.
  */
-export default function WaiveDialog({ variant, subject, onSubmit, onClose, returnFocusTo }: WaiveDialogProps) {
+export default function WaiveDialog({
+  variant,
+  subject,
+  onSubmit,
+  onClose,
+  returnFocusTo,
+  children,
+  canSubmit = true,
+  focusReason = true,
+  size = 'md',
+}: WaiveDialogProps) {
   const copy = COPY[variant];
   const dialogRef = useRef<HTMLDialogElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -66,6 +105,7 @@ export default function WaiveDialog({ variant, subject, onSubmit, onClose, retur
   const showProblem = problem !== null && (touched || reason.length > 0);
   const flagged = problem !== null && (touched || trimmedLength > REASON_MAX);
 
+  const focusReasonOnOpen = useRef(focusReason);
   const returnRef = useRef(returnFocusTo);
   useEffect(() => {
     returnRef.current = returnFocusTo;
@@ -80,7 +120,7 @@ export default function WaiveDialog({ variant, subject, onSubmit, onClose, retur
     } else {
       dialog.setAttribute('open', '');
     }
-    textareaRef.current?.focus();
+    if (focusReasonOnOpen.current) textareaRef.current?.focus();
     const remembered = opener.current;
     return () => {
       if (typeof dialog.close === 'function' && dialog.open) dialog.close();
@@ -92,7 +132,7 @@ export default function WaiveDialog({ variant, subject, onSubmit, onClose, retur
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setTouched(true);
-    if (problem !== null || sendingRef.current) return;
+    if (problem !== null || !canSubmit || sendingRef.current) return;
     sendingRef.current = true;
     setSending(true);
     setServerError(null);
@@ -123,7 +163,9 @@ export default function WaiveDialog({ variant, subject, onSubmit, onClose, retur
       onClick={(event) => {
         if (event.target === dialogRef.current) requestClose();
       }}
-      className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-900/50"
+      className={`m-auto max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-900/50 ${
+        size === 'lg' ? 'w-[min(40rem,calc(100vw-2rem))]' : 'w-[min(32rem,calc(100vw-2rem))]'
+      }`}
     >
       <form onSubmit={handleSubmit} noValidate>
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
@@ -150,6 +192,7 @@ export default function WaiveDialog({ variant, subject, onSubmit, onClose, retur
           <p id={helpId} className="text-sm text-slate-600">
             {copy.help}
           </p>
+          {children}
           <label htmlFor={`${titleId}-reason`} className="block pt-1 text-sm font-semibold text-slate-800">
             Reason
           </label>
@@ -166,7 +209,7 @@ export default function WaiveDialog({ variant, subject, onSubmit, onClose, retur
             className={`block w-full resize-y rounded-lg border px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500 disabled:bg-slate-50 ${
               flagged ? 'border-red-400' : 'border-slate-300'
             }`}
-            placeholder="What did you check, and why does this change the outcome?"
+            placeholder={copy.placeholder ?? 'What did you check, and why does this change the outcome?'}
           />
           <div id={statusId} className="flex items-start justify-between gap-3 text-xs">
             <p
@@ -201,7 +244,7 @@ export default function WaiveDialog({ variant, subject, onSubmit, onClose, retur
           </button>
           <button
             type="submit"
-            disabled={problem !== null || sending}
+            disabled={problem !== null || !canSubmit || sending}
             className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-40 ${copy.tone}`}
           >
             {sending && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}

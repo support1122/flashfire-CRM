@@ -1,4 +1,4 @@
-import type { Deduction, DeductionRule, DeductionStatus } from '../../types/attendance';
+import type { Deduction, DeductionOrigin, DeductionRule, DeductionSource, DeductionStatus } from '../../types/attendance';
 import type { RuleTotals } from '../../types/attendanceAdmin';
 import { RULE_LABEL, SIGNAL_LABEL, formatInr, formatTalk } from './format';
 
@@ -116,6 +116,11 @@ export function signalName(kind: string): string {
 
 /** One plain sentence on why this fine exists, built from the frozen evidence. */
 export function whyText(d: Deduction): string {
+  if (rowOrigin(d) === 'manual') {
+    return rowSource(d) === 'allocation'
+      ? 'A person marked this Lead Allocation call as missed. Their reason is below.'
+      : 'A person marked this meeting as missed. Their reason is below.';
+  }
   switch (d.rule) {
     case 'missed_meeting':
       return 'No presence signal arrived before the mark window closed one minute after the scheduled start.';
@@ -172,15 +177,66 @@ export type StatusFilter = 'all' | DeductionStatus;
 export type RuleFilter = 'all' | DeductionRule;
 export type LedgerSort = 'newest' | 'oldest' | 'amount_high' | 'amount_low';
 
+export type SourceFilter = 'all' | DeductionSource;
+export type RaisedByFilter = 'all' | DeductionOrigin;
+/** tier1 = the first-miss amount (INR 500), escalated = INR 1,000 or more. */
+export type AmountFilter = 'all' | 'tier1' | 'escalated';
+
+export const TIER1_AMOUNT_INR = 500;
+export const ESCALATED_AMOUNT_INR = 1000;
+
 export interface LedgerFilters {
   status: StatusFilter;
   rule: RuleFilter;
-  /** Free text. Matches client name, BDA name or email, booking id and the waiver or void reason. Case and accent blind. */
+  /** Free text. Matches client name, BDA name or email, booking id, the marker's name and the waiver, void or absence reason. Case and accent blind. */
   search: string;
   sort: LedgerSort;
+  /** Calendly meeting or Lead Allocation call. */
+  source: SourceFilter;
+  /** Admin filter. Automatic rule or marked by a person. */
+  raisedBy: RaisedByFilter;
+  /** Admin filter. */
+  amount: AmountFilter;
+  /** BDA filter. Active rows only, the ones that count towards pay. */
+  countingOnly: boolean;
 }
 
-export const DEFAULT_FILTERS: LedgerFilters = { status: 'all', rule: 'all', search: '', sort: 'newest' };
+export const DEFAULT_FILTERS: LedgerFilters = {
+  status: 'all',
+  rule: 'all',
+  search: '',
+  sort: 'newest',
+  source: 'all',
+  raisedBy: 'all',
+  amount: 'all',
+  countingOnly: false,
+};
+
+export const SOURCE_LABEL: Record<DeductionSource, string> = {
+  booking: 'Calendly meeting',
+  allocation: 'Lead Allocation call',
+};
+
+export const RAISED_BY_LABEL: Record<DeductionOrigin, string> = {
+  auto: 'Automatic',
+  manual: 'Marked by admin',
+};
+
+export const AMOUNT_LABEL: Record<Exclude<AmountFilter, 'all'>, string> = {
+  tier1: 'Tier 1, ₹500',
+  escalated: 'Escalated, ₹1,000 or more',
+};
+
+/** Rows from before the absence feature carry neither field; they are automatic Calendly fines. */
+export const rowSource = (d: Pick<Deduction, 'source'>): DeductionSource => (d.source === 'allocation' ? 'allocation' : 'booking');
+export const rowOrigin = (d: Pick<Deduction, 'origin'>): DeductionOrigin => (d.origin === 'manual' ? 'manual' : 'auto');
+
+/** "Marked by Sohith" for an admin, "Marked absent by Sohith" for the BDA it was marked against. Null on automatic rows. */
+export function markedByText(d: Pick<Deduction, 'origin' | 'manualAbsent'>, admin: boolean): string | null {
+  if (rowOrigin(d) !== 'manual') return null;
+  const who = d.manualAbsent?.markedByName || d.manualAbsent?.markedBy || 'an admin';
+  return admin ? `Marked by ${who}` : `Marked absent by ${who}`;
+}
 
 export const SORT_LABEL: Record<LedgerSort, string> = {
   newest: 'Meeting date, newest first',
@@ -191,7 +247,15 @@ export const SORT_LABEL: Record<LedgerSort, string> = {
 
 /** True when any filter differs from the default. Sorting alone is not a filter. */
 export function hasActiveFilters(f: LedgerFilters): boolean {
-  return f.status !== 'all' || f.rule !== 'all' || f.search.trim() !== '';
+  return (
+    f.status !== 'all' ||
+    f.rule !== 'all' ||
+    f.search.trim() !== '' ||
+    f.source !== 'all' ||
+    f.raisedBy !== 'all' ||
+    f.amount !== 'all' ||
+    f.countingOnly
+  );
 }
 
 const fold = (text: string) =>
@@ -203,7 +267,17 @@ const fold = (text: string) =>
 /** The text a search is matched against, for one row. */
 function searchable(d: Deduction): string {
   return fold(
-    [d.clientName, d.bdaName, d.bdaEmail, d.bookingId, d.waiverReason, d.voidReason, d.waivedByName]
+    [
+      d.clientName,
+      d.bdaName,
+      d.bdaEmail,
+      d.bookingId,
+      d.waiverReason,
+      d.voidReason,
+      d.waivedByName,
+      d.manualAbsent?.markedByName,
+      d.manualAbsent?.reason,
+    ]
       .filter((v): v is string => typeof v === 'string' && v.length > 0)
       .join(' '),
   );
@@ -220,6 +294,11 @@ export function applyLedgerFilters(rows: Deduction[], f: LedgerFilters): Deducti
   const kept = rows.filter((d) => {
     if (f.status !== 'all' && d.status !== f.status) return false;
     if (f.rule !== 'all' && d.rule !== f.rule) return false;
+    if (f.source !== 'all' && rowSource(d) !== f.source) return false;
+    if (f.raisedBy !== 'all' && rowOrigin(d) !== f.raisedBy) return false;
+    if (f.amount === 'tier1' && d.amountInr !== TIER1_AMOUNT_INR) return false;
+    if (f.amount === 'escalated' && d.amountInr < ESCALATED_AMOUNT_INR) return false;
+    if (f.countingOnly && !countsTowardsPay(d)) return false;
     if (words.length === 0) return true;
     const haystack = searchable(d);
     return words.every((w) => haystack.includes(w)); // every word must match, in any order

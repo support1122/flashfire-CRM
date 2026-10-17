@@ -61,7 +61,7 @@ export function ActionDialog({ title, onSubmit, onClose, submitLabel, danger, ch
         if (!sending) onClose();
       }}
       onClose={onClose}
-      className="w-[min(28rem,92vw)] rounded-xl border border-slate-200 p-0 shadow-xl backdrop:bg-slate-900/40"
+      className="m-auto w-[min(28rem,92vw)] rounded-xl border border-slate-200 p-0 shadow-xl backdrop:bg-slate-900/40"
     >
       <form onSubmit={submit} className="p-5">
         <div className="flex items-start justify-between gap-3">

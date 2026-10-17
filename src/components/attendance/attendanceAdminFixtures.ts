@@ -41,6 +41,9 @@ function base(id: string, who: typeof SIDDHARTHA, partial: Partial<Deduction>): 
     voidedAt: null,
     voidReason: null,
     createdAt: '2026-10-01T10:32:00.000Z',
+    origin: 'auto',
+    source: 'booking',
+    manualAbsent: null,
     ...partial,
   };
 }
@@ -186,6 +189,57 @@ export const siddharthaNeedsReview = base('ded_1009', SIDDHARTHA, {
     bookingStatus: 'completed',
     callSummary: null,
     clientName: 'Imran Qureshi',
+  },
+});
+
+/** An admin marked a Lead Allocation call absent by hand. */
+export const allocationManual = base('ded_1010', KALPATARU, {
+  clientName: 'Nadia Rahman',
+  tierIndex: 3,
+  origin: 'manual',
+  source: 'allocation',
+  manualAbsent: {
+    kind: 'allocation',
+    reason: 'BDA was offline for the whole call window and did not pick up.',
+    markedBy: 'sohith@flashfirehq.com',
+    markedByName: 'Sohith',
+    at: '2026-10-07T18:00:00.000Z',
+    requestId: 'abs_9001',
+  },
+  createdAt: '2026-10-07T18:00:00.000Z',
+  evidence: {
+    scheduledStart: '2026-10-07T17:00:00.000Z',
+    windowClosedAt: null,
+    signals: [],
+    bookingStatus: null,
+    callSummary: null,
+    clientName: 'Nadia Rahman',
+  },
+});
+
+/** Escalated tier: INR 1,000, written by hand for a Calendly meeting after a BDA report was approved. */
+export const bookingManualEscalated = base('ded_1011', SIDDHARTHA, {
+  clientName: 'Pavel Novak',
+  amountInr: 1000,
+  tierIndex: 6,
+  origin: 'manual',
+  source: 'booking',
+  manualAbsent: {
+    kind: 'booking',
+    reason: 'Client joined on time and waited, BDA never joined.',
+    markedBy: 'sohith@flashfirehq.com',
+    markedByName: 'Sohith',
+    at: '2026-10-07T20:00:00.000Z',
+    requestId: 'abs_9002',
+  },
+  createdAt: '2026-10-07T20:00:00.000Z',
+  evidence: {
+    scheduledStart: '2026-10-07T19:00:00.000Z',
+    windowClosedAt: null,
+    signals: [],
+    bookingStatus: 'completed',
+    callSummary: null,
+    clientName: 'Pavel Novak',
   },
 });
 

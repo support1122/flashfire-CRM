@@ -3,7 +3,7 @@ import { CalendarClock, CheckCircle2, Loader2, Search } from 'lucide-react';
 import { ApiError } from '../../api/attendance';
 import { useBdaAvailability, useCreateAllocation, useLeadLookup } from '../../api/salesAllocation';
 import type { LeadMatch } from '../../types/salesAllocation';
-import { FIELD_CLASS, LABEL_CLASS, errorMessage } from './helpers';
+import { FIELD_CLASS, LABEL_CLASS, errorMessage, useDebounced } from './helpers';
 import {
   INDIA_ZONE,
   ZONE_GROUPS,
@@ -14,15 +14,6 @@ import {
 } from './timeZones';
 
 const DEFAULT_ZONE = 'America/New_York';
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const id = window.setTimeout(() => setDebounced(value), ms);
-    return () => window.clearTimeout(id);
-  }, [value, ms]);
-  return debounced;
-}
 
 function StepHeading({ n, children }: { n: number; children: string }) {
   return (

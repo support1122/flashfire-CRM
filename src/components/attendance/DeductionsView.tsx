@@ -1,14 +1,24 @@
 import { useMemo, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardList, Info, Search, X, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardList, FileWarning, Flag, Info, Search, X, Loader2, RefreshCw, UserX } from 'lucide-react';
 import { useCrmAuth } from '../../auth/CrmAuthContext';
+import { useAbsenceReports } from '../../api/absence';
 import { useDeductionSummary, useDeductions, useResolveDeduction, useReviewQueues } from '../../api/attendanceAdmin';
 import type { Deduction } from '../../types/attendance';
 import type { DeductionsMode } from '../../types/attendanceAdmin';
+import AbsenceNotice from './AbsenceNotice';
+import AbsenceReportsView from './AbsenceReportsView';
 import AttendanceReviewQueues from './AttendanceReviewQueues';
 import FinesSwitch from './FinesSwitch';
+import MarkAbsentDialog from './MarkAbsentDialog';
 import DeductionEvidenceDrawer from './DeductionEvidenceDrawer';
 import WaiveDialog from './WaiveDialog';
+import { PENDING_REPORTS, successNotice } from './absenceHelpers';
 import {
+  AMOUNT_LABEL,
+  RAISED_BY_LABEL,
+  SOURCE_LABEL,
+  markedByText,
+  rowSource,
   RULES,
   STATUS_CHIP,
   currentMonthKey,
@@ -26,13 +36,16 @@ import {
   countByStatus,
   hasActiveFilters,
   type LedgerFilters,
+  type AmountFilter,
   type LedgerSort,
+  type RaisedByFilter,
   type RuleFilter,
+  type SourceFilter,
   type StatusFilter,
 } from './deductionHelpers';
 import { RULE_LABEL, fmtDayTime, formatInr } from './format';
 
-type View = 'ledger' | 'queues';
+type View = 'ledger' | 'queues' | 'absences';
 
 interface DialogState {
   kind: 'waive' | 'activate';
@@ -135,6 +148,28 @@ function AmountCell({ d }: { d: Deduction }) {
   );
 }
 
+/** Where the fine came from, when it is not the usual automatic Calendly rule. */
+function OriginTags({ d, admin }: { d: Deduction; admin: boolean }) {
+  const marked = markedByText(d, admin);
+  const allocation = rowSource(d) === 'allocation';
+  if (!marked && !allocation) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+      {allocation && (
+        <span className="inline-flex items-center rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-semibold text-violet-800">
+          Lead Allocation
+        </span>
+      )}
+      {marked && (
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600" data-testid="marked-by">
+          <UserX size={11} aria-hidden="true" />
+          {marked}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function ResolutionNote({ d }: { d: Deduction }) {
   if (d.status === 'waived') {
     return (
@@ -207,12 +242,17 @@ export default function DeductionsView() {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [evidence, setEvidence] = useState<EvidenceState | null>(null);
   const [filters, setFilters] = useState<LedgerFilters>(DEFAULT_FILTERS);
+  const [absenceDialog, setAbsenceDialog] = useState<{ trigger: HTMLElement | null } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const thisMonth = currentMonthKey();
   const query = useDeductions(token, month, admin ? bdaEmail : '');
   const summary = useDeductionSummary(token, month, admin);
   const queues = useReviewQueues(token, admin);
   const resolve = useResolveDeduction(token);
+  // Same request as the review queue, so the badge costs nothing extra. For a BDA it is their own pending reports.
+  const pendingReports = useAbsenceReports(token, PENDING_REPORTS, { poll: true });
+  const pendingReportCount = pendingReports.data?.pendingCount ?? pendingReports.data?.reports.length ?? 0;
 
   const data = query.data;
   // `rows` is the whole month as the server sent it (totals and counts come from it). `visibleRows` is what the
@@ -261,6 +301,19 @@ export default function DeductionsView() {
           </p>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={(e) => setAbsenceDialog({ trigger: e.currentTarget })}
+            className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 ${
+              admin
+                ? 'bg-red-600 hover:bg-red-700 focus-visible:outline-red-600'
+                : 'bg-slate-800 hover:bg-slate-900 focus-visible:outline-slate-800'
+            }`}
+          >
+            <UserX size={15} aria-hidden="true" />
+            {admin ? 'Mark absent' : 'Report a missed call'}
+          </button>
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Month">
           <button
             type="button"
@@ -292,42 +345,55 @@ export default function DeductionsView() {
             </button>
           )}
         </div>
+        </div>
       </header>
 
-      {admin && (
-        <nav aria-label="Deductions sections" className="flex gap-1 border-b border-slate-200">
-          {(
-            [
-              { id: 'ledger', label: 'Ledger' },
-              { id: 'queues', label: 'Review queues' },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setView(item.id)}
-              aria-current={view === item.id ? 'page' : undefined}
-              className={`-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-orange-500 ${
-                view === item.id
-                  ? 'border-orange-500 text-slate-900'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              {item.id === 'queues' && <ClipboardList size={15} aria-hidden="true" />}
-              {item.label}
-              {item.id === 'queues' && queueCount > 0 && (
-                <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
-                  {queueCount}
-                  <span className="sr-only"> items waiting</span>
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
-      )}
+      <nav aria-label="Deductions sections" className="flex flex-wrap gap-x-1 border-b border-slate-200">
+        {(
+          [
+            { id: 'ledger', label: 'Ledger', show: true },
+            { id: 'queues', label: 'Review queues', show: admin },
+            { id: 'absences', label: admin ? 'Absence reports' : 'My reports', show: true },
+          ] as const
+        )
+          .filter((item) => item.show)
+          .map((item) => {
+            const badge = item.id === 'queues' ? queueCount : item.id === 'absences' ? pendingReportCount : 0;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setView(item.id);
+                  setNotice(null);
+                }}
+                aria-current={view === item.id ? 'page' : undefined}
+                className={`-mb-px inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-orange-500 ${
+                  view === item.id
+                    ? 'border-orange-500 text-slate-900'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                {item.id === 'queues' && <ClipboardList size={15} aria-hidden="true" />}
+                {item.id === 'absences' && <FileWarning size={15} aria-hidden="true" />}
+                {item.label}
+                {badge > 0 && (
+                  <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white" data-testid={`badge-${item.id}`}>
+                    {badge}
+                    <span className="sr-only"> {item.id === 'queues' ? 'items waiting' : admin ? 'reports waiting for review' : 'reports pending review'}</span>
+                  </span>
+                )}
+              </button>
+            );
+          })}
+      </nav>
+
+      <AbsenceNotice message={notice} onDismiss={() => setNotice(null)} />
 
       {admin && view === 'queues' ? (
         <AttendanceReviewQueues token={token} />
+      ) : view === 'absences' ? (
+        <AbsenceReportsView token={token} admin={admin} month={month} onNotice={setNotice} />
       ) : (
         <>
           {admin && <FinesSwitch token={token} />}
@@ -403,6 +469,7 @@ export default function DeductionsView() {
                   <h2 id="per-bda-heading" className="border-b border-slate-200 px-4 py-3 text-sm font-bold text-slate-900">
                     Per BDA, {monthLabel(month)}
                   </h2>
+                  <div className="relative overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-600">
                       <tr>
@@ -446,6 +513,7 @@ export default function DeductionsView() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </section>
               )}
 
@@ -464,6 +532,31 @@ export default function DeductionsView() {
 
                 {rows.length > 0 && (
                   <div className="space-y-2 border-b border-slate-200 bg-slate-50/60 px-4 py-3">
+                    {admin && (
+                      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Quick filters">
+                        <button
+                          type="button"
+                          onClick={() => setFilters((f) => ({ ...f, status: f.status === 'needs_review' ? 'all' : 'needs_review' }))}
+                          aria-pressed={filters.status === 'needs_review'}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${
+                            filters.status === 'needs_review'
+                              ? 'border-amber-500 bg-amber-100 text-amber-900'
+                              : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                          }`}
+                        >
+                          <Flag size={12} aria-hidden="true" />
+                          Needs review ({statusCounts.needs_review})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setView('absences')}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+                        >
+                          <FileWarning size={12} aria-hidden="true" />
+                          Pending reports ({pendingReportCount})
+                        </button>
+                      </div>
+                    )}
                     <div role="search" aria-label="Filter deductions" className="flex flex-wrap items-end gap-3">
                       <div className="min-w-56 flex-1">
                         <label htmlFor="deductions-search" className="block text-xs font-semibold text-slate-600">
@@ -522,6 +615,66 @@ export default function DeductionsView() {
                       </div>
 
                       <div>
+                        <label htmlFor="deductions-source-filter" className="block text-xs font-semibold text-slate-600">
+                          Source
+                        </label>
+                        <select
+                          id="deductions-source-filter"
+                          value={filters.source}
+                          onChange={(e) => setFilters((f) => ({ ...f, source: e.target.value as SourceFilter }))}
+                          className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+                        >
+                          <option value="all">All sources</option>
+                          {(Object.keys(SOURCE_LABEL) as Array<keyof typeof SOURCE_LABEL>).map((k) => (
+                            <option key={k} value={k}>
+                              {SOURCE_LABEL[k]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {admin && (
+                        <>
+                          <div>
+                            <label htmlFor="deductions-raised-filter" className="block text-xs font-semibold text-slate-600">
+                              Raised by
+                            </label>
+                            <select
+                              id="deductions-raised-filter"
+                              value={filters.raisedBy}
+                              onChange={(e) => setFilters((f) => ({ ...f, raisedBy: e.target.value as RaisedByFilter }))}
+                              className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+                            >
+                              <option value="all">All</option>
+                              {(Object.keys(RAISED_BY_LABEL) as Array<keyof typeof RAISED_BY_LABEL>).map((k) => (
+                                <option key={k} value={k}>
+                                  {RAISED_BY_LABEL[k]}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label htmlFor="deductions-amount-filter" className="block text-xs font-semibold text-slate-600">
+                              Amount
+                            </label>
+                            <select
+                              id="deductions-amount-filter"
+                              value={filters.amount}
+                              onChange={(e) => setFilters((f) => ({ ...f, amount: e.target.value as AmountFilter }))}
+                              className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+                            >
+                              <option value="all">All amounts</option>
+                              {(Object.keys(AMOUNT_LABEL) as Array<keyof typeof AMOUNT_LABEL>).map((k) => (
+                                <option key={k} value={k}>
+                                  {AMOUNT_LABEL[k]}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      )}
+
+                      <div>
                         <label htmlFor="deductions-sort" className="block text-xs font-semibold text-slate-600">
                           Sort
                         </label>
@@ -539,6 +692,21 @@ export default function DeductionsView() {
                         </select>
                       </div>
 
+                      {!admin && (
+                        <label
+                          htmlFor="deductions-counting"
+                          className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-orange-500"
+                        >
+                          <input
+                            id="deductions-counting"
+                            type="checkbox"
+                            checked={filters.countingOnly}
+                            onChange={(e) => setFilters((f) => ({ ...f, countingOnly: e.target.checked }))}
+                            className="accent-orange-600"
+                          />
+                          Counting toward pay
+                        </label>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <p role="status" aria-live="polite" className="text-xs text-slate-600" data-testid="ledger-count">
@@ -582,7 +750,7 @@ export default function DeductionsView() {
                     </button>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <div className="relative overflow-x-auto">
                     <table className="w-full text-sm">
                       <caption className="sr-only">Deductions for {monthLabel(month)}</caption>
                       <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-600">
@@ -617,6 +785,7 @@ export default function DeductionsView() {
                                   {d.clientName}
                                 </p>
                                 <p className="text-xs text-slate-500">{when}</p>
+                                <OriginTags d={d} admin={admin} />
                                 <ResolutionNote d={d} />
                               </td>
                               {admin && <td className="whitespace-nowrap px-3 py-3 align-top text-slate-700">{d.bdaName || d.bdaEmail}</td>}
@@ -686,6 +855,16 @@ export default function DeductionsView() {
           admin={admin}
           returnFocusTo={focusAfterClose(evidence.trigger, evidence.deduction.deductionId)}
           onClose={() => setEvidence(null)}
+        />
+      )}
+      {absenceDialog && (
+        <MarkAbsentDialog
+          token={token}
+          admin={admin}
+          defaultBdaEmail={bdaEmail}
+          returnFocusTo={absenceDialog.trigger}
+          onClose={() => setAbsenceDialog(null)}
+          onDone={(report) => setNotice(successNotice(report))}
         />
       )}
       {dialog && dialogSubject && (
