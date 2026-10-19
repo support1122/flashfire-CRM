@@ -4,6 +4,7 @@ import { useAbsenceCandidates, useCreateAbsence, useCreateAbsenceBatch } from '.
 import { useTrackedBdas } from '../../api/attendanceAdmin';
 import type { AbsenceCandidate, AbsenceKind, AbsenceOutcome } from '../../types/absence';
 import { useDebounced } from '../salesAllocation/helpers';
+import { CallCheckChip } from '../salesAllocation/shared';
 import { BATCH_MAX, KIND_LABEL, absenceErrorMessage, candidateKey, istTime, refusalMessage, withFriendlyError } from './absenceHelpers';
 import type { FocusTarget } from './deductionHelpers';
 import WaiveDialog from './WaiveDialog';
@@ -240,6 +241,7 @@ function CallPicker({
                           {istTime(c.callStart)}
                         </span>
                         {c.detail && <span className="block truncate text-xs text-slate-500">{c.detail}</span>}
+                        {c.kind === 'allocation' && <CallCheckChip check={c.callCheck} status="scheduled" callAt={c.callStart} now={new Date()} />}
                       </span>
                     </label>
                   </li>

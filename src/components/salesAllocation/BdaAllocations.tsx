@@ -6,7 +6,7 @@ import type { SalesAllocation } from '../../types/salesAllocation';
 import { PENDING_REPORTS, outcomeNotice } from '../attendance/absenceHelpers';
 import AbsenceNotice from '../attendance/AbsenceNotice';
 import MarkAbsentDialog from '../attendance/MarkAbsentDialog';
-import { ActionDialog, StatusBadge } from './shared';
+import { ActionDialog, CallCheckChip, StatusBadge } from './shared';
 import { errorMessage, useNow } from './helpers';
 import { INDIA_ZONE, countdownLabel, dayKeyInZone, formatInZone, zoneCity } from './timeZones';
 
@@ -52,6 +52,7 @@ function CallCard({
           <StatusBadge status={row.status} />
         </div>
       </div>
+      <CallCheckChip check={row.callCheck} status={row.status} callAt={row.callAt} now={now} />
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {row.phone && (

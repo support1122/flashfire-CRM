@@ -267,6 +267,20 @@ describe('MarkAbsentDialog with several calls', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('shows what the Zoom call log says next to each Lead Allocation call', async () => {
+    const miss = { verdict: 'not_called' as const, calls: 0, connected: false, firstCallAt: null, firstCallOffsetMin: null, talkSec: 0 };
+    const ok = { verdict: 'called_in_time' as const, calls: 1, connected: true, firstCallAt: '2026-10-07T09:25:00.000Z', firstCallOffsetMin: -5, talkSec: 80 };
+    install({
+      'GET /api/crm/absences/candidates': candidatesFor([{ ...candidateAllocation, callCheck: miss }, { ...candidateAllocation2, callCheck: ok }]),
+      'GET /api/crm/attendance/bdas': BDAS,
+    });
+    renderDialog({ admin: true });
+    const dialog = await screen.findByRole('dialog');
+    const tomasz = await within(dialog).findByRole('checkbox', { name: /Tomasz/ });
+    expect(tomasz).toHaveAccessibleName(/Not called/);
+    expect(within(dialog).getByRole('checkbox', { name: /Meera/ })).toHaveAccessibleName(/Called in time/);
+  });
+
   it('narrows the list by a date range and sends the range to the server', async () => {
     const calls = setup();
     renderDialog({ admin: true });

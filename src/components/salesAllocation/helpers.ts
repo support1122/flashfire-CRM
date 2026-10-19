@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { AllocationStatus } from '../../types/salesAllocation';
+import type { AllocationStatus, CallCheck } from '../../types/salesAllocation';
 
 export const STATUS_CHIP: Record<AllocationStatus, string> = {
   scheduled: 'bg-sky-100 text-sky-800',
@@ -68,3 +68,43 @@ export async function copyText(text: string): Promise<boolean> {
     return ok;
   }
 }
+
+export type CallCheckTone = 'good' | 'warn' | 'bad' | 'muted';
+
+/** "5 min before", "12 min after", "at the call time". */
+function offsetText(min: number): string {
+  if (min === 0) return 'at the call time';
+  return `${Math.abs(min)} min ${min < 0 ? 'before' : 'after'}`;
+}
+
+/**
+ * The chip for "did the BDA call the client". Null when there is nothing worth saying: no check, a call still in the
+ * future, or a cancelled call. `callAtMs` is the call time, so "waiting" only appears once that time has come.
+ */
+export function callCheckInfo(
+  check: CallCheck | null | undefined,
+  status: AllocationStatus,
+  callAtMs: number,
+  nowMs: number,
+): { label: string; detail: string; tone: CallCheckTone } | null {
+  if (!check || status === 'cancelled') return null;
+  switch (check.verdict) {
+    case 'called_in_time':
+      return { label: 'Called in time', detail: `First call ${offsetText(check.firstCallOffsetMin ?? 0)}${check.connected ? ', connected' : ', not connected'}`, tone: 'good' };
+    case 'called_late':
+      return { label: 'Called late', detail: `First call ${offsetText(check.firstCallOffsetMin ?? 0)}${check.connected ? ', connected' : ', not connected'}`, tone: 'warn' };
+    case 'not_called':
+      return { label: 'Not called', detail: 'No outbound Zoom call to this number from the BDA', tone: 'bad' };
+    case 'waiting':
+      return nowMs < callAtMs ? null : { label: 'No call yet', detail: 'Nothing in the Zoom call log so far', tone: 'muted' };
+    case 'no_phone':
+      return { label: 'Cannot check', detail: 'This call has no usable phone number', tone: 'muted' };
+  }
+}
+
+export const CALL_CHECK_CHIP: Record<CallCheckTone, string> = {
+  good: 'bg-emerald-100 text-emerald-800',
+  warn: 'bg-amber-100 text-amber-800',
+  bad: 'bg-red-100 text-red-800',
+  muted: 'bg-slate-100 text-slate-600',
+};

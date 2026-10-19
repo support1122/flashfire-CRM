@@ -12,7 +12,7 @@ import { PENDING_REPORTS, outcomeNotice } from '../attendance/absenceHelpers';
 import AbsenceNotice from '../attendance/AbsenceNotice';
 import MarkAbsentDialog from '../attendance/MarkAbsentDialog';
 import ScheduleCallCard from './ScheduleCallCard';
-import { ActionDialog, StatusBadge } from './shared';
+import { ActionDialog, CallCheckChip, StatusBadge } from './shared';
 import { copyText, errorMessage, useNow } from './helpers';
 import { INDIA_ZONE, countdownLabel, formatInZone, zoneCity } from './timeZones';
 
@@ -165,6 +165,7 @@ function AllocationRow({
       </p>
       <div className="mt-2 md:mt-0">
         <StatusBadge status={row.status} />
+        <CallCheckChip check={row.callCheck} status={row.status} callAt={row.callAt} now={now} />
         {row.outcomeNote && <p className="mt-1 text-xs text-slate-500">{row.outcomeNote}</p>}
       </div>
       <div className="mt-3 md:mt-0">

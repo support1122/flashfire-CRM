@@ -5,6 +5,20 @@
 export type AllocationStatus = 'scheduled' | 'completed' | 'no_answer' | 'cancelled' | 'absent';
 export type AllocationScope = 'upcoming' | 'past' | 'all';
 
+/** What the Zoom call log says about the BDA calling the client. Evidence only: it never fines anyone by itself. */
+export type CallVerdict = 'called_in_time' | 'called_late' | 'not_called' | 'waiting' | 'no_phone';
+
+export interface CallCheck {
+  verdict: CallVerdict;
+  calls: number;
+  connected: boolean;
+  /** ISO instant of the first counted call, null when none. */
+  firstCallAt: string | null;
+  /** Minutes from the call time to the first call: negative = before it. */
+  firstCallOffsetMin: number | null;
+  talkSec: number;
+}
+
 export interface SalesAllocation {
   allocationId: string;
   clientName: string;
@@ -25,6 +39,8 @@ export interface SalesAllocation {
   reminderState: string | null;
   reminderSentAt: string | null;
   crmUrl: string;
+  /** Null when the call log could not be read. */
+  callCheck?: CallCheck | null;
 }
 
 export interface AllocationListResponse {

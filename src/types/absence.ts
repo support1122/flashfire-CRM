@@ -2,6 +2,8 @@
  * Server contract: /api/crm/absences (errors are { success: false, error: { code, message } }).
  */
 
+import type { CallCheck } from './salesAllocation';
+
 /** allocation = a Lead Allocation call, booking = a Calendly meeting. */
 export type AbsenceKind = 'allocation' | 'booking';
 export type AbsenceStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
@@ -16,6 +18,8 @@ export interface AbsenceCandidate {
   /** ISO UTC instant the call started. */
   callStart: string;
   detail: string | null;
+  /** Lead Allocation calls only: what the Zoom call log says. */
+  callCheck?: CallCheck | null;
 }
 
 export interface AbsenceCandidatesResponse {

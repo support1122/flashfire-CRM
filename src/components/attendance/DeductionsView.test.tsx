@@ -91,6 +91,22 @@ describe('DeductionsView totals', () => {
   });
 });
 
+describe('DeductionsView fines banner', () => {
+  it('does not show the fines switch to an admin (it lives on the Lead Allocation tab)', async () => {
+    asAdmin();
+    install({
+      'GET /api/crm/deductions': () => deductionsResponse(adminRows),
+      'GET /api/crm/deductions/summary': () => summaryResponse(),
+      'GET /api/crm/admin/attendance/review-queues': () => emptyQueues,
+    });
+    renderView();
+    await screen.findByTestId('ledger-count');
+    expect(screen.queryByText(/^Fines:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Shadow mode' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Turn off' })).not.toBeInTheDocument();
+  });
+});
+
 describe('DeductionsView as a BDA', () => {
   beforeEach(() => {
     asBda();

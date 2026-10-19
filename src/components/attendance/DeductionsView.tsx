@@ -8,7 +8,6 @@ import type { DeductionsMode } from '../../types/attendanceAdmin';
 import AbsenceNotice from './AbsenceNotice';
 import AbsenceReportsView from './AbsenceReportsView';
 import AttendanceReviewQueues from './AttendanceReviewQueues';
-import FinesSwitch from './FinesSwitch';
 import MarkAbsentDialog from './MarkAbsentDialog';
 import DeductionEvidenceDrawer from './DeductionEvidenceDrawer';
 import WaiveDialog from './WaiveDialog';
@@ -405,7 +404,6 @@ export default function DeductionsView() {
         <AbsenceReportsView token={token} admin={admin} month={month} onNotice={setNotice} />
       ) : (
         <>
-          {admin && <FinesSwitch token={token} />}
           {data && !admin && <ModeBanner mode={data.mode} admin={admin} />}
           <PolicyDetails />
 

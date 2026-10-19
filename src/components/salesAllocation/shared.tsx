@@ -1,11 +1,29 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { LABEL_CLASS, STATUS_CHIP, STATUS_LABEL, errorMessage } from './helpers';
+import { CALL_CHECK_CHIP, LABEL_CLASS, STATUS_CHIP, STATUS_LABEL, callCheckInfo, errorMessage } from './helpers';
 import { Loader2, X } from 'lucide-react';
-import type { AllocationStatus } from '../../types/salesAllocation';
+import type { AllocationStatus, CallCheck } from '../../types/salesAllocation';
 
 export function StatusBadge({ status }: { status: AllocationStatus }) {
   return (
     <span className={`rounded px-2 py-0.5 text-xs font-semibold ${STATUS_CHIP[status]}`}>{STATUS_LABEL[status]}</span>
+  );
+}
+
+/** "Called in time", "Not called"... from the Zoom call log. Renders nothing when there is nothing to say. */
+export function CallCheckChip({ check, status, callAt, now }: { check: CallCheck | null | undefined; status: AllocationStatus; callAt: string; now: Date }) {
+  const info = callCheckInfo(check, status, new Date(callAt).getTime(), now.getTime());
+  if (!info) return null;
+  return (
+    <span className="mt-1 block">
+      <span
+        title={info.detail}
+        data-testid="call-check"
+        className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${CALL_CHECK_CHIP[info.tone]}`}
+      >
+        {info.label}
+      </span>
+      <span className="mt-0.5 block text-xs text-slate-500">{info.detail}</span>
+    </span>
   );
 }
 
