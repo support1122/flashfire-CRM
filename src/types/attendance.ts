@@ -124,6 +124,18 @@ export interface DeductionChip {
  * A row is created when a rule fires (missed_meeting, no_show_not_called, status_not_updated),
  * tracks evidence and any admin waiver/activation, and is never deleted (immutable audit trail).
  */
+/** What the attendance row recorded for the fined meeting (backend shapeAttendanceNote). Display only. */
+export interface DeductionAttendance {
+  status: string | null;
+  verdict: string | null;
+  joinDevice: JoinDevice | null;
+  joinDeviceReason: string | null;
+  joinedAt: string | null;
+  lateByMs: number | null;
+  timeSpentMs: number;
+  verified: boolean;
+}
+
 export interface Deduction {
   deductionId: string;
   bdaEmail: string;
@@ -153,6 +165,8 @@ export interface Deduction {
   origin: DeductionOrigin;
   source: DeductionSource;
   manualAbsent: ManualAbsent | null;
+  /** null when no attendance row exists (a Lead Allocation call, or nobody was ever seen). */
+  attendance?: DeductionAttendance | null;
 }
 
 /**

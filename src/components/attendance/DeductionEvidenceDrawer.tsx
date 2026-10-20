@@ -5,6 +5,8 @@ import type { Deduction } from '../../types/attendance';
 import {
   STATUS_CHIP,
   callSummaryText,
+  seenFacts,
+  CONTACT_LINE,
   countsTowardsPay,
   offsetFromStart,
   resolveFocusTarget,
@@ -18,6 +20,7 @@ import {
   type FocusTarget,
 } from './deductionHelpers';
 import { KIND_LABEL } from './absenceHelpers';
+import { JoinDeviceChip } from './AttendanceCells';
 import { RULE_LABEL, formatInr } from './format';
 
 function stamp(iso: string | null | undefined): string {
@@ -155,6 +158,22 @@ export default function DeductionEvidenceDrawer({ deduction: d, admin, onClose, 
         <p className="mt-2 text-slate-600">{whyText(d)}</p>
       </Section>
 
+      {seenFacts(d).length > 0 && (
+        <Section title="What the system saw">
+          <ul className="list-disc space-y-1 pl-4 text-slate-700" data-testid="seen-facts">
+            {seenFacts(d).map((f) => (
+              <li key={f}>{f}</li>
+            ))}
+          </ul>
+          {d.attendance?.joinDevice && (
+            <div className="mt-2">
+              <JoinDeviceChip device={d.attendance.joinDevice} />
+              {d.attendance.joinDeviceReason && <p className="mt-1 text-xs text-slate-500">{d.attendance.joinDeviceReason}</p>}
+            </div>
+          )}
+        </Section>
+      )}
+
       {d.manualAbsent && (
         <Section title="Marked absent">
           <dl>
@@ -239,6 +258,12 @@ export default function DeductionEvidenceDrawer({ deduction: d, admin, onClose, 
             <Row label="When">{stamp(d.voidedAt)}</Row>
           </dl>
           <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-slate-700">{voidReasonText(d.voidReason)}</p>
+        </Section>
+      )}
+
+      {!admin && (d.status === 'active' || d.status === 'needs_review') && (
+        <Section title="Think this is wrong?">
+          <p className="rounded-lg bg-orange-50 px-3 py-2 text-orange-900" data-testid="contact-admin">{CONTACT_LINE}</p>
         </Section>
       )}
 

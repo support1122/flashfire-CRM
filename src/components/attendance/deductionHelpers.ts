@@ -131,6 +131,64 @@ export function whyText(d: Deduction): string {
   }
 }
 
+function clock(iso: string): string {
+  return new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(iso));
+}
+
+/** Plain-language device phrase for the join, or null when nobody saw one. */
+function joinedFrom(a: NonNullable<Deduction['attendance']>): string | null {
+  switch (a.joinDevice) {
+    case 'mobile': return 'from a mobile phone';
+    case 'phone_dial_in': return 'by phone dial-in';
+    case 'pc': return 'from the PC';
+    case 'unknown': return 'from an unknown device';
+    default: return null;
+  }
+}
+
+/**
+ * What the system actually saw for this meeting, as short facts. This is the part a BDA needs to judge whether the
+ * fine is right: for example "Joined from a mobile phone at 8:07 pm, 7m late". The extension cannot report from a
+ * phone, so a phone join looks like no join at all.
+ */
+export function seenFacts(d: Deduction): string[] {
+  if (d.rule === 'status_not_updated') {
+    return [`The booking was still "${d.evidence.bookingStatus ?? 'scheduled'}" when the status deadline passed.`];
+  }
+  if (rowOrigin(d) === 'manual') return [];
+  const a = d.attendance;
+  const facts: string[] = [];
+  if (d.rule === 'missed_meeting') {
+    const signals = d.evidence.signals ?? [];
+    if (signals.length === 0) facts.push('No presence signal arrived before the window closed, one minute after the start.');
+    else facts.push('A signal arrived, but after the one minute window had closed.');
+  }
+  if (a?.joinedAt) {
+    const device = joinedFrom(a);
+    const late = a.lateByMs != null && a.lateByMs > 0 ? `, ${Math.max(1, Math.round(a.lateByMs / 60000))}m after the start` : '';
+    facts.push(`Google Meet shows a join${device ? ` ${device}` : ''} at ${clock(a.joinedAt)}${late}.`);
+    if (a.joinDevice === 'mobile' || a.joinDevice === 'phone_dial_in') {
+      facts.push('The attendance extension runs on the PC, so it cannot report a join from a phone.');
+    }
+  } else if (d.rule === 'missed_meeting') {
+    facts.push('Google Meet shows nobody from the BDA in the call.');
+  }
+  if (d.rule === 'no_show_not_called') {
+    facts.push(callSummaryText(d.evidence.callSummary));
+  }
+  return facts;
+}
+
+/** Short headline for each automatic rule, shown after "Why:" in the ledger row. */
+export const RULE_REASON_TITLE: Record<DeductionRule, string> = {
+  missed_meeting: 'not seen in the meeting',
+  no_show_not_called: 'client did not show and was not called',
+  status_not_updated: 'booking status not updated',
+};
+
+/** Who a BDA should talk to about a fine they think is wrong. */
+export const CONTACT_LINE = 'If this looks wrong, contact an admin with the reference below and they can review or waive it.';
+
 export function callSummaryText(cs: Deduction['evidence']['callSummary']): string {
   if (!cs || cs.calls == null) return 'No call data was recorded.';
   if (cs.calls === 0) return 'No outbound calls to the client.';

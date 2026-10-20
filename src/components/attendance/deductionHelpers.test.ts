@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  seenFacts,
   DEFAULT_FILTERS,
   applyLedgerFilters,
   countByStatus,
@@ -22,6 +23,30 @@ import {
   voidReasonText,
 } from './deductionHelpers';
 import { adminRows, allocationManual, bookingManualEscalated, missedActive } from './attendanceAdminFixtures';
+
+describe('seenFacts', () => {
+  it('says a mobile join cannot be reported by the PC extension', () => {
+    const d = {
+      ...missedActive,
+      attendance: { status: 'present', verdict: null, joinDevice: 'mobile', joinDeviceReason: null, joinedAt: '2026-10-19T14:37:00.000Z', lateByMs: 420000, timeSpentMs: 0, verified: true },
+    } as typeof missedActive;
+    const facts = seenFacts(d);
+    expect(facts.join(' ')).toMatch(/join from a mobile phone/);
+    expect(facts.join(' ')).toMatch(/7m after the start/);
+    expect(facts.join(' ')).toMatch(/cannot report a join from a phone/);
+  });
+
+  it('says nobody was seen when there is no attendance row', () => {
+    const d = { ...missedActive, attendance: null, evidence: { ...missedActive.evidence, signals: [] } } as typeof missedActive;
+    const facts = seenFacts(d).join(' ');
+    expect(facts).toMatch(/No presence signal/);
+    expect(facts).toMatch(/nobody from the BDA/);
+  });
+
+  it('gives nothing for a manual mark, the person\'s own reason is shown instead', () => {
+    expect(seenFacts(bookingManualEscalated)).toEqual([]);
+  });
+});
 
 describe('isCrmAdminUser', () => {
   it('is true for role admin or the isAdmin flag, never for role bda alone', () => {

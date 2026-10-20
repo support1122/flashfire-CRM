@@ -11,6 +11,7 @@ import AttendanceReviewQueues from './AttendanceReviewQueues';
 import MarkAbsentDialog from './MarkAbsentDialog';
 import DeductionEvidenceDrawer from './DeductionEvidenceDrawer';
 import WaiveDialog from './WaiveDialog';
+import { JoinDeviceChip } from './AttendanceCells';
 import { PENDING_REPORTS, outcomeNotice } from './absenceHelpers';
 import {
   AMOUNT_LABEL,
@@ -18,6 +19,10 @@ import {
   SOURCE_LABEL,
   markedByText,
   rowSource,
+  rowOrigin,
+  seenFacts,
+  RULE_REASON_TITLE,
+  CONTACT_LINE,
   RULES,
   STATUS_CHIP,
   currentMonthKey,
@@ -169,6 +174,32 @@ function OriginTags({ d, admin }: { d: Deduction; admin: boolean }) {
           {marked}
         </span>
       )}
+    </div>
+  );
+}
+
+/** The reason for the fine, in the row itself, so nobody has to open the drawer to learn why. */
+function WhyNote({ d, admin }: { d: Deduction; admin: boolean }) {
+  const facts = seenFacts(d);
+  const manualReason = d.manualAbsent?.reason;
+  const device = d.attendance?.joinDevice;
+  if (facts.length === 0 && !manualReason) return null;
+  const dead = d.status === 'waived' || d.status === 'voided';
+  return (
+    <div className="mt-1.5 max-w-md text-[11px] leading-snug text-slate-600" data-testid="why-note">
+      <p className="font-semibold text-slate-700">
+        Why: {rowOrigin(d) === 'manual' ? 'marked absent' : RULE_REASON_TITLE[d.rule]}
+      </p>
+      {manualReason && <p>{manualReason}</p>}
+      {facts.map((f) => (
+        <p key={f}>{f}</p>
+      ))}
+      {device && (
+        <div className="mt-1">
+          <JoinDeviceChip device={device} />
+        </div>
+      )}
+      {!admin && !dead && <p className="mt-1 text-slate-500">{CONTACT_LINE}</p>}
     </div>
   );
 }
@@ -849,6 +880,7 @@ export default function DeductionsView() {
                                 </p>
                                 <p className="text-xs text-slate-500">{when}</p>
                                 <OriginTags d={d} admin={admin} />
+                                <WhyNote d={d} admin={admin} />
                                 <ResolutionNote d={d} />
                               </td>
                               {admin && <td className="whitespace-nowrap px-3 py-3 align-top text-slate-700">{d.bdaName || d.bdaEmail}</td>}
