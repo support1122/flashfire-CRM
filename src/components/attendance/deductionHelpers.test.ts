@@ -43,6 +43,18 @@ describe('seenFacts', () => {
     expect(facts).toMatch(/nobody from the BDA/);
   });
 
+  it('names the colleague who covered the meeting and says the fine is held for review', () => {
+    const d = {
+      ...missedActive,
+      status: 'needs_review',
+      attendance: null,
+      evidence: { ...missedActive.evidence, signals: [], coveredBy: [{ bdaEmail: 'rit@x', bdaName: 'Ritika', joinedAt: '2026-10-20T19:00:00.000Z', minutes: 20 }] },
+    } as typeof missedActive;
+    const facts = seenFacts(d).join(' ');
+    expect(facts).toMatch(/Ritika was in this meeting for about 20 minutes/);
+    expect(facts).toMatch(/held for review/);
+  });
+
   it('gives nothing for a manual mark, the person\'s own reason is shown instead', () => {
     expect(seenFacts(bookingManualEscalated)).toEqual([]);
   });

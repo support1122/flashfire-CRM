@@ -143,7 +143,14 @@ export default function DeductionEvidenceDrawer({ deduction: d, admin, onClose, 
           </span>
           {tier && <span className="text-xs text-slate-500">{tier}</span>}
         </div>
-        {d.status === 'needs_review' && (
+        {d.status === 'needs_review' && (d.evidence.coveredBy?.length ?? 0) > 0 && (
+          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid="covered-note">
+            {admin
+              ? 'A colleague was in this meeting instead of the assigned BDA. Waive it if the cover was agreed, or activate it if it was not.'
+              : 'A colleague was in this meeting instead of you, so an admin will check whether the cover was agreed. It is not counted in your total.'}
+          </p>
+        )}
+        {d.status === 'needs_review' && (d.evidence.coveredBy?.length ?? 0) === 0 && (
           <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
             {admin
               ? 'A data source was unhealthy when this was judged, so it does not count until an admin activates or waives it.'

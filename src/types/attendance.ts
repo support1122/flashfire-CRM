@@ -154,6 +154,8 @@ export interface Deduction {
     bookingStatus: string | null; // Status at rule evaluation time
     callSummary: Partial<CallSummary> | null; // Calls from the BDA (for no_show_not_called rule)
     clientName: string;
+    /** Colleagues the record shows in the meeting while the assigned BDA was not. Non-empty means the fine is held for review. */
+    coveredBy?: { bdaEmail: string; bdaName: string; joinedAt: string | null; minutes: number }[];
   };
   waivedBy: string | null; // Admin who waived (approved the fine)
   waivedByName: string | null;

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Loader2, X } from 'lucide-react';
-import { REASON_MAX, REASON_MIN, reasonProblem, resolveFocusTarget, type FocusTarget } from './deductionHelpers';
+import { REASON_MAX, REASON_MIN, absenceReasonProblem, reasonProblem, resolveFocusTarget, type FocusTarget } from './deductionHelpers';
 
 export type ReasonVariant = 'waive' | 'activate' | 'convert' | 'dismiss' | 'mark_absent' | 'report_absent' | 'reject_report';
 
@@ -103,7 +103,8 @@ export default function WaiveDialog({
   const statusId = useId();
 
   const trimmedLength = reason.trim().length;
-  const problem = reasonProblem(reason);
+  const absence = variant === 'mark_absent' || variant === 'report_absent';
+  const problem = (absence ? absenceReasonProblem : reasonProblem)(reason);
   // Guidance appears as soon as the admin types; it turns red once they leave the box or try to send.
   const showProblem = problem !== null && (touched || reason.length > 0);
   const flagged = problem !== null && (touched || trimmedLength > REASON_MAX);
@@ -219,7 +220,7 @@ export default function WaiveDialog({
               className={flagged ? 'font-medium text-red-700' : showProblem ? 'font-medium text-amber-700' : 'text-slate-500'}
               role={flagged ? 'alert' : undefined}
             >
-              {showProblem ? problem : `${REASON_MIN} to ${REASON_MAX} characters.`}
+              {showProblem ? problem : `${absence ? 10 : REASON_MIN} to ${REASON_MAX} characters.`}
             </p>
             <p
               className={`shrink-0 tabular-nums ${flagged ? 'font-semibold text-red-700' : 'text-slate-500'}`}

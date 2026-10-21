@@ -158,6 +158,9 @@ export function seenFacts(d: Deduction): string[] {
   if (rowOrigin(d) === 'manual') return [];
   const a = d.attendance;
   const facts: string[] = [];
+  for (const c of d.evidence.coveredBy ?? []) {
+    facts.push(`${c.bdaName || c.bdaEmail} was in this meeting${c.minutes > 0 ? ` for about ${c.minutes} minutes` : ''}${c.joinedAt ? `, joined at ${clock(c.joinedAt)}` : ''}. The meeting was not reassigned in the CRM, so it is held for review.`);
+  }
   if (d.rule === 'missed_meeting') {
     const signals = d.evidence.signals ?? [];
     if (signals.length === 0) facts.push('No presence signal arrived before the window closed, one minute after the start.');
@@ -446,6 +449,17 @@ export function reasonProblem(reason: string): string | null {
   if (len === 0) return `A reason is required (at least ${REASON_MIN} characters).`;
   if (len < REASON_MIN) return `Add ${REASON_MIN - len} more ${REASON_MIN - len === 1 ? 'character' : 'characters'} (minimum ${REASON_MIN}).`;
   if (len > REASON_MAX) return `Too long by ${len - REASON_MAX} ${len - REASON_MAX === 1 ? 'character' : 'characters'} (maximum ${REASON_MAX}).`;
+  return null;
+}
+
+/** Marking or reporting an absence needs a real sentence, the same rule as the server: 10 characters, 8 letters, 2 words. */
+export function absenceReasonProblem(reason: string): string | null {
+  const base = reasonProblem(reason);
+  if (base) return base;
+  const text = reason.trim();
+  const letters = (text.match(/\p{L}/gu) ?? []).length;
+  const words = text.split(/\s+/).filter((w) => /\p{L}/u.test(w)).length;
+  if (text.length < 10 || letters < 8 || words < 2) return 'Say what happened in a sentence (at least 10 characters), for example "Did not join and did not call the client".';
   return null;
 }
 
