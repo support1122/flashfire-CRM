@@ -16,6 +16,8 @@ import {
   type Handler,
 } from './attendanceAdminFixtures';
 import { pendingNew, pendingOld, report } from './absenceFixtures';
+import { DEFAULT_FILTERS, applyLedgerFilters, deriveTotals } from './deductionHelpers';
+import { formatInr } from './format';
 
 const auth = vi.hoisted(() => ({
   current: { token: 'tok', user: { email: 'x', name: 'x', permissions: [] as string[], role: 'bda' as string, isAdmin: false } },
@@ -356,6 +358,26 @@ describe('DeductionsView filters', () => {
     expect(rowsShown()).toBe(8);
   });
 
+  it('a date range re-totals the cards and the per-BDA table to that range only', async () => {
+    adminInstall();
+    renderView();
+    await screen.findByTestId('ledger-count');
+    const month = deriveTotals(adminRows);
+    expect(screen.getByTestId('total-active')).toHaveTextContent(formatInr(month.activeAmountInr));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Yesterday' }));
+    const day = deriveTotals(applyLedgerFilters(adminRows, { ...DEFAULT_FILTERS, from: '2026-10-07', to: '2026-10-07' }));
+    expect(day.activeAmountInr).toBeLessThan(month.activeAmountInr);
+    expect(screen.getByTestId('total-active')).toHaveTextContent(formatInr(day.activeAmountInr));
+    expect(screen.getByText(/Active, all BDAs, 7 Oct/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Per BDA, 7 Oct' })).toBeInTheDocument();
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent('The totals above cover 7 Oct');
+
+    // Other filters only narrow the table, the cards stay the range figure.
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'waived');
+    expect(screen.getByTestId('total-active')).toHaveTextContent(formatInr(day.activeAmountInr));
+  });
+
   it('filters by typed dates, offers only days of the month, and Clear filters resets them', async () => {
     adminInstall();
     renderView();
@@ -365,7 +387,7 @@ describe('DeductionsView filters', () => {
     expect(screen.getByLabelText('To date')).toHaveAttribute('max', '2026-10-31');
     await userEvent.type(from, '2026-10-06');
     expect(rowsShown()).toBeLessThan(8);
-    expect(screen.getByTestId('ledger-count')).toHaveTextContent('The totals above still cover the whole month');
+    expect(screen.getByTestId('ledger-count')).toHaveTextContent('The totals above cover from 6 Oct');
     await userEvent.click(screen.getAllByRole('button', { name: 'Clear filters' })[0]);
     expect(rowsShown()).toBe(8);
     expect(screen.getByLabelText('From date')).toHaveValue('');

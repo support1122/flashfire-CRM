@@ -144,3 +144,50 @@ export interface BdaProfileUpdate {
   addLeaveDays?: string[];
   removeLeaveDays?: string[];
 }
+
+/** One Calendly meeting a BDA could hand over (GET /api/crm/admin/transfer-meetings). */
+export interface TransferMeeting {
+  bookingId: string;
+  clientName: string;
+  bookingStatus: string | null;
+  scheduledStart: string;
+  /** IST day, YYYY-MM-DD. */
+  day: string;
+  /** false once the mark window has opened (start minus 5 minutes): the server refuses these. */
+  canMove: boolean;
+}
+
+export interface TransferBda {
+  email: string;
+  displayName: string;
+  /** Leave days inside the requested range. */
+  leaveDays: string[];
+  /** Meetings already assigned to them, per IST day. */
+  loadByDay: Record<string, number>;
+}
+
+export interface TransferCandidatesResponse {
+  success: true;
+  bdaEmail: string;
+  from: string;
+  to: string;
+  meetings: TransferMeeting[];
+  bdas: TransferBda[];
+}
+
+export interface TransferItemResult {
+  bookingId: string;
+  ok: boolean;
+  clientName: string;
+  assignedBdaEmail?: string | null;
+  previousEmail?: string | null;
+  /** e.g. "double_booked:Client name" */
+  warnings?: string[];
+  error?: { code: string; message: string };
+}
+
+export interface TransferBatchResponse {
+  success: true;
+  results: TransferItemResult[];
+  summary: { moved: number; failed: number };
+}

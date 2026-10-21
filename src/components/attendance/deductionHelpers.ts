@@ -227,6 +227,23 @@ export function deriveTotals(rows: Deduction[]): { byRule: RuleTotals; activeAmo
   return { byRule, activeAmountInr };
 }
 
+/** Active totals per BDA email, for the rows given. A BDA with no active row is simply absent. */
+export function deriveTotalsByBda(rows: Deduction[]): Map<string, { byRule: RuleTotals; activeAmountInr: number }> {
+  const groups = new Map<string, Deduction[]>();
+  for (const row of rows) groups.set(row.bdaEmail, [...(groups.get(row.bdaEmail) ?? []), row]);
+  return new Map([...groups].map(([email, list]) => [email, deriveTotals(list)]));
+}
+
+/** "12 Oct to 20 Oct", "from 12 Oct" or "up to 20 Oct" for a YYYY-MM-DD range. */
+export function dayRangeLabel(from: string, to: string): string {
+  const short = (day: string) => {
+    const [, m, d] = day.split('-').map(Number);
+    return `${d} ${MONTH_NAMES[(m || 1) - 1].slice(0, 3)}`;
+  };
+  if (from && to) return from === to ? short(from) : `${short(from)} to ${short(to)}`;
+  return from ? `from ${short(from)}` : `up to ${short(to)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Ledger filters and sorting (client side, over the month the server already returned)
 // ---------------------------------------------------------------------------

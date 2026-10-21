@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { CalendarDays, Check, Loader2, RefreshCw, X } from 'lucide-react';
+import { ArrowRightLeft, CalendarDays, Check, Loader2, RefreshCw, X } from 'lucide-react';
 import { useCrmAuth } from '../../auth/CrmAuthContext';
 import {
   useCancelLeaveRequest,
@@ -11,6 +11,10 @@ import type { LeaveRequest, LeaveStatus } from '../../types/leave';
 import { isCrmAdminUser, REASON_MAX, REASON_MIN, reasonProblem } from './deductionHelpers';
 import { formatInr } from './format';
 import LeaveDecisionDialog from './LeaveDecisionDialog';
+import TransferMeetingsDialog from './TransferMeetingsDialog';
+
+const istToday = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
 const STATUS_CHIP: Record<LeaveStatus, string> = {
   pending: 'bg-amber-100 text-amber-800',
@@ -159,12 +163,15 @@ function RequestCard({
   admin,
   onDecide,
   onCancel,
+  onTransfer,
   cancelling,
 }: {
   request: LeaveRequest;
   admin: boolean;
   onDecide: (r: LeaveRequest, decision: 'approve' | 'reject') => void;
   onCancel: (r: LeaveRequest) => void;
+  /** Opens the Transfer meetings dialog for this BDA and these days. Admins, on approved requests still ahead. */
+  onTransfer: (r: LeaveRequest, trigger: HTMLElement) => void;
   cancelling: boolean;
 }) {
   return (
@@ -241,6 +248,16 @@ function RequestCard({
                   } worth ${formatInr(request.waivedAmountInr)}.`}
             </span>
           )}
+          {admin && request.status === 'approved' && request.toDate >= istToday() && (
+            <button
+              type="button"
+              onClick={(e) => onTransfer(request, e.currentTarget)}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+            >
+              <ArrowRightLeft size={13} aria-hidden="true" />
+              Transfer their meetings
+            </button>
+          )}
         </div>
       )}
     </li>
@@ -254,6 +271,8 @@ export default function LeaveRequestsView() {
   const admin = isCrmAdminUser(user);
   const [filter, setFilter] = useState(admin ? 'pending' : 'all');
   const [dialog, setDialog] = useState<{ request: LeaveRequest; decision: 'approve' | 'reject' } | null>(null);
+  const [transfer, setTransfer] = useState<{ request: LeaveRequest; trigger: HTMLElement } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const query = useLeaveRequests(token, filter, '');
   const decide = useDecideLeaveRequest(token);
@@ -328,6 +347,7 @@ export default function LeaveRequestsView() {
                   admin={serverAdmin}
                   onDecide={(request, decision) => setDialog({ request, decision })}
                   onCancel={(request) => cancel.mutate(request.leaveRequestId)}
+                  onTransfer={(request, trigger) => setTransfer({ request, trigger })}
                   cancelling={cancel.isPending && cancel.variables === r.leaveRequestId}
                 />
               ))}
@@ -335,6 +355,22 @@ export default function LeaveRequestsView() {
           )}
         </div>
       </section>
+
+      {notice && (
+        <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900" data-testid="transfer-notice">{notice}</p>
+      )}
+
+      {transfer && (
+        <TransferMeetingsDialog
+          token={token}
+          defaultBdaEmail={transfer.request.bdaEmail}
+          defaultFrom={transfer.request.fromDate > istToday() ? transfer.request.fromDate : istToday()}
+          defaultTo={transfer.request.toDate}
+          returnFocusTo={transfer.trigger}
+          onClose={() => setTransfer(null)}
+          onDone={setNotice}
+        />
+      )}
 
       {dialog && (
         <LeaveDecisionDialog

@@ -14,6 +14,8 @@ import type {
   DeductionsResponse,
   DeductionSummaryResponse,
   ReviewQueuesResponse,
+  TransferBatchResponse,
+  TransferCandidatesResponse,
 } from '../types/attendanceAdmin';
 
 // Admin endpoints need PUT (for profile edits, deduction actions), which the shared crmRequest in ./attendance
@@ -178,6 +180,34 @@ export function useReassignBooking(token: string | null) {
         token,
         { method: 'PUT', body: { email } },
       ),
+    onSettled: invalidate,
+  });
+}
+
+export function useTransferCandidates(
+  token: string | null,
+  params: { bdaEmail: string; from: string; to: string },
+  enabled = true,
+) {
+  const { bdaEmail, from, to } = params;
+  return useQuery({
+    queryKey: ['attendance-admin', 'transfer', bdaEmail, from, to] as const,
+    enabled: enabled && Boolean(token) && Boolean(bdaEmail) && Boolean(from) && Boolean(to),
+    queryFn: ({ signal }) =>
+      adminRequest<TransferCandidatesResponse>(
+        `/api/crm/admin/transfer-meetings?bdaEmail=${encodeURIComponent(bdaEmail)}&from=${from}&to=${to}`,
+        token,
+        { signal },
+      ),
+  });
+}
+
+/** One call moves up to 50 meetings and answers per meeting. */
+export function useTransferMeetings(token: string | null) {
+  const invalidate = useInvalidateLedger();
+  return useMutation({
+    mutationFn: (items: { bookingId: string; email: string }[]) =>
+      adminRequest<TransferBatchResponse>('/api/crm/admin/bookings/reassign', token, { method: 'POST', body: { items } }),
     onSettled: invalidate,
   });
 }

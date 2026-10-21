@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardList, FileWarning, Flag, Info, Search, X, Loader2, RefreshCw, UserX } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardList, FileWarning, Flag, Info, Search, X, Loader2, RefreshCw, UserX, ArrowRightLeft } from 'lucide-react';
 import { useCrmAuth } from '../../auth/CrmAuthContext';
 import { useAbsenceReports } from '../../api/absence';
 import { useDeductionSummary, useDeductions, useResolveDeduction, useReviewQueues } from '../../api/attendanceAdmin';
@@ -9,6 +9,7 @@ import AbsenceNotice from './AbsenceNotice';
 import AbsenceReportsView from './AbsenceReportsView';
 import AttendanceReviewQueues from './AttendanceReviewQueues';
 import MarkAbsentDialog from './MarkAbsentDialog';
+import TransferMeetingsDialog from './TransferMeetingsDialog';
 import DeductionEvidenceDrawer from './DeductionEvidenceDrawer';
 import WaiveDialog from './WaiveDialog';
 import { JoinDeviceChip } from './AttendanceCells';
@@ -27,6 +28,9 @@ import {
   STATUS_CHIP,
   currentMonthKey,
   deriveTotals,
+  emptyRuleTotals,
+  deriveTotalsByBda,
+  dayRangeLabel,
   countsTowardsPay,
   isCrmAdminUser,
   monthLabel,
@@ -228,13 +232,20 @@ function TotalsCards({
   underReview,
   admin,
   filtered,
+  rangeText,
 }: {
   totals: ReturnType<typeof deriveTotals>;
   underReview: number;
   admin: boolean;
   filtered: boolean;
+  /** "12 Oct to 20 Oct" while a meeting date range is applied, else null for the whole month. */
+  rangeText: string | null;
 }) {
-  const label = admin ? (filtered ? 'Active for this BDA' : 'Active, all BDAs') : 'Deducted this month';
+  const label = admin
+    ? `${filtered ? 'Active for this BDA' : 'Active, all BDAs'}${rangeText ? `, ${rangeText}` : ''}`
+    : rangeText
+      ? `Deducted, ${rangeText}`
+      : 'Deducted this month';
   return (
     <section aria-label="Totals" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <div className="col-span-2 rounded-xl border border-slate-200 bg-white px-4 py-3 lg:col-span-1">
@@ -275,6 +286,7 @@ export default function DeductionsView() {
   const [bdaEmail, setBdaEmail] = useState('');
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [evidence, setEvidence] = useState<EvidenceState | null>(null);
+  const [transfer, setTransfer] = useState<{ bdaEmail: string; trigger: HTMLElement | null } | null>(null);
   const [filters, setFilters] = useState<LedgerFilters>(DEFAULT_FILTERS);
   const [absenceDialog, setAbsenceDialog] = useState<{ trigger: HTMLElement | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -301,14 +313,23 @@ export default function DeductionsView() {
   const statusCounts = useMemo(() => countByStatus(rows), [rows]);
   const filtered = hasActiveFilters(filters);
 
+  // A meeting date range changes the cards and the per-BDA table so they add up to what the range shows. The other
+  // filters (status, rule, search...) only narrow the table: the cards stay a clean month or range figure.
+  const ranged = filters.from !== '' || filters.to !== '';
+  const rangeRows = useMemo(
+    () => (ranged ? applyLedgerFilters(rows, { ...DEFAULT_FILTERS, from: filters.from, to: filters.to }) : rows),
+    [ranged, rows, filters.from, filters.to]
+  );
+  const rangeText = ranged ? dayRangeLabel(filters.from, filters.to) : monthLabel(month);
+
   const totals = useMemo(() => {
-    const derived = deriveTotals(rows);
-    if (!data?.totals) return derived;
+    const derived = deriveTotals(rangeRows);
+    if (ranged || !data?.totals) return derived;
     return {
       activeAmountInr: data.totals.activeAmountInr,
       byRule: { ...derived.byRule, ...data.totals.byRule },
     };
-  }, [data, rows]);
+  }, [data, rangeRows, ranged]);
 
   const underReview = rows.filter((r) => r.status === 'needs_review').length;
   const queueCount = queues.data
@@ -317,7 +338,15 @@ export default function DeductionsView() {
       queues.data.stuckStatus.length +
       queues.data.needsReassignment.length
     : 0;
-  const bdaOptions = summary.data?.perBda ?? [];
+  const bdaOptions = useMemo(() => {
+    const list = summary.data?.perBda ?? [];
+    if (!ranged) return list;
+    const byBda = deriveTotalsByBda(rangeRows);
+    return list.map((b) => {
+      const t = byBda.get(b.bdaEmail);
+      return { ...b, byRule: t?.byRule ?? emptyRuleTotals(), activeAmountInr: t?.activeAmountInr ?? 0 };
+    });
+  }, [summary.data, ranged, rangeRows]);
 
   const dialogSubject = dialog && {
     heading: `${RULE_LABEL[dialog.deduction.rule]}, ${formatInr(dialog.deduction.amountInr)}`,
@@ -353,6 +382,16 @@ export default function DeductionsView() {
             <UserX size={15} aria-hidden="true" />
             {admin ? 'Mark absent' : 'Report a missed call'}
           </button>
+          {admin && (
+            <button
+              type="button"
+              onClick={(e) => setTransfer({ bdaEmail: bdaEmail, trigger: e.currentTarget })}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-800"
+            >
+              <ArrowRightLeft size={15} aria-hidden="true" />
+              Transfer meetings
+            </button>
+          )}
         <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Month">
           <button
             type="button"
@@ -487,7 +526,7 @@ export default function DeductionsView() {
             </div>
           ) : (
             <>
-              <TotalsCards totals={totals} underReview={underReview} admin={admin} filtered={Boolean(bdaEmail)} />
+              <TotalsCards totals={totals} underReview={underReview} admin={admin} filtered={Boolean(bdaEmail)} rangeText={ranged ? rangeText : null} />
 
               {admin && summary.isError && (
                 <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
@@ -505,7 +544,7 @@ export default function DeductionsView() {
               {admin && !bdaEmail && bdaOptions.length > 0 && (
                 <section aria-labelledby="per-bda-heading" className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                   <h2 id="per-bda-heading" className="border-b border-slate-200 px-4 py-3 text-sm font-bold text-slate-900">
-                    Per BDA, {monthLabel(month)}
+                    Per BDA, {rangeText}
                   </h2>
                   <div className="relative overflow-x-auto">
                   <table className="w-full text-sm">
@@ -516,6 +555,7 @@ export default function DeductionsView() {
                           <th key={r} scope="col" className="px-4 py-2 text-right">{RULE_LABEL[r]}</th>
                         ))}
                         <th scope="col" className="px-4 py-2 text-right">Active total</th>
+                        <th scope="col" className="px-2 py-2"><span className="sr-only">Actions</span></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -547,6 +587,17 @@ export default function DeductionsView() {
                             );
                           })}
                           <td className="px-4 py-2 text-right font-bold tabular-nums text-slate-900">{formatInr(b.activeAmountInr)}</td>
+                          <td className="px-2 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={(e) => setTransfer({ bdaEmail: b.bdaEmail, trigger: e.currentTarget })}
+                              aria-label={`Transfer meetings of ${b.name || b.bdaEmail}`}
+                              title="Transfer this BDA's upcoming meetings"
+                              className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-orange-500"
+                            >
+                              <ArrowRightLeft size={14} aria-hidden="true" />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -805,7 +856,7 @@ export default function DeductionsView() {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                       <p role="status" aria-live="polite" className="text-xs text-slate-600" data-testid="ledger-count">
                         Showing {visibleRows.length} of {rows.length}
-                        {filtered ? '. The totals above still cover the whole month.' : ''}
+                        {ranged ? `. The totals above cover ${rangeText}.` : filtered ? '. The totals above still cover the whole month.' : ''}
                       </p>
                       {filtered && (
                         <button
@@ -960,6 +1011,15 @@ export default function DeductionsView() {
           returnFocusTo={absenceDialog.trigger}
           onClose={() => setAbsenceDialog(null)}
           onDone={(outcome) => setNotice(outcomeNotice(outcome))}
+        />
+      )}
+      {transfer && (
+        <TransferMeetingsDialog
+          token={token}
+          defaultBdaEmail={transfer.bdaEmail}
+          returnFocusTo={transfer.trigger}
+          onClose={() => setTransfer(null)}
+          onDone={setNotice}
         />
       )}
       {dialog && dialogSubject && (
