@@ -8,7 +8,7 @@ import type { DeductionsMode } from '../../types/attendanceAdmin';
 
 const LABEL: Record<DeductionsMode, string> = { live: 'Live', shadow: 'Shadow', off: 'Off' };
 const CONFIRM: Record<DeductionsMode, string> = {
-  live: 'Start real fines now? Meetings from this moment are fined per policy (₹500/₹1,000 missed, ₹100 no-show not called, ₹50 status not updated). Earlier meetings are never fined.',
+  live: 'Start real fines now? Meetings from this moment are fined per policy (₹500 per missed meeting, ₹100 no-show not called, ₹50 status not updated). Earlier meetings are never fined.',
   shadow: 'Switch to shadow mode? Rows are created for admins only and nobody is charged.',
   off: 'Turn fines off? No new deduction rows are created. Existing rows stay and can still be waived.',
 };

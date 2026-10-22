@@ -172,8 +172,8 @@ describe('DeductionsView as a BDA', () => {
     const summary = screen.getByText('How deductions work');
     const details = summary.closest('details') as HTMLDetailsElement;
     expect(details.open).toBe(false);
-    expect(details).toHaveTextContent('₹500 each for the first 5 misses');
-    expect(details).toHaveTextContent('₹1,000 each from the 6th');
+    expect(details).toHaveTextContent('₹500 each, however many in a month');
+    expect(details).toHaveTextContent('Meetings before 22 Oct 2026 were ₹500 for the first 5 misses of a month and ₹1,000 from the 6th');
     expect(details).toHaveTextContent('₹100');
     expect(details).toHaveTextContent('₹50');
   });

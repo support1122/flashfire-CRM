@@ -113,7 +113,8 @@ function PolicyDetails() {
       <div className="space-y-3 border-t border-slate-200 px-4 py-3 text-sm text-slate-700">
         <ul className="list-disc space-y-1.5 pl-5">
           <li>
-            <strong>Missed meeting:</strong> {formatInr(500)} each for the first 5 misses in a month, {formatInr(1000)} each from the 6th. You
+            <strong>Missed meeting:</strong> {formatInr(500)} each, however many in a month. (Meetings before 22 Oct 2026 were {formatInr(500)} for the
+            first 5 misses of a month and {formatInr(1000)} from the 6th, and those charges stay.) You
             are present if any signal reaches the server by one minute after the start: Mark Present in the CRM or the Meet page,
             the extension seeing you in the call, or Google Meet records.
           </li>

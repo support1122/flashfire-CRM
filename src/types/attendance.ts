@@ -145,7 +145,7 @@ export interface Deduction {
   rule: DeductionRule; // 'missed_meeting' | 'no_show_not_called' | 'status_not_updated'
   month: string; // YYYY-MM (IST calendar month the booking started in)
   amountInr: number; // Fine amount in INR (may be 0 if waived)
-  tierIndex: number | null; // Only for missed_meeting: 1-based tier (1st miss = 1, 6th+ = 6 and up; ₹1,000 from 6). The backend sets i + 1.
+  tierIndex: number | null; // Only for missed_meeting: 1-based count of the month's misses. Before 22 Oct 2026 the 6th and later cost ₹1,000; from that date every miss is ₹500. The backend sets i + 1.
   status: DeductionStatus; // 'shadow' | 'needs_review' | 'active' | 'waived' | 'voided'
   evidence: {
     scheduledStart: string;
@@ -156,6 +156,10 @@ export interface Deduction {
     clientName: string;
     /** Colleagues the record shows in the meeting while the assigned BDA was not. Non-empty means the fine is held for review. */
     coveredBy?: { bdaEmail: string; bdaName: string; joinedAt: string | null; minutes: number }[];
+    /** Shared team Google accounts (e.g. "FLASHFIRE") that were in the Meet roster. Also holds the fine for review. */
+    unattributedStaff?: { displayName: string | null }[];
+    /** When the BDA's own extension reported them in this meeting's call. Also holds the fine for review. */
+    extensionInCall?: { firstAt: string; lastAt: string } | null;
   };
   waivedBy: string | null; // Admin who waived (approved the fine)
   waivedByName: string | null;

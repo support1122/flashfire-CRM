@@ -161,6 +161,12 @@ export function seenFacts(d: Deduction): string[] {
   for (const c of d.evidence.coveredBy ?? []) {
     facts.push(`${c.bdaName || c.bdaEmail} was in this meeting${c.minutes > 0 ? ` for about ${c.minutes} minutes` : ''}${c.joinedAt ? `, joined at ${clock(c.joinedAt)}` : ''}. The meeting was not reassigned in the CRM, so it is held for review.`);
   }
+  for (const s of d.evidence.unattributedStaff ?? []) {
+    facts.push(`A shared team account${s.displayName ? ` ("${s.displayName}")` : ''} was in this meeting, so someone from the team attended. It could not be matched to one BDA, so the fine is held for review.`);
+  }
+  if (d.evidence.extensionInCall) {
+    facts.push(`The BDA's own extension reported them in this meeting's call at ${clock(d.evidence.extensionInCall.firstAt)}, so the fine is held for review.`);
+  }
   if (d.rule === 'missed_meeting') {
     const signals = d.evidence.signals ?? [];
     if (signals.length === 0) facts.push('No presence signal arrived before the window closed, one minute after the start.');
@@ -307,7 +313,7 @@ export const RAISED_BY_LABEL: Record<DeductionOrigin, string> = {
 
 export const AMOUNT_LABEL: Record<Exclude<AmountFilter, 'all'>, string> = {
   tier1: 'Tier 1, ₹500',
-  escalated: 'Escalated, ₹1,000 or more',
+  escalated: 'Escalated, ₹1,000 or more (before 22 Oct 2026)',
 };
 
 /** Rows from before the absence feature carry neither field; they are automatic Calendly fines. */

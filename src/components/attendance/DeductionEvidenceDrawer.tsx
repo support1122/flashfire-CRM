@@ -143,6 +143,13 @@ export default function DeductionEvidenceDrawer({ deduction: d, admin, onClose, 
           </span>
           {tier && <span className="text-xs text-slate-500">{tier}</span>}
         </div>
+        {d.status === 'needs_review' && (d.evidence.unattributedStaff?.length ?? 0) + (d.evidence.extensionInCall ? 1 : 0) > 0 && (d.evidence.coveredBy?.length ?? 0) === 0 && (
+          <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid="attended-note">
+            {admin
+              ? 'The record suggests the meeting was attended (a shared team account or the BDA extension was in the call). Waive it if it was, or activate it if it was not.'
+              : 'The record suggests this meeting was attended, so an admin will check it. It is not counted in your total.'}
+          </p>
+        )}
         {d.status === 'needs_review' && (d.evidence.coveredBy?.length ?? 0) > 0 && (
           <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900" data-testid="covered-note">
             {admin
@@ -150,7 +157,7 @@ export default function DeductionEvidenceDrawer({ deduction: d, admin, onClose, 
               : 'A colleague was in this meeting instead of you, so an admin will check whether the cover was agreed. It is not counted in your total.'}
           </p>
         )}
-        {d.status === 'needs_review' && (d.evidence.coveredBy?.length ?? 0) === 0 && (
+        {d.status === 'needs_review' && (d.evidence.coveredBy?.length ?? 0) === 0 && (d.evidence.unattributedStaff?.length ?? 0) === 0 && !d.evidence.extensionInCall && (
           <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
             {admin
               ? 'A data source was unhealthy when this was judged, so it does not count until an admin activates or waives it.'

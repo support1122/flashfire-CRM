@@ -55,6 +55,14 @@ describe('seenFacts', () => {
     expect(facts).toMatch(/held for review/);
   });
 
+  it('explains a hold for a shared team account or the extension reporting the BDA in the call', () => {
+    const base = { ...missedActive, status: 'needs_review', attendance: null } as typeof missedActive;
+    const staff = seenFacts({ ...base, evidence: { ...base.evidence, signals: [], unattributedStaff: [{ displayName: 'FLASHFIRE' }] } } as typeof missedActive).join(' ');
+    expect(staff).toMatch(/shared team account \("FLASHFIRE"\) was in this meeting/);
+    const ext = seenFacts({ ...base, evidence: { ...base.evidence, signals: [], extensionInCall: { firstAt: '2026-10-20T19:00:00.000Z', lastAt: '2026-10-20T19:20:00.000Z' } } } as typeof missedActive).join(' ');
+    expect(ext).toMatch(/own extension reported them in this meeting's call/);
+  });
+
   it('gives nothing for a manual mark, the person\'s own reason is shown instead', () => {
     expect(seenFacts(bookingManualEscalated)).toEqual([]);
   });
