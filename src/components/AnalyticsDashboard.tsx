@@ -21,6 +21,7 @@ import {
   Lock,
 } from 'lucide-react';
 import NotesModal from './NotesModal';
+import FunnelTable from './FunnelTable';
 import { validatePostMeetingBookingStatus } from '../utils/postMeetingStatus';
 import { isStatusLockedForUser, statusLockMessage } from '../utils/statusLock';
 import {
@@ -888,6 +889,8 @@ export default function AnalyticsDashboard({ onOpenEmailCampaign }: AnalyticsDas
         ))}
       </div>
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-10 space-y-10">
+      <FunnelTable />
+
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h3 className="text-sm uppercase tracking-wide text-slate-500 font-semibold mb-2">Analytics Overview</h3>
