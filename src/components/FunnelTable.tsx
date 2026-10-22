@@ -17,11 +17,14 @@ interface FunnelRow {
   completed: number;
   noShow: number;
   paid: number;
+  paidUsd: number;
   revenue: number;
+  otherRevenue: Record<string, number>;
 }
 
 interface FunnelResponse {
   view: View;
+  stripeError?: string | null;
   timezone: string;
   from: string | null;
   to: string | null;
@@ -38,6 +41,12 @@ const VIEWS: Array<{ id: View; label: string }> = [
 
 const pct = (num: number, den: number) => (den > 0 ? (num / den) * 100 : null);
 const money = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`;
+const CURRENCY_SYMBOLS: Record<string, string> = { GBP: '£', EUR: '€', INR: '₹', CAD: 'C$', AUD: 'A$' };
+const otherMoney = (o: Record<string, number>) =>
+  Object.entries(o)
+    .filter(([, v]) => v > 0)
+    .map(([c, v]) => `${CURRENCY_SYMBOLS[c] ?? `${c} `}${Math.round(v).toLocaleString('en-US')}`)
+    .join(' · ');
 
 const todayIso = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 const daysAgoIso = (n: number) => {
@@ -100,7 +109,7 @@ export default function FunnelTable() {
 
   const renderRow = (r: Omit<FunnelRow, 'key' | 'label'> & { key?: string; label: string }, isTotal = false) => {
     const due = r.attended + r.noShow; // calls that actually came due
-    const avgDeal = r.paid > 0 ? r.revenue / r.paid : null;
+    const avgDeal = r.paidUsd > 0 ? r.revenue / r.paidUsd : null;
     const perLead = r.forms > 0 ? r.revenue / r.forms : null;
     return (
       <tr
@@ -118,7 +127,10 @@ export default function FunnelTable() {
         <td className="px-3 py-2 text-right tabular-nums text-slate-700">
           {pct(r.paid, r.forms) === null ? '–' : `${pct(r.paid, r.forms)!.toFixed(1)}%`}
         </td>
-        <td className="px-3 py-2 text-right tabular-nums text-slate-900">{money(r.revenue)}</td>
+        <td className="px-3 py-2 text-right tabular-nums text-slate-900">
+          {money(r.revenue)}
+          {otherMoney(r.otherRevenue) && <div className="text-[11px] font-normal text-slate-400">+ {otherMoney(r.otherRevenue)}</div>}
+        </td>
         <td className="px-3 py-2 text-right tabular-nums text-slate-600">{avgDeal === null ? '–' : money(avgDeal)}</td>
         <td className="px-3 py-2 text-right tabular-nums text-slate-600">{perLead === null ? '–' : money(perLead)}</td>
       </tr>
@@ -130,14 +142,14 @@ export default function FunnelTable() {
     ['Form fills', 'text-right', 'People who filled any form: the website signup form or a Meta / other lead form. Counted once per email, on their first form date. Leads whose bookings are all marked Ignored are left out.'],
     ['Scheduled', 'text-right', 'Form fills who booked a call. Status is anything except Not-scheduled (Scheduled, Rescheduled, Completed, Paid, No-show or Canceled).\n% = share of Form fills.'],
     ['Canceled', 'text-right', 'Scheduled leads who never attended and never no-showed, and whose latest booking status is Canceled.\n% = share of Scheduled.'],
-    ['Attended', 'text-right', 'Leads whose call happened. Status is Completed or Paid.\n% = share of calls that came due (Attended + No-show). Future and canceled calls are not in that base.'],
-    ['Completed', 'text-right', 'Attended leads who have NOT paid. Status is Completed (and not Paid). Attended = Completed + Paid.\n% = share of Attended.'],
+    ['Attended', 'text-right', 'Leads whose call happened. Booking status is Completed or Paid.\n% = share of calls that came due (Attended + No-show). Future and canceled calls are not in that base.'],
+    ['Completed', 'text-right', 'Leads whose booking status is Completed (call done, not yet marked Paid by the rep).\n% = share of Attended.'],
     ['No-show', 'text-right', 'Leads who never attended and have a booking with status No-show.\n% = no-show rate, share of calls that came due (Attended + No-show).'],
-    ['Paid', 'text-right', 'Leads whose booking status is Paid.\n% = share of Attended.'],
-    ['Form → Paid', 'text-right', 'Overall conversion: Paid ÷ Form fills.'],
-    ['Revenue', 'text-right', 'Sum of the plan price (or payment breakdown) of Paid bookings.'],
-    ['Avg deal', 'text-right', 'Revenue ÷ Paid.'],
-    ['Revenue / lead', 'text-right', 'Revenue ÷ Form fills.'],
+    ['Paid', 'text-right', 'Number of paying payments in the period from STRIPE (succeeded charges + manual payments, by payment date; add-ons and upgrades excluded). Same as the Stripe Data tab.\n% = Paid ÷ Attended in the same period.'],
+    ['Form → Paid', 'text-right', 'Paid (Stripe payments in the period) ÷ Form fills in the same period.'],
+    ['Revenue', 'text-right', 'Stripe revenue in the period by payment date. Big number = USD payments; the small grey line lists payments in other currencies (not converted).'],
+    ['Avg deal', 'text-right', 'USD revenue ÷ number of USD payments.'],
+    ['Revenue / lead', 'text-right', 'USD revenue ÷ Form fills.'],
   ];
 
   return (
@@ -146,8 +158,8 @@ export default function FunnelTable() {
         <div>
           <h3 className="text-lg font-semibold text-slate-900">Sales Funnel</h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Leads grouped by the day they filled the form (ET). Small % = share of the previous step; Attended / No-show
-            are out of calls that came due. Completed = attended but not yet paid (Attended = Completed + Paid).
+            Leads grouped by the day they filled the form (ET); Paid and Revenue come from Stripe by payment date. Small % = share of the previous step; Attended / No-show
+            are out of calls that came due.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -175,6 +187,11 @@ export default function FunnelTable() {
         </div>
       </div>
 
+      {data?.stripeError && (
+        <div className="mx-5 mt-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700">
+          Stripe payments could not be loaded ({data.stripeError}), so Paid and Revenue show 0.
+        </div>
+      )}
       {error && <div className="m-5 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-600">{error}</div>}
 
       <div className="overflow-x-auto">
