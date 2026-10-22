@@ -70,6 +70,7 @@ export default function FunnelTable() {
   const [data, setData] = useState<FunnelResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -124,19 +125,19 @@ export default function FunnelTable() {
     );
   };
 
-  const headers = [
-    ['Period', 'text-left'],
-    ['Form fills', 'text-right'],
-    ['Scheduled', 'text-right'],
-    ['Canceled', 'text-right'],
-    ['Attended', 'text-right'],
-    ['Completed', 'text-right'],
-    ['No-show', 'text-right'],
-    ['Paid', 'text-right'],
-    ['Form → Paid', 'text-right'],
-    ['Revenue', 'text-right'],
-    ['Avg deal', 'text-right'],
-    ['Revenue / lead', 'text-right'],
+  const headers: Array<[string, string, string]> = [
+    ['Period', 'text-left', 'The day (month, quarter) the lead FIRST filled a form, in ET. Every other column follows those same leads.'],
+    ['Form fills', 'text-right', 'People who filled any form: the website signup form or a Meta / other lead form. Counted once per email, on their first form date. Leads whose bookings are all marked Ignored are left out.'],
+    ['Scheduled', 'text-right', 'Form fills who booked a call. Status is anything except Not-scheduled (Scheduled, Rescheduled, Completed, Paid, No-show or Canceled).\n% = share of Form fills.'],
+    ['Canceled', 'text-right', 'Scheduled leads who never attended and never no-showed, and whose latest booking status is Canceled.\n% = share of Scheduled.'],
+    ['Attended', 'text-right', 'Leads whose call happened. Status is Completed or Paid.\n% = share of calls that came due (Attended + No-show). Future and canceled calls are not in that base.'],
+    ['Completed', 'text-right', 'Attended leads who have NOT paid. Status is Completed (and not Paid). Attended = Completed + Paid.\n% = share of Attended.'],
+    ['No-show', 'text-right', 'Leads who never attended and have a booking with status No-show.\n% = no-show rate, share of calls that came due (Attended + No-show).'],
+    ['Paid', 'text-right', 'Leads whose booking status is Paid.\n% = share of Attended.'],
+    ['Form → Paid', 'text-right', 'Overall conversion: Paid ÷ Form fills.'],
+    ['Revenue', 'text-right', 'Sum of the plan price (or payment breakdown) of Paid bookings.'],
+    ['Avg deal', 'text-right', 'Revenue ÷ Paid.'],
+    ['Revenue / lead', 'text-right', 'Revenue ÷ Form fills.'],
   ];
 
   return (
@@ -180,8 +181,18 @@ export default function FunnelTable() {
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
-              {headers.map(([h, align]) => (
-                <th key={h} className={`px-3 py-2 font-semibold whitespace-nowrap ${align}`}>{h}</th>
+              {headers.map(([h, align, help]) => (
+                <th
+                  key={h}
+                  className={`px-3 py-2 font-semibold whitespace-nowrap cursor-help ${align}`}
+                  onMouseEnter={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setTip({ text: help, x: Math.min(Math.max(r.left + r.width / 2, 150), window.innerWidth - 150), y: r.bottom + 6 });
+                  }}
+                  onMouseLeave={() => setTip(null)}
+                >
+                  <span className="border-b border-dotted border-slate-400">{h}</span>
+                </th>
               ))}
             </tr>
           </thead>
@@ -194,6 +205,14 @@ export default function FunnelTable() {
           </tbody>
         </table>
       </div>
+      {tip && (
+        <div
+          className="fixed z-50 w-72 -translate-x-1/2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-normal normal-case tracking-normal text-white shadow-lg whitespace-pre-line pointer-events-none"
+          style={{ left: tip.x, top: tip.y }}
+        >
+          {tip.text}
+        </div>
+      )}
     </section>
   );
 }
