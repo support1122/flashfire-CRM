@@ -91,7 +91,7 @@ describe('MarkAbsentDialog as an admin', () => {
     await within(dialog).findByRole('checkbox', { name: /Select all/ });
     const boxes = within(dialog).getAllByRole('checkbox');
     expect(boxes).toHaveLength(4); // two calls, "select all" and the admin-only "Fine anyway"
-    expect(within(dialog).getByRole('checkbox', { name: /Select all 2 shown/ })).not.toBeChecked();
+    expect(within(dialog).getByRole('checkbox', { name: /Select all 2 that can be marked/ })).not.toBeChecked();
     expect(within(dialog).getByText(/Wed, Oct 7, 3:00 PM IST/)).toBeInTheDocument();
     expect(within(dialog).getByText('Siddhartha · Wed, Oct 7, 3:00 PM IST')).toBeInTheDocument();
     expect(within(dialog).getByTestId('candidates-count')).toHaveTextContent('2 calls found');
@@ -225,6 +225,21 @@ describe('MarkAbsentDialog as an admin', () => {
     expect(within(dialog).getByLabelText('To date')).toHaveAttribute('max');
   });
 
+  it('lists calls that cannot be marked, greyed out with the reason, and leaves them out of select all', async () => {
+    const fined: AbsenceCandidate = { ...candidateAllocation2, refId: 'alloc_fined', clientName: 'Already Done', blockedReason: 'fined' };
+    const canceled: AbsenceCandidate = { ...candidateAllocation2, refId: 'alloc_cx', clientName: 'Called Off', blockedReason: 'canceled' };
+    install({ ...routes(), 'GET /api/crm/absences/candidates': candidatesFor([candidateAllocation, fined, canceled]) });
+    renderDialog({ admin: true });
+    const dialog = await screen.findByRole('dialog', { name: /mark absent/i });
+    await within(dialog).findByText(/Already Done/);
+    expect(within(dialog).getAllByTestId('blocked-chip').map((e) => e.textContent)).toEqual(['Already fined', 'Canceled']);
+    expect(within(dialog).getByRole('checkbox', { name: /Already Done/ })).toBeDisabled();
+    expect(within(dialog).getByTestId('candidates-count')).toHaveTextContent('3 calls found, 1 can be marked');
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /Select all 1 that can be marked/ }));
+    expect(within(dialog).getByRole('checkbox', { name: /Select all 1 that can be marked/ })).toBeChecked();
+    expect(within(dialog).getByRole('checkbox', { name: /Already Done/ })).not.toBeChecked();
+  });
+
   it('shows an empty state with the 30 day rule', async () => {
     install({ ...routes(), 'GET /api/crm/absences/candidates': candidatesFor([]) });
     renderDialog({ admin: true });
@@ -261,7 +276,7 @@ describe('MarkAbsentDialog with several calls', () => {
     const calls = setup();
     const { onDone } = renderDialog({ admin: true });
     const dialog = await screen.findByRole('dialog');
-    const selectAll = await within(dialog).findByRole('checkbox', { name: /Select all 2 shown/ });
+    const selectAll = await within(dialog).findByRole('checkbox', { name: /Select all 2 that can be marked/ });
     await userEvent.click(selectAll);
     expect(selectAll).toBeChecked();
     expect(within(dialog).getByTestId('candidate-selected')).toHaveTextContent('2 calls selected');
@@ -282,7 +297,7 @@ describe('MarkAbsentDialog with several calls', () => {
     setup();
     renderDialog({ admin: true });
     const dialog = await screen.findByRole('dialog');
-    const selectAll = await within(dialog).findByRole('checkbox', { name: /Select all 2 shown/ });
+    const selectAll = await within(dialog).findByRole('checkbox', { name: /Select all 2 that can be marked/ });
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /Tomasz/ }));
     expect((selectAll as HTMLInputElement).indeterminate).toBe(true);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Clear' }));

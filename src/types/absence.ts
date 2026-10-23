@@ -19,6 +19,8 @@ export interface AbsenceCandidate {
   callStart: string;
   /** true when the call has not started yet. Only admins are ever sent these. */
   upcoming?: boolean;
+  /** Why this call cannot be marked, or null when it can. Blocked calls are still listed so nothing looks missing. */
+  blockedReason?: 'fined' | 'reported' | 'leave' | 'canceled' | 'rescheduled' | null;
   detail: string | null;
   /** Lead Allocation calls only: what the Zoom call log says. */
   callCheck?: CallCheck | null;

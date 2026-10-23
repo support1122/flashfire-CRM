@@ -55,6 +55,14 @@ function AdminBdaSelect({ token, value, onChange }: { token: string | null; valu
   );
 }
 
+const BLOCKED_LABEL: Record<NonNullable<AbsenceCandidate['blockedReason']>, string> = {
+  fined: 'Already fined',
+  reported: 'Report open',
+  leave: 'On leave',
+  canceled: 'Canceled',
+  rescheduled: 'Rescheduled',
+};
+
 function CallPicker({
   token,
   admin,
@@ -82,7 +90,8 @@ function CallPicker({
   const aheadLimit = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(Date.now() + 7 * 86_400_000));
   const backwards = Boolean(from && to && from > to);
   const query = useAbsenceCandidates(token, { kind, bdaEmail: admin ? bdaEmail : '', q, from, to }, !backwards);
-  const candidates = query.data?.candidates ?? [];
+  const listed = query.data?.candidates ?? [];
+  const candidates = listed.filter((c) => !c.blockedReason);
   const shownSelected = candidates.filter((c) => selected.has(candidateKey(c))).length;
   const allShown = candidates.length > 0 && shownSelected === candidates.length;
   const atLimit = selected.size >= BATCH_MAX;
@@ -210,13 +219,13 @@ function CallPicker({
               Try again
             </button>
           </div>
-        ) : candidates.length === 0 ? (
+        ) : listed.length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center" data-testid="candidates-empty">
             <p className="text-sm font-semibold text-slate-800">
               {q ? `No ${KIND_LABEL[kind].toLowerCase()} matches "${q}"` : `No ${KIND_LABEL[kind].toLowerCase()} to mark`}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              {admin ? 'Calls from the last 30 days, and the rest of today, appear here. Pick a later To date (up to a week ahead) to mark a call in advance. ' : 'Only calls from the last 30 days appear here. '}Calls that already have a fine or a report are left out.
+              {admin ? 'Calls from the last 30 days, and the rest of today, appear here. Pick a later To date (up to a week ahead) to see calls that have not happened yet.' : 'Only calls from the last 30 days appear here.'}
             </p>
           </div>
         ) : (
@@ -224,17 +233,18 @@ function CallPicker({
             <legend className="sr-only">Choose the calls</legend>
             <label className="mb-1 flex cursor-pointer items-center gap-2 text-xs font-semibold text-slate-700 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-orange-500">
               <input ref={allRef} type="checkbox" checked={allShown} onChange={toggleAllShown} className="accent-orange-600" />
-              Select all {candidates.length} shown
+              Select all {candidates.length} that can be marked
             </label>
             <ul className={`max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 ${settling || query.isFetching ? 'opacity-60' : ''}`}>
-              {candidates.map((c) => {
+              {listed.map((c) => {
                 const checked = selected.has(candidateKey(c));
-                const blocked = !checked && atLimit;
+                const why = c.blockedReason ? BLOCKED_LABEL[c.blockedReason] : null;
+                const blocked = Boolean(why) || (!checked && atLimit);
                 return (
                   <li key={`${c.kind}-${c.refId}`}>
                     <label
                       className={`flex items-start gap-3 px-3 py-2.5 ${blocked ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-orange-500 ${
-                        checked ? 'bg-orange-50' : 'hover:bg-slate-50'
+                        checked ? 'bg-orange-50' : why ? '' : 'hover:bg-slate-50'
                       }`}
                     >
                       <input
@@ -249,6 +259,11 @@ function CallPicker({
                         <span className="block text-xs text-slate-600">
                           {admin && c.bdaName ? `${c.bdaName} · ` : ''}
                           {istTime(c.callStart)}
+                          {why && (
+                            <span className="ml-2 inline-flex rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700" data-testid="blocked-chip">
+                              {why}
+                            </span>
+                          )}
                           {c.upcoming && (
                             <span className="ml-2 inline-flex rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-semibold text-sky-800" data-testid="upcoming-chip">
                               Upcoming
@@ -266,7 +281,9 @@ function CallPicker({
           </fieldset>
         )}
         <p role="status" aria-live="polite" className="mt-1.5 text-xs text-slate-500" data-testid="candidates-count">
-          {query.isSuccess ? `${candidates.length} ${candidates.length === 1 ? 'call' : 'calls'} found` : ''}
+          {query.isSuccess
+            ? `${listed.length} ${listed.length === 1 ? 'call' : 'calls'} found${listed.length > candidates.length ? `, ${candidates.length} can be marked` : ''}`
+            : ''}
         </p>
       </div>
 
