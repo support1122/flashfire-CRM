@@ -17,7 +17,7 @@ import {
 } from './attendanceAdminFixtures';
 import { pendingNew, pendingOld, report } from './absenceFixtures';
 import { DEFAULT_FILTERS, applyLedgerFilters, deriveTotals } from './deductionHelpers';
-import { formatInr } from './format';
+import { fmtTime, fmtWeekdayDate, formatInr } from './format';
 
 const auth = vi.hoisted(() => ({
   current: { token: 'tok', user: { email: 'x', name: 'x', permissions: [] as string[], role: 'bda' as string, isAdmin: false } },
@@ -146,6 +146,26 @@ describe('DeductionsView as a BDA', () => {
     expect(within(row).getByText(/Waived by/)).toHaveTextContent('Sohith');
     expect(within(row).getByText(/Power cut at the BDA home/)).toBeInTheDocument();
     expect(row.querySelector('.line-through')).not.toBeNull();
+  });
+
+  it('shows the absence date and time in their own Absent on column, muted when resolved', async () => {
+    renderView();
+    await screen.findByTestId('total-active');
+    expect(screen.getByRole('columnheader', { name: 'Absent on' })).toHaveAttribute('scope', 'col');
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers.indexOf('Absent on')).toBe(headers.indexOf('Meeting') + 1);
+
+    const start = '2026-10-05T10:00:00.000Z';
+    const row = screen.getByText('Rohan Deshpande').closest('tr') as HTMLElement;
+    const cell = within(row).getByTestId('absent-on');
+    expect(cell).toHaveTextContent(fmtWeekdayDate(start));
+    expect(cell).toHaveTextContent(fmtTime(start));
+    expect(cell.querySelector('.line-through')).not.toBeNull();
+    // The Meeting cell no longer repeats the date.
+    expect(within(row).getByText('Rohan Deshpande').closest('td')).not.toHaveTextContent(fmtTime(start));
+
+    const activeRow = screen.getByText('Ananya Krishnamurthy').closest('tr') as HTMLElement;
+    expect(within(activeRow).getByTestId('absent-on').querySelector('.line-through')).toBeNull();
   });
 
   it('shows the Fines are not active yet banner in shadow and off mode, and none when live', async () => {

@@ -20,6 +20,26 @@ export function fmtDay(iso: string | null | undefined): string {
   }
 }
 
+/** "Wed, 21 Oct 2026". Returns "-" for missing or bad input. */
+export function fmtWeekdayDate(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  try {
+    return format(parseISO(iso), 'EEE, d MMM yyyy');
+  } catch {
+    return '-';
+  }
+}
+
+/** "4:29 PM". Returns "-" for missing or bad input. */
+export function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return '-';
+  try {
+    return format(parseISO(iso), 'h:mm a');
+  } catch {
+    return '-';
+  }
+}
+
 export function fmtDayTime(iso: string | null | undefined): string {
   if (!iso) return '-';
   try {

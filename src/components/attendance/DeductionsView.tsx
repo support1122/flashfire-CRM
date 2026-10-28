@@ -55,7 +55,7 @@ import {
   type SourceFilter,
   type StatusFilter,
 } from './deductionHelpers';
-import { RULE_LABEL, fmtDayTime, formatInr } from './format';
+import { RULE_LABEL, fmtDayTime, fmtTime, fmtWeekdayDate, formatInr } from './format';
 
 type View = 'ledger' | 'queues' | 'absences';
 
@@ -902,6 +902,7 @@ export default function DeductionsView() {
                       <thead className="bg-slate-50 text-left text-xs font-semibold text-slate-600">
                         <tr>
                           <th scope="col" className="min-w-60 px-3 py-2.5">Meeting</th>
+                          <th scope="col" className="whitespace-nowrap px-3 py-2.5">Absent on</th>
                           {admin && <th scope="col" className="px-3 py-2.5">BDA</th>}
                           <th scope="col" className="px-3 py-2.5">Rule</th>
                           <th scope="col" className="px-3 py-2.5 text-right">Amount</th>
@@ -930,10 +931,15 @@ export default function DeductionsView() {
                                 <p className={`font-medium ${resolved ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
                                   {d.clientName}
                                 </p>
-                                <p className="text-xs text-slate-500">{when}</p>
                                 <OriginTags d={d} admin={admin} />
                                 <WhyNote d={d} admin={admin} />
                                 <ResolutionNote d={d} />
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3 align-top" data-testid="absent-on">
+                                <p className={`font-semibold ${resolved ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
+                                  {fmtWeekdayDate(d.evidence.scheduledStart)}
+                                </p>
+                                <p className="text-xs text-slate-500">{fmtTime(d.evidence.scheduledStart)}</p>
                               </td>
                               {admin && <td className="whitespace-nowrap px-3 py-3 align-top text-slate-700">{d.bdaName || d.bdaEmail}</td>}
                               <td className="min-w-36 px-3 py-3 align-top">
