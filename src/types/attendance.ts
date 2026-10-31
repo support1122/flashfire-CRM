@@ -142,6 +142,8 @@ export interface Deduction {
   bdaName: string;
   bookingId: string;
   clientName: string;
+  /** The shift day the meeting belongs to (YYYY-MM-DD, IST), set by the server. Use it for "which day", not the start's calendar date. */
+  workDay?: string | null;
   rule: DeductionRule; // 'missed_meeting' | 'no_show_not_called' | 'status_not_updated'
   month: string; // YYYY-MM (IST calendar month the booking started in)
   amountInr: number; // Fine amount in INR (may be 0 if waived)

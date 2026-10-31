@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Loader2, RefreshCw, Search } from 'lucide-react';
+import { istDateKey, fmtWorkDay } from './format';
 import { useAbsenceCandidates, useCreateAbsence, useCreateAbsenceBatch } from '../../api/absence';
 import { useTrackedBdas } from '../../api/attendanceAdmin';
 import type { AbsenceCandidate, AbsenceKind, AbsenceOutcome } from '../../types/absence';
@@ -259,6 +260,7 @@ function CallPicker({
                         <span className="block text-xs text-slate-600">
                           {admin && c.bdaName ? `${c.bdaName} · ` : ''}
                           {istTime(c.callStart)}
+                          {c.workDay && istDateKey(c.callStart) !== c.workDay && ` (shift of ${fmtWorkDay(c.workDay)})`}
                           {why && (
                             <span className="ml-2 inline-flex rounded bg-slate-200 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700" data-testid="blocked-chip">
                               {why}
@@ -333,21 +335,19 @@ function CallPicker({
  */
 export default function MarkAbsentDialog({ token, admin, target, defaultBdaEmail = '', returnFocusTo, onClose, onDone }: MarkAbsentDialogProps) {
   const [picked, setPicked] = useState<Map<string, AbsenceCandidate>>(new Map());
-  // Admin only: mark the call even if attendance shows the BDA joined. Off by default, and the server refuses without it.
-  const [force, setForce] = useState(false);
   const create = useCreateAbsence(token);
   const createMany = useCreateAbsenceBatch(token);
   const count = target ? 1 : picked.size;
 
   async function submit(reason: string) {
     if (target) {
-      const { report } = await withFriendlyError(create.mutateAsync({ kind: target.kind, refId: target.refId, reason, ...(admin && force ? { force: true } : {}) }));
+      const { report } = await withFriendlyError(create.mutateAsync({ kind: target.kind, refId: target.refId, reason }));
       onDone({ saved: [report], failed: [] });
       return;
     }
     if (picked.size === 0) throw new Error('Choose at least one call first.');
     const items = [...picked.values()];
-    const res = await withFriendlyError(createMany.mutateAsync({ items: items.map((c) => ({ kind: c.kind, refId: c.refId })), reason, ...(admin && force ? { force: true } : {}) }));
+    const res = await withFriendlyError(createMany.mutateAsync({ items: items.map((c) => ({ kind: c.kind, refId: c.refId })), reason }));
     const names = new Map(items.map((c) => [candidateKey(c), c.clientName]));
     const saved = res.results.flatMap((r) => (r.ok && r.report ? [r.report] : []));
     const failed = res.results.flatMap((r) =>
@@ -382,14 +382,6 @@ export default function MarkAbsentDialog({ token, admin, target, defaultBdaEmail
       size={target ? 'md' : 'lg'}
     >
       {!target && <CallPicker token={token} admin={admin} defaultBdaEmail={admin ? defaultBdaEmail : ''} selected={picked} onChange={setPicked} />}
-      {admin && (
-        <label className="mt-1 flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-700 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-orange-500">
-          <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} className="mt-0.5 accent-orange-600" data-testid="force-fine" />
-          <span>
-            <span className="font-semibold">Fine anyway</span>, even when attendance shows the BDA joined the meeting. Leave this off unless you have checked the call yourself.
-          </span>
-        </label>
-      )}
     </WaiveDialog>
   );
 }

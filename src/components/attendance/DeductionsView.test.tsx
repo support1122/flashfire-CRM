@@ -7,6 +7,7 @@ import {
   adminRows,
   allocationManual,
   bookingManualEscalated,
+  missedActive,
   apiError,
   deductionsResponse,
   emptyQueues,
@@ -166,6 +167,20 @@ describe('DeductionsView as a BDA', () => {
 
     const activeRow = screen.getByText('Ananya Krishnamurthy').closest('tr') as HTMLElement;
     expect(within(activeRow).getByTestId('absent-on').querySelector('.line-through')).toBeNull();
+  });
+
+  it('shows the working day in Absent on, with the real date only when it differs', async () => {
+    const late = { ...missedActive, deductionId: 'ded_late', clientName: 'Late Shift Client', workDay: '2026-10-29', evidence: { ...missedActive.evidence, scheduledStart: '2026-10-30T01:00:00+05:30' } };
+    const legacy = { ...missedActive, deductionId: 'ded_legacy', clientName: 'Legacy Client', workDay: undefined, evidence: { ...missedActive.evidence, scheduledStart: '2026-10-21T16:30:00' } };
+    install({ 'GET /api/crm/deductions': () => deductionsResponse([late, legacy]) });
+    renderView();
+    await screen.findByText('Late Shift Client');
+    const lateCell = within(screen.getByText('Late Shift Client').closest('tr') as HTMLElement).getByTestId('absent-on');
+    expect(lateCell).toHaveTextContent('Thu, 29 Oct 2026');
+    expect(lateCell).toHaveTextContent('1:00 AM, Fri 30 Oct');
+    const legacyCell = within(screen.getByText('Legacy Client').closest('tr') as HTMLElement).getByTestId('absent-on');
+    expect(legacyCell).toHaveTextContent('Wed, 21 Oct 2026');
+    expect(legacyCell).toHaveTextContent('4:30 PM');
   });
 
   it('shows the Fines are not active yet banner in shadow and off mode, and none when live', async () => {
@@ -593,7 +608,7 @@ describe('DeductionsView absence features as an admin', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Mark absent' }));
     const dialog = await screen.findByRole('dialog', { name: /mark absent/i });
     await userEvent.click(await within(dialog).findByRole('checkbox', { name: /Tomasz/ }));
-    await userEvent.type(within(dialog).getByLabelText('Reason'), 'BDA never joined the call.');
+    await userEvent.type(within(dialog).getByLabelText(/^Reason/), 'BDA never joined the call.');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mark absent' }));
     expect(await screen.findByTestId('absence-notice')).toHaveTextContent('Absence recorded for Tomasz Kowalczyk. The fine was added to the ledger.');
     expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1);

@@ -95,7 +95,7 @@ describe('AdminAllocations: Mark absent', () => {
     expect(within(dialog).getByText('Tomasz Kowalczyk')).toBeInTheDocument();
     expect(within(dialog).getByText(/Siddhartha · Wed, Oct 7, 3:00 PM IST · Lead Allocation call/)).toBeInTheDocument();
     expect(within(dialog).queryByRole('radio')).not.toBeInTheDocument();
-    await userEvent.type(within(dialog).getByLabelText('Reason'), 'BDA did not pick up for ten minutes.');
+    await userEvent.type(within(dialog).getByLabelText(/^Reason/), 'BDA did not pick up for ten minutes.');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mark absent' }));
     expect(await screen.findByTestId('absence-notice')).toHaveTextContent('Absence recorded for Tomasz Kowalczyk');
     const posts = calls.filter((c) => c.method === 'POST');

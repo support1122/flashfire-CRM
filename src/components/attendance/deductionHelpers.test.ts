@@ -8,6 +8,7 @@ import {
   istDayKey,
   monthDayBounds,
   presetRange,
+  rowWorkDay,
   currentMonthKey,
   deriveTotals,
   isCrmAdminUser,
@@ -306,7 +307,27 @@ describe('date filters', () => {
     expect(presetRange('yesterday', now)).toEqual({ from: '2026-10-07', to: '2026-10-07' });
     expect(presetRange('last7', now)).toEqual({ from: '2026-10-02', to: '2026-10-08' });
     // 00:30 IST on the 8th is still the 7th in UTC; the preset must follow IST.
-    expect(presetRange('today', new Date('2026-10-07T19:00:00.000Z'))).toEqual({ from: '2026-10-08', to: '2026-10-08' });
+    // 00:30 IST on the 8th: that is still the shift that began on the 7th.
+    expect(presetRange('today', new Date('2026-10-07T19:00:00.000Z'))).toEqual({ from: '2026-10-07', to: '2026-10-07' });
+  });
+
+  it('Today at 02:00 IST is still the previous calendar date', () => {
+    const now = new Date('2026-10-30T02:00:00+05:30');
+    expect(presetRange('today', now)).toEqual({ from: '2026-10-29', to: '2026-10-29' });
+    expect(presetRange('yesterday', now)).toEqual({ from: '2026-10-28', to: '2026-10-28' });
+    expect(presetRange('last7', now)).toEqual({ from: '2026-10-23', to: '2026-10-29' });
+    // From 08:00 IST the new calendar date is the working day again.
+    expect(presetRange('today', new Date('2026-10-30T08:00:00+05:30'))).toEqual({ from: '2026-10-30', to: '2026-10-30' });
+  });
+
+  it('filters by workDay when present and falls back to the meeting start when missing', () => {
+    const late = { ...missedActive, deductionId: 'late', workDay: '2026-10-29', evidence: { ...missedActive.evidence, scheduledStart: '2026-10-30T01:00:00+05:30' } };
+    const legacy = { ...missedActive, deductionId: 'legacy', workDay: undefined, evidence: { ...missedActive.evidence, scheduledStart: '2026-10-30T01:00:00+05:30' } };
+    const on = (day: string) => ids(applyLedgerFilters([late, legacy], { ...DEFAULT_FILTERS, from: day, to: day }));
+    expect(on('2026-10-29')).toEqual(['late']);
+    expect(on('2026-10-30')).toEqual(['legacy']);
+    expect(rowWorkDay(late)).toBe('2026-10-29');
+    expect(rowWorkDay(legacy)).toBe('2026-10-30');
   });
 
   it('gives the first and last day of a month, leap years included', () => {

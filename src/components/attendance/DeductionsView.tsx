@@ -55,7 +55,7 @@ import {
   type SourceFilter,
   type StatusFilter,
 } from './deductionHelpers';
-import { RULE_LABEL, fmtDayTime, fmtTime, fmtWeekdayDate, formatInr } from './format';
+import { RULE_LABEL, fmtDayTime, fmtMeetingTime, fmtWeekdayDate, fmtWorkDay, formatInr } from './format';
 
 type View = 'ledger' | 'queues' | 'absences';
 
@@ -127,7 +127,7 @@ function PolicyDetails() {
           </li>
         </ul>
         <p>
-          The miss count restarts on the 1st of each month (IST). An admin can waive any deduction with a written reason, and a waived one
+          A day means the working day, which is the shift, not the calendar day. A shift that crosses midnight belongs to the day it began. The miss count restarts on the 1st of each month for the working day, so a shift that crosses midnight on the 1st counts in the month it began. An admin can waive any deduction with a written reason, and a waived one
           no longer counts. A deduction marked under review does not count until an admin decides.
         </p>
       </div>
@@ -937,9 +937,9 @@ export default function DeductionsView() {
                               </td>
                               <td className="whitespace-nowrap px-3 py-3 align-top" data-testid="absent-on">
                                 <p className={`font-semibold ${resolved ? 'text-slate-500 line-through' : 'text-slate-900'}`}>
-                                  {fmtWeekdayDate(d.evidence.scheduledStart)}
+                                  {d.workDay ? fmtWorkDay(d.workDay) : fmtWeekdayDate(d.evidence.scheduledStart)}
                                 </p>
-                                <p className="text-xs text-slate-500">{fmtTime(d.evidence.scheduledStart)}</p>
+                                <p className="text-xs text-slate-500">{fmtMeetingTime(d.evidence.scheduledStart, d.workDay)}</p>
                               </td>
                               {admin && <td className="whitespace-nowrap px-3 py-3 align-top text-slate-700">{d.bdaName || d.bdaEmail}</td>}
                               <td className="min-w-36 px-3 py-3 align-top">

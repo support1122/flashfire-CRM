@@ -17,6 +17,8 @@ export interface AbsenceCandidate {
   clientName: string;
   /** ISO UTC instant the call started. */
   callStart: string;
+  /** The shift day the call belongs to (YYYY-MM-DD, IST), set by the server. */
+  workDay?: string | null;
   /** true when the call has not started yet. Only admins are ever sent these. */
   upcoming?: boolean;
   /** Why this call cannot be marked, or null when it can. Blocked calls are still listed so nothing looks missing. */
@@ -80,16 +82,14 @@ export interface AbsenceCandidatesFilters {
 export interface CreateAbsenceBody {
   kind: AbsenceKind;
   refId: string;
+  /** An admin's mark may leave this blank; the server then records a default. */
   reason: string;
-  /** Admin only: mark it even though attendance shows the BDA joined. */
-  force?: boolean;
 }
 
 export interface BatchAbsenceBody {
   items: { kind: AbsenceKind; refId: string }[];
+  /** An admin's mark may leave this blank; the server then records a default. */
   reason: string;
-  /** Admin only: mark them even though attendance shows the BDA joined. */
-  force?: boolean;
 }
 
 /** 200 even when some calls were refused: every call has its own result, in the order the server handled them. */

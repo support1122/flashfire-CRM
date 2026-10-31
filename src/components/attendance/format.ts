@@ -30,6 +30,61 @@ export function fmtWeekdayDate(iso: string | null | undefined): string {
   }
 }
 
+/** IST wall-clock parts of an instant, or null for missing or bad input. */
+function istParts(iso: string | null | undefined) {
+  const t = Date.parse(iso ?? '');
+  if (!Number.isFinite(t)) return null;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    hourCycle: 'h12',
+  }).formatToParts(new Date(t));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    weekday: get('weekday'),
+    clock: `${get('hour')}:${get('minute')} ${get('dayPeriod').toUpperCase()}`,
+  };
+}
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** The IST calendar date of an instant as YYYY-MM-DD, or null for missing or bad input. */
+export function istDateKey(iso: string | null | undefined): string | null {
+  const p = istParts(iso);
+  if (!p) return null;
+  const m = MONTHS_SHORT.indexOf(p.month) + 1;
+  return `${p.year}-${String(m).padStart(2, '0')}-${p.day.padStart(2, '0')}`;
+}
+
+/** A working day (YYYY-MM-DD, the day the shift began) as "Thu, 29 Oct 2026". Read as a plain calendar date, no timezone shift. */
+export function fmtWorkDay(workDay: string | null | undefined): string {
+  if (!workDay || !/^\d{4}-\d{2}-\d{2}$/.test(workDay)) return '-';
+  try {
+    return format(parseISO(workDay), 'EEE, d MMM yyyy');
+  } catch {
+    return '-';
+  }
+}
+
+/**
+ * The real meeting time in IST, plus the real date ("1:00 AM, Fri 30 Oct") only when it differs from the working day.
+ * Without a working day it is the plain clock time, like fmtTime.
+ */
+export function fmtMeetingTime(iso: string | null | undefined, workDay: string | null | undefined): string {
+  if (!workDay) return fmtTime(iso);
+  const p = istParts(iso);
+  if (!p) return '-';
+  return istDateKey(iso) === workDay ? p.clock : `${p.clock}, ${p.weekday} ${p.day} ${p.month}`;
+}
+
 /** "4:29 PM". Returns "-" for missing or bad input. */
 export function fmtTime(iso: string | null | undefined): string {
   if (!iso) return '-';

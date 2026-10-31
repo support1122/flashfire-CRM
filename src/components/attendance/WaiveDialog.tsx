@@ -32,7 +32,7 @@ const COPY: Record<ReasonVariant, { title: string; confirm: string; help: string
   mark_absent: {
     title: 'Mark absent',
     confirm: 'Mark absent',
-    help: 'The BDA is fined for this call at once and sees your name and this reason on the deduction. The record stays and is never deleted.',
+    help: 'The BDA is fined for this call at once and sees your name on the deduction, with your reason if you write one. The record stays and is never deleted.',
     tone: 'bg-red-600 hover:bg-red-700 focus-visible:outline-red-600',
     placeholder: 'What happened on this call?',
   },
@@ -104,7 +104,9 @@ export default function WaiveDialog({
 
   const trimmedLength = reason.trim().length;
   const absence = variant === 'mark_absent' || variant === 'report_absent';
-  const problem = (absence ? absenceReasonProblem : reasonProblem)(reason);
+  // An admin's mark needs no reason: blank is fine, anything typed only has to fit the length limit.
+  const optional = variant === 'mark_absent';
+  const problem = optional ? (trimmedLength > REASON_MAX ? reasonProblem(reason) : null) : (absence ? absenceReasonProblem : reasonProblem)(reason);
   // Guidance appears as soon as the admin types; it turns red once they leave the box or try to send.
   const showProblem = problem !== null && (touched || reason.length > 0);
   const flagged = problem !== null && (touched || trimmedLength > REASON_MAX);
@@ -198,7 +200,7 @@ export default function WaiveDialog({
           </p>
           {children}
           <label htmlFor={`${titleId}-reason`} className="block pt-1 text-sm font-semibold text-slate-800">
-            Reason
+            Reason{optional ? ' (optional)' : ''}
           </label>
           <textarea
             ref={textareaRef}
@@ -220,7 +222,7 @@ export default function WaiveDialog({
               className={flagged ? 'font-medium text-red-700' : showProblem ? 'font-medium text-amber-700' : 'text-slate-500'}
               role={flagged ? 'alert' : undefined}
             >
-              {showProblem ? problem : `${absence ? 10 : REASON_MIN} to ${REASON_MAX} characters.`}
+              {showProblem ? problem : optional ? `Optional, up to ${REASON_MAX} characters.` : `${absence ? 10 : REASON_MIN} to ${REASON_MAX} characters.`}
             </p>
             <p
               className={`shrink-0 tabular-nums ${flagged ? 'font-semibold text-red-700' : 'text-slate-500'}`}

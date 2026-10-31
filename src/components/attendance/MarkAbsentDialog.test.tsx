@@ -83,22 +83,23 @@ describe('MarkAbsentDialog as an admin', () => {
     'POST /api/crm/absences/batch': post ?? batchReply('approved'),
   });
 
-  it('lists past calls in IST, keeps Mark absent disabled until a call and a valid reason exist, then posts once', async () => {
+  it('lists past calls in IST, keeps Mark absent disabled until a call is picked, then posts once', async () => {
     const calls = install(routes());
     const { onDone, onClose } = renderDialog({ admin: true });
     const dialog = await screen.findByRole('dialog', { name: /mark absent/i });
 
     await within(dialog).findByRole('checkbox', { name: /Select all/ });
     const boxes = within(dialog).getAllByRole('checkbox');
-    expect(boxes).toHaveLength(4); // two calls, "select all" and the admin-only "Fine anyway"
+    expect(boxes).toHaveLength(3); // two calls and "select all"
+    expect(within(dialog).queryByTestId('force-fine')).not.toBeInTheDocument();
     expect(within(dialog).getByRole('checkbox', { name: /Select all 2 that can be marked/ })).not.toBeChecked();
     expect(within(dialog).getByText(/Wed, Oct 7, 3:00 PM IST/)).toBeInTheDocument();
     expect(within(dialog).getByText('Siddhartha · Wed, Oct 7, 3:00 PM IST')).toBeInTheDocument();
     expect(within(dialog).getByTestId('candidates-count')).toHaveTextContent('2 calls found');
 
     const submit = within(dialog).getByRole('button', { name: 'Mark absent' });
-    await userEvent.type(within(dialog).getByLabelText('Reason'), GOOD_REASON);
-    expect(submit).toBeDisabled(); // reason is fine, but no call is picked
+    await userEvent.type(within(dialog).getByLabelText(/^Reason/), GOOD_REASON);
+    expect(submit).toBeDisabled(); // a reason is typed, but no call is picked
 
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /Tomasz Kowalczyk/ }));
     expect(within(dialog).getByTestId('candidate-selected')).toHaveTextContent('Tomasz Kowalczyk, Siddhartha');
@@ -115,49 +116,68 @@ describe('MarkAbsentDialog as an admin', () => {
     expect(posts[0].body).toEqual({ items: [{ kind: 'allocation', refId: 'alloc_9' }], reason: GOOD_REASON });
   });
 
-  it('keeps Mark absent disabled for a throwaway reason like "Yeah -", and sends force only when Fine anyway is ticked', async () => {
+  it('lets an admin mark with a blank reason, and sends a short reason like "Yeah -" as typed, never with force', async () => {
     const calls = install(routes());
     renderDialog({ admin: true });
     const dialog = await screen.findByRole('dialog', { name: /mark absent/i });
     await within(dialog).findByRole('checkbox', { name: /Select all/ });
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: /Tomasz Kowalczyk/ }));
     const submit = within(dialog).getByRole('button', { name: 'Mark absent' });
-
-    await userEvent.type(within(dialog).getByLabelText('Reason'), 'Yeah -');
+    expect(within(dialog).getByLabelText('Reason (optional)')).toBeInTheDocument();
+    expect(within(dialog).getByText('Optional, up to 500 characters.')).toBeInTheDocument();
     expect(submit).toBeDisabled();
-    expect(within(dialog).getByText(/Say what happened in a sentence/)).toBeInTheDocument();
 
-    await userEvent.clear(within(dialog).getByLabelText('Reason'));
-    await userEvent.type(within(dialog).getByLabelText('Reason'), GOOD_REASON);
-    expect(within(dialog).getByTestId('force-fine')).not.toBeChecked();
-    await userEvent.click(within(dialog).getByTestId('force-fine'));
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /Tomasz Kowalczyk/ }));
+    expect(submit).toBeEnabled();
     await userEvent.click(submit);
     await waitFor(() => expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1));
-    expect(calls.filter((c) => c.method === 'POST')[0].body).toEqual({ items: [{ kind: 'allocation', refId: 'alloc_9' }], reason: GOOD_REASON, force: true });
+    const blank = calls.filter((c) => c.method === 'POST')[0].body;
+    expect(blank).toEqual({ items: [{ kind: 'allocation', refId: 'alloc_9' }], reason: '' });
+    expect(blank).not.toHaveProperty('force');
   });
 
-  it('shows the server refusal when attendance says the BDA joined, and sends no force by default', async () => {
-    const refusal = { code: 'attendance_present', message: 'Attendance shows Siddhartha joined this meeting at Oct 10, 12:26 AM IST for about 24 minutes, so marking them absent looks wrong. If you are sure, tick "Fine anyway" and try again.' };
-    const calls = install(routes(batchReply('approved', { alloc_9: refusal })));
+  it('sends a short reason like "Yeah -" exactly as typed', async () => {
+    const calls = install(routes());
     renderDialog({ admin: true });
     const dialog = await screen.findByRole('dialog', { name: /mark absent/i });
-    await within(dialog).findByRole('checkbox', { name: /Select all/ });
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: /Tomasz Kowalczyk/ }));
-    await userEvent.type(within(dialog).getByLabelText('Reason'), GOOD_REASON);
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark absent' }));
-    expect(await within(dialog).findByText(/Attendance shows Siddhartha joined this meeting/)).toBeInTheDocument();
-    expect(calls.filter((c) => c.method === 'POST')[0].body).not.toHaveProperty('force');
+    await userEvent.click(await within(dialog).findByRole('checkbox', { name: /Tomasz Kowalczyk/ }));
+    await userEvent.type(within(dialog).getByLabelText(/^Reason/), 'Yeah -');
+    const submit = within(dialog).getByRole('button', { name: 'Mark absent' });
+    expect(submit).toBeEnabled();
+    await userEvent.click(submit);
+    await waitFor(() => expect(calls.filter((c) => c.method === 'POST')).toHaveLength(1));
+    const body = calls.filter((c) => c.method === 'POST')[0].body;
+    expect(body).toEqual({ items: [{ kind: 'allocation', refId: 'alloc_9' }], reason: 'Yeah -' });
+    expect(body).not.toHaveProperty('force');
   });
 
-  it('rejects a reason under 5 characters and shows the live counter', async () => {
+  it('shows the server message in the dialog and stays open when the server refuses the call', async () => {
+    const refusal = { code: 'call_canceled', message: 'This call was canceled, so it cannot be marked absent.' };
+    const calls = install(routes(batchReply('approved', { alloc_9: refusal })));
+    const { onClose, onDone } = renderDialog({ admin: true });
+    const dialog = await screen.findByRole('dialog', { name: /mark absent/i });
+    await userEvent.click(await within(dialog).findByRole('checkbox', { name: /Tomasz Kowalczyk/ }));
+    await userEvent.type(within(dialog).getByLabelText(/^Reason/), GOOD_REASON);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark absent' }));
+    expect(await within(dialog).findByText(/This call was canceled, so it cannot be marked absent\./)).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === 'POST')[0].body).not.toHaveProperty('force');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it('keeps the live counter and blocks more than 500 characters', async () => {
     install(routes());
     renderDialog({ admin: true });
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(await within(dialog).findByRole('checkbox', { name: /Tomasz/ }));
-    await userEvent.type(within(dialog).getByLabelText('Reason'), 'abc');
-    expect(within(dialog).getByRole('button', { name: 'Mark absent' })).toBeDisabled();
+    const box = within(dialog).getByLabelText(/^Reason/);
+    await userEvent.type(box, 'abc');
     expect(within(dialog).getByText('3 / 500')).toBeInTheDocument();
-    expect(within(dialog).getByText(/Add 2 more characters/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Mark absent' })).toBeEnabled();
+    await userEvent.clear(box);
+    await userEvent.click(box);
+    await userEvent.paste('x'.repeat(501));
+    expect(within(dialog).getByText('501 / 500')).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Mark absent' })).toBeDisabled();
   });
 
   it('switches to Calendly meetings and keeps the picks made on the other tab', async () => {
@@ -204,7 +224,7 @@ describe('MarkAbsentDialog as an admin', () => {
     const { onClose, onDone } = renderDialog({ admin: true });
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(await within(dialog).findByRole('checkbox', { name: /Tomasz/ }));
-    await userEvent.type(within(dialog).getByLabelText('Reason'), GOOD_REASON);
+    await userEvent.type(within(dialog).getByLabelText(/^Reason/), GOOD_REASON);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mark absent' }));
     expect(await within(dialog).findByText('This call already has a fine.')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
@@ -281,7 +301,7 @@ describe('MarkAbsentDialog with several calls', () => {
     expect(selectAll).toBeChecked();
     expect(within(dialog).getByTestId('candidate-selected')).toHaveTextContent('2 calls selected');
 
-    await userEvent.type(within(dialog).getByLabelText('Reason'), GOOD_REASON);
+    await userEvent.type(within(dialog).getByLabelText(/^Reason/), GOOD_REASON);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mark 2 absent' }));
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     const posts = calls.filter((c) => c.method === 'POST');
@@ -310,7 +330,7 @@ describe('MarkAbsentDialog with several calls', () => {
     const { onDone, onClose } = renderDialog({ admin: true });
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(await within(dialog).findByRole('checkbox', { name: /Select all/ }));
-    await userEvent.type(within(dialog).getByLabelText('Reason'), GOOD_REASON);
+    await userEvent.type(within(dialog).getByLabelText(/^Reason/), GOOD_REASON);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mark 2 absent' }));
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     const outcome = onDone.mock.calls[0][0];
@@ -324,7 +344,7 @@ describe('MarkAbsentDialog with several calls', () => {
     const { onDone, onClose } = renderDialog({ admin: true });
     const dialog = await screen.findByRole('dialog');
     await userEvent.click(await within(dialog).findByRole('checkbox', { name: /Tomasz/ }));
-    await userEvent.type(within(dialog).getByLabelText('Reason'), GOOD_REASON);
+    await userEvent.type(within(dialog).getByLabelText(/^Reason/), GOOD_REASON);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mark absent' }));
     expect(await within(dialog).findByText(/Tomasz Kowalczyk: This call already has a fine\./)).toBeInTheDocument();
     expect(onDone).not.toHaveBeenCalled();
