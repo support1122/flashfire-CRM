@@ -13,7 +13,6 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
-  const [rememberMe, setRememberMe] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const emailTrimmed = useMemo(() => email.trim(), [email]);
@@ -68,7 +67,7 @@ export default function LoginPage() {
     setInfo(null);
     setLoading(true);
     try {
-      const result = await verifyOtp(emailTrimmed, otp.trim(), rememberMe);
+      const result = await verifyOtp(emailTrimmed, otp.trim());
       if (result.status === 'pending_approval') {
         setStep('awaiting_approval');
         startPollingApproval(result.approvalId);
@@ -232,18 +231,7 @@ export default function LoginPage() {
                   <p className="mt-2 text-xs text-slate-500">Code expires quickly. If needed, go back and resend.</p>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="remember-me"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 text-orange-600 border-slate-300 rounded focus:ring-orange-500 focus:ring-2"
-                  />
-                  <label htmlFor="remember-me" className="text-sm text-slate-700 cursor-pointer">
-                    Remember for 30 days
-                  </label>
-                </div>
+                <p className="text-sm text-slate-500">You'll stay signed in for 30 days.</p>
 
                 <button
                   type="submit"
