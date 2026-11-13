@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardList, FileWarning, Flag, Info, Search, X, Loader2, RefreshCw, UserX, ArrowRightLeft } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardList, FileWarning, Flag, Info, MailWarning, Search, X, Loader2, RefreshCw, UserX, ArrowRightLeft } from 'lucide-react';
 import { useCrmAuth } from '../../auth/CrmAuthContext';
 import { useAbsenceReports } from '../../api/absence';
+import { useWarningLetters } from '../../api/warningLetter';
 import { useDeductionSummary, useDeductions, useResolveDeduction, useReviewQueues } from '../../api/attendanceAdmin';
 import type { Deduction } from '../../types/attendance';
 import type { DeductionsMode } from '../../types/attendanceAdmin';
 import AbsenceNotice from './AbsenceNotice';
 import AbsenceReportsView from './AbsenceReportsView';
+import WarningLettersView from './WarningLettersView';
 import AttendanceReviewQueues from './AttendanceReviewQueues';
 import MarkAbsentDialog from './MarkAbsentDialog';
 import TransferMeetingsDialog from './TransferMeetingsDialog';
@@ -57,7 +59,7 @@ import {
 } from './deductionHelpers';
 import { RULE_LABEL, fmtDayTime, fmtMeetingTime, fmtWeekdayDate, fmtWorkDay, formatInr } from './format';
 
-type View = 'ledger' | 'queues' | 'absences';
+type View = 'ledger' | 'queues' | 'absences' | 'warnings';
 
 interface DialogState {
   kind: 'waive' | 'activate';
@@ -305,6 +307,9 @@ export default function DeductionsView() {
   // Same request as the review queue, so the badge costs nothing extra. For a BDA it is their own pending reports.
   const pendingReports = useAbsenceReports(token, PENDING_REPORTS, { poll: true });
   const pendingReportCount = pendingReports.data?.pendingCount ?? pendingReports.data?.reports.length ?? 0;
+  // Same request as the Warning letters tab, so the badge costs nothing extra. Only admins have a draft count.
+  const warnings = useWarningLetters(token, '', { enabled: admin });
+  const draftLetterCount = admin ? (warnings.data?.draftCount ?? 0) : 0;
 
   const data = query.data;
   // `rows` is the whole month as the server sent it (totals and counts come from it). `visibleRows` is what the
@@ -433,11 +438,12 @@ export default function DeductionsView() {
             { id: 'ledger', label: 'Ledger', show: true },
             { id: 'queues', label: 'Review queues', show: admin },
             { id: 'absences', label: admin ? 'Absence reports' : 'My reports', show: true },
+            { id: 'warnings', label: admin ? 'Warning letters' : 'My warnings', show: true },
           ] as const
         )
           .filter((item) => item.show)
           .map((item) => {
-            const badge = item.id === 'queues' ? queueCount : item.id === 'absences' ? pendingReportCount : 0;
+            const badge = item.id === 'queues' ? queueCount : item.id === 'absences' ? pendingReportCount : item.id === 'warnings' ? draftLetterCount : 0;
             return (
               <button
                 key={item.id}
@@ -455,11 +461,12 @@ export default function DeductionsView() {
               >
                 {item.id === 'queues' && <ClipboardList size={15} aria-hidden="true" />}
                 {item.id === 'absences' && <FileWarning size={15} aria-hidden="true" />}
+                {item.id === 'warnings' && <MailWarning size={15} aria-hidden="true" />}
                 {item.label}
                 {badge > 0 && (
                   <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white" data-testid={`badge-${item.id}`}>
                     {badge}
-                    <span className="sr-only"> {item.id === 'queues' ? 'items waiting' : admin ? 'reports waiting for review' : 'reports pending review'}</span>
+                    <span className="sr-only"> {item.id === 'queues' ? 'items waiting' : item.id === 'warnings' ? 'letters to review' : admin ? 'reports waiting for review' : 'reports pending review'}</span>
                   </span>
                 )}
               </button>
@@ -471,6 +478,8 @@ export default function DeductionsView() {
 
       {admin && view === 'queues' ? (
         <AttendanceReviewQueues token={token} />
+      ) : view === 'warnings' ? (
+        <WarningLettersView token={token} admin={admin} onNotice={setNotice} />
       ) : view === 'absences' ? (
         <AbsenceReportsView token={token} admin={admin} month={month} onNotice={setNotice} />
       ) : (

@@ -628,6 +628,53 @@ describe('DeductionsView absence features as an admin', () => {
   });
 });
 
+describe('DeductionsView Warning letters tab', () => {
+  const letters = {
+    success: true,
+    mode: 'draft',
+    window: { from: '2026-11-12T18:30:00.000Z', to: '2026-11-30T18:29:59.999Z', label: 'November 2026' },
+    policy: [],
+    letters: [],
+    standings: [{ bdaEmail: 'siddhartha@flashfirehq.com', bdaName: 'Siddhartha', missedCount: 8, level: 1, nextThreshold: 10 }],
+  };
+
+  it('shows Warning letters with the draft badge to an admin and opens it', async () => {
+    asAdmin();
+    const calls = install({
+      'GET /api/crm/deductions': () => deductionsResponse(adminRows),
+      'GET /api/crm/deductions/summary': () => summaryResponse(),
+      'GET /api/crm/admin/attendance/review-queues': () => emptyQueues,
+      'GET /api/crm/absences/': () => ({ success: true, reports: [] }),
+      'GET /api/crm/warning-letters': () => ({ ...letters, draftCount: 3 }),
+    });
+    renderView();
+    const tab = await screen.findByRole('button', { name: /warning letters/i });
+    await waitFor(() => expect(screen.getByTestId('badge-warnings')).toHaveTextContent('3'));
+    await userEvent.click(tab);
+    expect(tab).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByText('Letters are written as drafts. Review and send them here.')).toBeInTheDocument();
+    // The badge and the tab share one query, so the tab never asks for anything different.
+    expect(calls.filter((c) => c.path.startsWith('/api/crm/warning-letters')).every((c) => c.path === '/api/crm/warning-letters')).toBe(true);
+  });
+
+  it('shows My warnings to a BDA without a badge and without asking for admin data', async () => {
+    asBda();
+    const calls = install({
+      'GET /api/crm/deductions': () => deductionsResponse(siddharthaRows),
+      'GET /api/crm/absences/': () => ({ success: true, reports: [] }),
+      'GET /api/crm/warning-letters': () => letters,
+    });
+    renderView();
+    await screen.findByTestId('total-active');
+    expect(screen.queryByRole('button', { name: /warning letters/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('badge-warnings')).not.toBeInTheDocument();
+    expect(calls.some((c) => c.path.startsWith('/api/crm/warning-letters'))).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: /my warnings/i }));
+    expect(await screen.findByTestId('my-standing')).toHaveTextContent('8');
+    expect(screen.queryByRole('button', { name: /check now/i })).not.toBeInTheDocument();
+  });
+});
+
 describe('DeductionsView absence features as a BDA', () => {
   const mine = [...siddharthaRows, { ...bookingManualEscalated }];
 
