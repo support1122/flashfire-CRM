@@ -745,6 +745,8 @@ export default function LeadsView({
         firefliesTranscriptId: booking.firefliesTranscriptId,
         claimedBy: booking.claimedBy,
         leadSource: booking.leadSource,
+        leadMarket: booking.leadMarket ?? null,
+        landingRoute: booking.landingRoute ?? null,
         metaLeadId: booking.metaLeadId ?? undefined,
         metaFormName: booking.metaFormName,
         statusChangedBy: booking.statusChangedBy,
