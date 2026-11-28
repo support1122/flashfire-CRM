@@ -64,6 +64,11 @@ export default function FollowUpModal({
             return;
         }
 
+        if (!plan) {
+            setError('Please choose the package the lead is interested in');
+            return;
+        }
+
         setIsScheduling(true);
         setError('');
 
@@ -74,7 +79,7 @@ export default function FollowUpModal({
 
             await onSchedule({
                 followUpDateTime: followUpISO,
-                ...(plan ? { plan } : {}),
+                plan,
             });
             onClose();
         } catch (err) {
@@ -118,20 +123,22 @@ export default function FollowUpModal({
                         </p>
                     </div>
 
-                    {/* Package the lead leans towards. Optional, but it feeds the sales sheet and the leads table. */}
+                    {/* Package the lead leans towards. Required, it feeds the sales sheet and the leads table. */}
                     <div>
                         <label htmlFor="follow-up-package" className="block text-sm font-semibold text-slate-700 mb-2">
                             <Package size={16} className="inline mr-2" />
-                            Package
+                            Package <span className="text-red-500">*</span>
                         </label>
                         <select
                             id="follow-up-package"
+                            required
+                            aria-required="true"
                             value={plan}
                             onChange={(e) => setPlan(e.target.value as PlanName | '')}
                             disabled={isScheduling}
                             className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                         >
-                            <option value="">Not decided yet</option>
+                            <option value="">Choose a package</option>
                             {planOptions.map((p) => (
                                 <option key={p.key} value={p.key}>{p.label} ({p.displayPrice})</option>
                             ))}
@@ -152,7 +159,7 @@ export default function FollowUpModal({
                 <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-end">
                     <button
                         onClick={handleSchedule}
-                        disabled={isScheduling}
+                        disabled={isScheduling || !plan}
                         className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition font-semibold disabled:opacity-70"
                     >
                         {isScheduling ? (
